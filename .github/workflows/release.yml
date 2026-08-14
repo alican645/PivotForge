@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish:
@@ -53,5 +54,11 @@ jobs:
           dotnet pack src/PivotForge.Core/PivotForge.Core.csproj -c Release --no-build --no-restore -p:Version=${{ env.PACKAGE_VERSION }} -o artifacts/packages
           dotnet pack src/PivotForge.AspNetCore/PivotForge.AspNetCore.csproj -c Release --no-build --no-restore -p:Version=${{ env.PACKAGE_VERSION }} -o artifacts/packages
 
+      - name: Sign in to NuGet.org
+        uses: NuGet/login@v1
+        id: nuget_login
+        with:
+          user: alican645
+
       - name: Publish to NuGet.org
-        run: dotnet nuget push "artifacts/packages/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push "artifacts/packages/*.nupkg" --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
