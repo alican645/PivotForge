@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-pack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDKs
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore
+        run: dotnet restore PivotForge.slnx
+
+      - name: Build
+        run: dotnet build PivotForge.slnx -c Release --no-restore
+
+      - name: Test Core
+        run: dotnet test tests/PivotForge.Core.Tests/PivotForge.Core.Tests.csproj -c Release --no-build --no-restore
+
+      - name: Test ASP.NET Core
+        run: dotnet test tests/PivotForge.AspNetCore.Tests/PivotForge.AspNetCore.Tests.csproj -c Release --no-build --no-restore
+
+      - name: Test browser assets
+        run: node --test tests/*.test.js
+
+      - name: Pack Core
+        run: dotnet pack src/PivotForge.Core/PivotForge.Core.csproj -c Release --no-build --no-restore -o artifacts/packages
+
+      - name: Pack ASP.NET Core
+        run: dotnet pack src/PivotForge.AspNetCore/PivotForge.AspNetCore.csproj -c Release --no-build --no-restore -o artifacts/packages
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: pivotforge-packages
+          path: artifacts/packages/*.*nupkg
+          if-no-files-found: error

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@ViewData["Title"] - PivotForge</title>
+    <link rel="stylesheet" href="~/_content/PivotForge.AspNetCore/css/pivotforge.css" asp-append-version="true">
+</head>
+<body>
+    @RenderBody()
+    <script src="~/_content/PivotForge.AspNetCore/js/pivot-table.js" asp-append-version="true"></script>
+    <script src="~/_content/PivotForge.AspNetCore/js/pivot-view-storage.js" asp-append-version="true"></script>
+    <script src="~/_content/PivotForge.AspNetCore/js/pivot-drill-down.js" asp-append-version="true"></script>
+    <script src="~/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

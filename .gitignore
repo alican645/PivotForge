@@ -1,0 +1,35 @@
+# Build outputs
+**/bin/
+**/obj/
+artifacts/
+
+# IDE and user settings
+.idea/
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Test and coverage outputs
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Package and frontend caches
+*.nupkg
+*.snupkg
+node_modules/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+secrets.json
+
+# Operating system files
+.DS_Store
+Thumbs.db

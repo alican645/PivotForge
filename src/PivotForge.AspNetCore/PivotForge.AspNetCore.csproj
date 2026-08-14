@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+    <PackageId>PivotForge.AspNetCore</PackageId>
+    <Version>0.1.0-preview.1</Version>
+    <Authors>Alican</Authors>
+    <Copyright>Copyright (c) 2026 Alican</Copyright>
+    <Title>PivotForge for ASP.NET Core</Title>
+    <Description>An interactive ASP.NET Core pivot table UI powered by PivotForge. Includes static web assets, endpoint registration, drill-down, Excel export, large-data paging, request cancellation, and caching.</Description>
+    <PackageTags>aspnetcore;pivot;pivot-table;pivot-grid;data-grid;virtualization;drill-down;reporting;ui</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageIcon>pivotforge-icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial preview release of PivotForge for ASP.NET Core.</PackageReleaseNotes>
+    <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../PivotForge.Core/PivotForge.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="../../assets/brand/pivotforge-icon.png" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

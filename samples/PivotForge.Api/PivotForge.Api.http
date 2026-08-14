@@ -1,0 +1,20 @@
+@PivotForge.Api_HostAddress = http://localhost:0
+
+POST {{PivotForge.Api_HostAddress}}/api/pivot
+Accept: application/json
+Content-Type: application/json
+
+{
+  "rows": ["region"],
+  "columns": ["year"],
+  "values": [
+    { "field": "amount", "aggregation": "sum" }
+  ],
+  "data": [
+    { "region": "East", "year": 2026, "amount": 1200 },
+    { "region": "East", "year": 2026, "amount": 300 },
+    { "region": "West", "year": 2026, "amount": 500 }
+  ]
+}
+
+###

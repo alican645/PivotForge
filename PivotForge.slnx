@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/PivotForge.Api/PivotForge.Api.csproj" />
+    <Project Path="samples/PivotForge.MvcDemo/PivotForge.MvcDemo.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/PivotForge.AspNetCore/PivotForge.AspNetCore.csproj" />
+    <Project Path="src/PivotForge.Core/PivotForge.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PivotForge.AspNetCore.Tests/PivotForge.AspNetCore.Tests.csproj" />
+    <Project Path="tests/PivotForge.Core.Tests/PivotForge.Core.Tests.csproj" />
+  </Folder>
+</Solution>

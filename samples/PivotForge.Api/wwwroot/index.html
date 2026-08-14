@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PivotForge Demo</title>
+  <link rel="stylesheet" href="/pivot-table.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <strong>PivotForge</strong>
+        <span>Framework bağımsız pivot table renderer</span>
+      </div>
+      <div class="metrics" aria-live="polite">
+        <div class="metric">
+          <span>Satır</span>
+          <strong id="metricRows">0</strong>
+        </div>
+        <div class="metric">
+          <span>Kolon</span>
+          <strong id="metricColumns">0</strong>
+        </div>
+        <div class="metric">
+          <span>Hücre</span>
+          <strong id="metricCells">0</strong>
+        </div>
+        <div class="metric">
+          <span>Süre</span>
+          <strong id="metricDuration">0 ms</strong>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar">
+        <section class="section">
+          <h2>Alanlar</h2>
+          <div class="field">
+            <label for="rows">Rows</label>
+            <select id="rows">
+              <option value="region">region</option>
+              <option value="category">category</option>
+              <option value="salesPerson">salesPerson</option>
+              <option value="year">year</option>
+              <option value="quarter">quarter</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="columns">Columns</label>
+            <select id="columns">
+              <option value="year">year</option>
+              <option value="quarter">quarter</option>
+              <option value="region">region</option>
+              <option value="category">category</option>
+              <option value="salesPerson">salesPerson</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="valueField">Value</label>
+            <select id="valueField">
+              <option value="amount">amount</option>
+              <option value="quantity">quantity</option>
+              <option value="discount">discount</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="aggregation">Aggregation</label>
+            <select id="aggregation">
+              <option value="sum">sum</option>
+              <option value="count">count</option>
+              <option value="average">average</option>
+              <option value="min">min</option>
+              <option value="max">max</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button class="button primary" id="runButton" type="button">Çalıştır</button>
+            <button class="button" id="resetButton" type="button">Sıfırla</button>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Data</h2>
+          <div class="field">
+            <label for="dataEditor">JSON</label>
+            <textarea id="dataEditor" spellcheck="false"></textarea>
+          </div>
+        </section>
+      </aside>
+
+      <section class="content">
+        <div class="result-grid">
+          <div class="table-wrap">
+            <div class="panel-head">
+              <h2>PivotForge Pivot Tablo</h2>
+              <span class="status" id="status">Hazır</span>
+            </div>
+            <div id="tableHost"></div>
+          </div>
+
+          <div class="json-wrap">
+            <div class="panel-head">
+              <h2>PivotResult JSON</h2>
+              <span class="status">Engine output</span>
+            </div>
+            <pre id="jsonOutput">{}</pre>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/pivot-table.js"></script>
+  <script>
+    const sampleData = [
+      { region: "Marmara", category: "Beton", salesPerson: "Alican", year: 2026, quarter: "Q1", amount: 125000, quantity: 18, discount: 2500 },
+      { region: "Marmara", category: "Beton", salesPerson: "Alican", year: 2026, quarter: "Q2", amount: 98000, quantity: 14, discount: 1200 },
+      { region: "Marmara", category: "Cimento", salesPerson: "Deniz", year: 2026, quarter: "Q1", amount: 76000, quantity: 22, discount: 900 },
+      { region: "Ege", category: "Beton", salesPerson: "Mert", year: 2026, quarter: "Q1", amount: 62000, quantity: 9, discount: 700 },
+      { region: "Ege", category: "Cimento", salesPerson: "Mert", year: 2026, quarter: "Q2", amount: 89000, quantity: 24, discount: 1600 },
+      { region: "Akdeniz", category: "Beton", salesPerson: "Selin", year: 2026, quarter: "Q1", amount: 101000, quantity: 15, discount: 1900 },
+      { region: "Akdeniz", category: "Agrega", salesPerson: "Selin", year: 2025, quarter: "Q4", amount: 54000, quantity: 32, discount: 600 },
+      { region: "Ic Anadolu", category: "Agrega", salesPerson: "Deniz", year: 2025, quarter: "Q4", amount: 47000, quantity: 28, discount: 500 },
+      { region: "Ic Anadolu", category: "Cimento", salesPerson: "Alican", year: 2026, quarter: "Q2", amount: 68000, quantity: 19, discount: 850 },
+      { region: "Karadeniz", category: "Beton", salesPerson: "Mert", year: 2025, quarter: "Q3", amount: 72000, quantity: 11, discount: 1100 },
+      { region: "Karadeniz", category: "Agrega", salesPerson: "Selin", year: 2026, quarter: "Q2", amount: 59000, quantity: 35, discount: 400 },
+      { region: "Dogu Anadolu", category: "Cimento", salesPerson: "Deniz", year: 2026, quarter: "Q1", amount: 43000, quantity: 13, discount: 300 }
+    ];
+
+    const elements = {
+      rows: document.getElementById("rows"),
+      columns: document.getElementById("columns"),
+      valueField: document.getElementById("valueField"),
+      aggregation: document.getElementById("aggregation"),
+      dataEditor: document.getElementById("dataEditor"),
+      runButton: document.getElementById("runButton"),
+      resetButton: document.getElementById("resetButton"),
+      jsonOutput: document.getElementById("jsonOutput"),
+      status: document.getElementById("status"),
+      metricRows: document.getElementById("metricRows"),
+      metricColumns: document.getElementById("metricColumns"),
+      metricCells: document.getElementById("metricCells"),
+      metricDuration: document.getElementById("metricDuration")
+    };
+
+    const renderer = new PivotForge.PivotTableRenderer(document.getElementById("tableHost"), {
+      totalText: "Toplam",
+      emptyText: "-"
+    });
+
+    elements.dataEditor.value = JSON.stringify(sampleData, null, 2);
+    elements.runButton.addEventListener("click", runPivot);
+    elements.resetButton.addEventListener("click", resetDemo);
+
+    for (const control of [elements.rows, elements.columns, elements.valueField, elements.aggregation]) {
+      control.addEventListener("change", runPivot);
+    }
+
+    runPivot();
+
+    async function runPivot() {
+      const started = performance.now();
+      setStatus("Çalışıyor", false);
+
+      try {
+        const data = JSON.parse(elements.dataEditor.value);
+        const valueKey = `${elements.valueField.value}_${elements.aggregation.value}`;
+        const response = await fetch("/api/pivot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            rows: [elements.rows.value],
+            columns: [elements.columns.value],
+            values: [
+              {
+                field: elements.valueField.value,
+                aggregation: elements.aggregation.value
+              }
+            ],
+            data
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const result = await response.json();
+        const duration = Math.round(performance.now() - started);
+
+        renderer.render(result, {
+          rowFieldLabels: [elements.rows.value],
+          valueKey,
+          aggregation: elements.aggregation.value
+        });
+
+        elements.jsonOutput.textContent = JSON.stringify(result, null, 2);
+        renderMetrics(result, duration);
+        setStatus("Hazır", false);
+      } catch (error) {
+        setStatus(error.message || String(error), true);
+        elements.jsonOutput.textContent = "{}";
+      }
+    }
+
+    function resetDemo() {
+      elements.dataEditor.value = JSON.stringify(sampleData, null, 2);
+      elements.rows.value = "region";
+      elements.columns.value = "year";
+      elements.valueField.value = "amount";
+      elements.aggregation.value = "sum";
+      runPivot();
+    }
+
+    function renderMetrics(result, duration) {
+      elements.metricRows.textContent = result.metadata?.rowHeaderCount ?? 0;
+      elements.metricColumns.textContent = result.metadata?.columnHeaderCount ?? 0;
+      elements.metricCells.textContent = result.metadata?.cellCount ?? 0;
+      elements.metricDuration.textContent = `${duration} ms`;
+    }
+
+    function setStatus(message, isError) {
+      elements.status.textContent = message;
+      elements.status.classList.toggle("error", isError);
+    }
+  </script>
+</body>
+</html>

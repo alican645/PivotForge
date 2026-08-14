@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PackageId>PivotForge.Core</PackageId>
+    <Version>0.1.0-preview.1</Version>
+    <Authors>Alican</Authors>
+    <Copyright>Copyright (c) 2026 Alican</Copyright>
+    <Title>PivotForge Core</Title>
+    <Description>A fast, dependency-light pivot table engine for .NET. Build pivot results from objects, dictionaries, DataTables, JSON, and CSV with grouping, aggregation, filtering, sorting, show-as calculations, drill-down, pagination, cancellation, and Excel export.</Description>
+    <PackageTags>pivot;pivot-table;pivot-grid;crosstab;aggregation;analytics;reporting;drill-down;excel;dotnet</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageIcon>pivotforge-icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial preview release of the PivotForge pivot engine.</PackageReleaseNotes>
+    <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="../../assets/brand/pivotforge-icon.png" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

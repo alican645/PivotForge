@@ -1,0 +1,2556 @@
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@model IReadOnlyList<SalesRecord>
+
+@{
+    ViewData["Title"] = "PivotForge Demo";
+    var jsonOptions = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true
+    };
+    jsonOptions.Converters.Add(new JsonStringEnumConverter());
+    var sampleDisplayRecords = Model.Select(record => new Dictionary<string, object?>
+    {
+        ["Bölge"] = record.Region,
+        ["Kategori"] = record.Category,
+        ["Satış Temsilcisi"] = record.SalesPerson,
+        ["Yıl"] = record.Year,
+        ["Çeyrek"] = record.Quarter,
+        ["Tutar"] = record.Amount,
+        ["Miktar"] = record.Quantity,
+        ["İskonto"] = record.Discount
+    });
+    var sampleJson = JsonSerializer.Serialize(sampleDisplayRecords, jsonOptions);
+    var sampleJsonCompact = JsonSerializer.Serialize(Model, new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    });
+}
+
+<main class="pivot-shell">
+    <header class="pivot-topbar">
+        <div class="pivot-brand">
+            <strong>PivotForge MVC Demo</strong>
+            <span id="sourceDescription">100 kayıtlık satış verisi ile server-side C# pivot + saf HTML tablo renderer</span>
+        </div>
+        <div class="pivot-metrics" aria-live="polite">
+            <div class="pivot-metric">
+                <span>Kaynak</span>
+                <strong id="metricSource">@Model.Count</strong>
+            </div>
+            <div class="pivot-metric">
+                <span>Satır</span>
+                <strong id="metricRows">0</strong>
+            </div>
+            <div class="pivot-metric">
+                <span>Kolon</span>
+                <strong id="metricColumns">0</strong>
+            </div>
+            <div class="pivot-metric">
+                <span>Hücre</span>
+                <strong id="metricCells">0</strong>
+            </div>
+            <div class="pivot-metric">
+                <span>Süre</span>
+                <strong id="metricDuration">0 ms</strong>
+            </div>
+        </div>
+    </header>
+
+    <div class="pivot-workspace">
+        <aside class="pivot-sidebar" aria-label="PivotTable alanları">
+            <section class="pivot-section">
+                <div class="pivot-section__head">
+                    <h2>PivotTable Alanları</h2>
+                    <span>Alan listesi</span>
+                </div>
+                <div class="pivot-search">
+                    <input id="fieldSearch" type="search" placeholder="Alan ara" autocomplete="off">
+                </div>
+                <div class="pivot-field-list" id="fieldList" aria-label="Field list"></div>
+            </section>
+
+            <div class="pivot-layout-grid" aria-label="Pivot alan yerleşimi">
+                    <div class="pivot-zone" data-zone="filters">
+                        <div class="pivot-zone__head">
+                            <strong>Filtreler</strong>
+                            <span id="filtersCount">0</span>
+                        </div>
+                        <div class="pivot-zone__body" id="filtersZone"></div>
+                    </div>
+                    <div class="pivot-zone" data-zone="columns">
+                        <div class="pivot-zone__head">
+                            <strong>Sütunlar</strong>
+                            <span id="columnsCount">0</span>
+                        </div>
+                        <div class="pivot-zone__body" id="columnsZone"></div>
+                    </div>
+                    <div class="pivot-zone" data-zone="rows">
+                        <div class="pivot-zone__head">
+                            <strong>Satırlar</strong>
+                            <span id="rowsCount">0</span>
+                        </div>
+                        <div class="pivot-zone__body" id="rowsZone"></div>
+                    </div>
+                    <div class="pivot-zone" data-zone="values">
+                        <div class="pivot-zone__head">
+                            <strong>Değerler</strong>
+                            <span id="valuesCount">0</span>
+                        </div>
+                        <div class="pivot-zone__body" id="valuesZone"></div>
+                    </div>
+            </div>
+            <div class="pivot-sort-panel">
+                <label for="rowSortMode">Sıralama</label>
+                <select id="rowSortMode">
+                    <option value="none">Varsayılan</option>
+                    <option value="label-asc">Alan adı A-Z</option>
+                    <option value="label-desc">Alan adı Z-A</option>
+                    <option value="value-desc">Tutar Toplam büyükten küçüğe</option>
+                    <option value="value-asc">Tutar Toplam küçükten büyüğe</option>
+                </select>
+            </div>
+            <div class="pivot-actions">
+                <button class="pivot-button primary" id="runButton" type="button">Çalıştır</button>
+                <button class="pivot-button" id="jsonButton" type="button">JSON</button>
+            </div>
+        </aside>
+
+        <section class="pivot-content">
+            <div class="pivot-card">
+                <div class="pivot-panel-head">
+                    <h2>Pivot Tablo</h2>
+                    <span class="pivot-status" id="status">Hazır</span>
+                </div>
+                <div class="pivot-table-toolbar" aria-label="Pivot tablo araçları">
+                    <div class="pivot-view-mode" aria-label="Pivot görünüm modu">
+                        <button type="button" data-view-mode="compact">Kompakt</button>
+                        <button type="button" data-view-mode="tabular" data-selected="true">Tablo</button>
+                    </div>
+                    <label class="pivot-toolbar-toggle">
+                        <input id="repeatLabelsToggle" type="checkbox">
+                        <span>Etiketleri tekrarla</span>
+                    </label>
+                    <label class="pivot-toolbar-toggle">
+                        <input id="subtotalsToggle" type="checkbox" checked>
+                        <span>Alt toplamlar</span>
+                    </label>
+                    <label class="pivot-toolbar-toggle">
+                        <input id="largeDataToggle" type="checkbox">
+                        <span>Büyük veri</span>
+                    </label>
+                    <span class="pivot-large-data-info" id="largeDataInfo" hidden aria-live="polite"></span>
+                    <div class="pivot-saved-views pivot-dropdown-host">
+                        <button class="pivot-saved-views__trigger" id="savedViewsButton" type="button" aria-haspopup="true" aria-expanded="false">
+                            Görünümler <span id="activeViewLabel"></span>
+                        </button>
+                        <div class="pivot-view-menu" id="savedViewsMenu" hidden>
+                            <select id="savedViewSelect" aria-label="Kayıtlı görünüm">
+                                <option value="">Kayıtlı görünüm yok</option>
+                            </select>
+                            <input id="savedViewName" type="text" maxlength="60" placeholder="Görünüm adı" autocomplete="off">
+                            <div class="pivot-view-menu__actions">
+                                <button type="button" id="saveViewButton">Kaydet</button>
+                                <button type="button" id="updateViewButton" disabled>Güncelle</button>
+                                <button class="is-danger" type="button" id="deleteViewButton" disabled>Sil</button>
+                            </div>
+                            <span class="pivot-view-menu__status" id="savedViewStatus" aria-live="polite"></span>
+                        </div>
+                    </div>
+                    <button type="button" id="drillDownButton" disabled>Detay</button>
+                    <button type="button" id="expandAllButton">Tümünü genişlet</button>
+                    <button type="button" id="collapseAllButton">Tümünü daralt</button>
+                    <button type="button" id="resetColumnsButton">Kolonları sıfırla</button>
+                    <button type="button" id="resetLayoutButton">Yerleşimi sıfırla</button>
+                    <button type="button" id="exportExcelButton">Excel</button>
+                    <button type="button" id="exportCsvButton">CSV</button>
+                    <button type="button" id="toolbarJsonButton">JSON</button>
+                    <button type="button" id="fullscreenButton">Tam ekran</button>
+                </div>
+                <div class="pivot-table-stage">
+                    <div id="tableHost"></div>
+                    <div class="pivot-large-loading" id="largeDataLoading" hidden aria-live="polite">
+                        <strong>Pivot hazırlanıyor</strong>
+                        <span>Veriler sunucuda işleniyor...</span>
+                        <div class="pivot-large-loading__lines" aria-hidden="true">
+                            <i></i><i></i><i></i><i></i><i></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</main>
+
+<div class="pivot-modal" id="jsonModal" aria-hidden="true">
+    <div class="pivot-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="jsonModalTitle">
+        <div class="pivot-panel-head">
+            <h2 id="jsonModalTitle">100 Kayıt JSON</h2>
+            <button class="pivot-button" id="closeJsonButton" type="button">Kapat</button>
+        </div>
+        <div class="pivot-modal__body">
+            <pre id="jsonOutput">@sampleJson</pre>
+        </div>
+    </div>
+</div>
+
+<div class="pivot-modal pivot-drill-down-modal" id="drillDownModal" aria-hidden="true">
+    <div class="pivot-modal__dialog pivot-drill-down-dialog" role="dialog" aria-modal="true" aria-labelledby="drillDownTitle">
+        <div class="pivot-panel-head">
+            <div class="pivot-drill-down-heading">
+                <h2 id="drillDownTitle">Kaynak Kayıtlar</h2>
+                <span id="drillDownSummary"></span>
+            </div>
+            <button class="pivot-button" id="closeDrillDownButton" type="button">Kapat</button>
+        </div>
+        <div class="pivot-drill-down-body">
+            <div class="pivot-drill-down-toolbar">
+                <input id="drillDownSearch" type="search" placeholder="Kayıtlarda ara" autocomplete="off">
+                <button class="pivot-button" id="drillDownCsvButton" type="button" disabled>CSV</button>
+            </div>
+            <div class="pivot-drill-down-notice" id="drillDownNotice" hidden></div>
+            <div class="pivot-drill-down-state" id="drillDownState">Bir hücre seçin</div>
+            <div class="pivot-drill-down-table-wrap" id="drillDownTableWrap" hidden>
+                <table class="pivot-drill-down-table">
+                    <thead id="drillDownTableHead"></thead>
+                    <tbody id="drillDownTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="pivot-conditional-panel" id="conditionalPanel" role="dialog" aria-modal="false" aria-labelledby="conditionalPanelTitle" hidden>
+    <div class="pivot-conditional-panel__head">
+        <div>
+            <strong id="conditionalPanelTitle">Koşullu biçimlendirme</strong>
+            <span id="conditionalPanelSummary"></span>
+        </div>
+        <button type="button" id="closeConditionalPanelButton" aria-label="Koşullu biçimlendirme panelini kapat">×</button>
+    </div>
+    <form id="conditionalForm">
+        <label>
+            <span>Koşul</span>
+            <select id="conditionalOperator">
+                <option value="greaterThan">Büyüktür</option>
+                <option value="greaterThanOrEqual" selected>Büyük veya eşittir</option>
+                <option value="lessThan">Küçüktür</option>
+                <option value="lessThanOrEqual">Küçük veya eşittir</option>
+                <option value="equal">Eşittir</option>
+                <option value="between">Arasındadır</option>
+            </select>
+        </label>
+        <div class="pivot-conditional-panel__values">
+            <label>
+                <span>Değer</span>
+                <input id="conditionalThreshold" type="number" step="any" required>
+            </label>
+            <label id="conditionalThreshold2Label" hidden>
+                <span>İkinci değer</span>
+                <input id="conditionalThreshold2" type="number" step="any">
+            </label>
+        </div>
+        <fieldset class="pivot-conditional-colors">
+            <legend>Vurgu rengi</legend>
+            <label title="Yeşil"><input type="radio" name="conditionalColor" value="green" checked><span class="is-green"></span></label>
+            <label title="Sarı"><input type="radio" name="conditionalColor" value="amber"><span class="is-amber"></span></label>
+            <label title="Kırmızı"><input type="radio" name="conditionalColor" value="red"><span class="is-red"></span></label>
+            <label title="Mavi"><input type="radio" name="conditionalColor" value="blue"><span class="is-blue"></span></label>
+        </fieldset>
+        <div class="pivot-conditional-panel__actions">
+            <button class="is-secondary" type="button" id="clearConditionalRulesButton">Ölçü kurallarını temizle</button>
+            <button class="is-primary" type="submit">Kuralı ekle</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        const elements = {
+            fieldSearch: document.getElementById("fieldSearch"),
+            fieldList: document.getElementById("fieldList"),
+            rowsZone: document.getElementById("rowsZone"),
+            columnsZone: document.getElementById("columnsZone"),
+            valuesZone: document.getElementById("valuesZone"),
+            filtersZone: document.getElementById("filtersZone"),
+            rowsCount: document.getElementById("rowsCount"),
+            columnsCount: document.getElementById("columnsCount"),
+            valuesCount: document.getElementById("valuesCount"),
+            filtersCount: document.getElementById("filtersCount"),
+            runButton: document.getElementById("runButton"),
+            jsonButton: document.getElementById("jsonButton"),
+            closeJsonButton: document.getElementById("closeJsonButton"),
+            jsonModal: document.getElementById("jsonModal"),
+            status: document.getElementById("status"),
+            sourceDescription: document.getElementById("sourceDescription"),
+            metricSource: document.getElementById("metricSource"),
+            metricRows: document.getElementById("metricRows"),
+            metricColumns: document.getElementById("metricColumns"),
+            metricCells: document.getElementById("metricCells"),
+            metricDuration: document.getElementById("metricDuration"),
+            rowSortMode: document.getElementById("rowSortMode"),
+            expandAllButton: document.getElementById("expandAllButton"),
+            collapseAllButton: document.getElementById("collapseAllButton"),
+            resetColumnsButton: document.getElementById("resetColumnsButton"),
+            resetLayoutButton: document.getElementById("resetLayoutButton"),
+            exportExcelButton: document.getElementById("exportExcelButton"),
+            exportCsvButton: document.getElementById("exportCsvButton"),
+            toolbarJsonButton: document.getElementById("toolbarJsonButton"),
+            fullscreenButton: document.getElementById("fullscreenButton"),
+            viewModeButtons: document.querySelectorAll("[data-view-mode]"),
+            repeatLabelsToggle: document.getElementById("repeatLabelsToggle"),
+            subtotalsToggle: document.getElementById("subtotalsToggle"),
+            largeDataToggle: document.getElementById("largeDataToggle"),
+            largeDataInfo: document.getElementById("largeDataInfo"),
+            largeDataLoading: document.getElementById("largeDataLoading"),
+            tableHost: document.getElementById("tableHost"),
+            savedViewsButton: document.getElementById("savedViewsButton"),
+            savedViewsMenu: document.getElementById("savedViewsMenu"),
+            savedViewSelect: document.getElementById("savedViewSelect"),
+            savedViewName: document.getElementById("savedViewName"),
+            saveViewButton: document.getElementById("saveViewButton"),
+            updateViewButton: document.getElementById("updateViewButton"),
+            deleteViewButton: document.getElementById("deleteViewButton"),
+            savedViewStatus: document.getElementById("savedViewStatus"),
+            activeViewLabel: document.getElementById("activeViewLabel"),
+            drillDownButton: document.getElementById("drillDownButton"),
+            drillDownModal: document.getElementById("drillDownModal"),
+            drillDownTitle: document.getElementById("drillDownTitle"),
+            drillDownSummary: document.getElementById("drillDownSummary"),
+            drillDownSearch: document.getElementById("drillDownSearch"),
+            drillDownCsvButton: document.getElementById("drillDownCsvButton"),
+            drillDownNotice: document.getElementById("drillDownNotice"),
+            drillDownState: document.getElementById("drillDownState"),
+            drillDownTableWrap: document.getElementById("drillDownTableWrap"),
+            drillDownTableHead: document.getElementById("drillDownTableHead"),
+            drillDownTableBody: document.getElementById("drillDownTableBody"),
+            closeDrillDownButton: document.getElementById("closeDrillDownButton"),
+            conditionalPanel: document.getElementById("conditionalPanel"),
+            conditionalPanelSummary: document.getElementById("conditionalPanelSummary"),
+            conditionalForm: document.getElementById("conditionalForm"),
+            conditionalOperator: document.getElementById("conditionalOperator"),
+            conditionalThreshold: document.getElementById("conditionalThreshold"),
+            conditionalThreshold2: document.getElementById("conditionalThreshold2"),
+            conditionalThreshold2Label: document.getElementById("conditionalThreshold2Label"),
+            closeConditionalPanelButton: document.getElementById("closeConditionalPanelButton"),
+            clearConditionalRulesButton: document.getElementById("clearConditionalRulesButton"),
+            pivotCard: document.querySelector(".pivot-card")
+        };
+
+        const renderer = new PivotForge.PivotTableRenderer(elements.tableHost, {
+            totalText: "Toplam",
+            emptyText: "-",
+            onViewStateChanged: persistCurrentState,
+            onSelectionChanged: handlePivotSelectionChanged,
+            onCellDoubleClick: openDrillDown,
+            onCellCopied: handleCellCopied,
+            onCellFilterRequested: filterByCellSelection,
+            onConditionalFormatRequested: openConditionalPanel
+        });
+
+        const sourceData = @Html.Raw(sampleJsonCompact);
+
+        const fields = [
+            { name: "Region", label: "Bölge", role: "dimension" },
+            { name: "Category", label: "Kategori", role: "dimension" },
+            { name: "SalesPerson", label: "Satış Temsilcisi", role: "dimension" },
+            { name: "Year", label: "Yıl", role: "dimension" },
+            { name: "Quarter", label: "Çeyrek", role: "dimension" },
+            { name: "Amount", label: "Tutar", role: "measure" },
+            { name: "Quantity", label: "Miktar", role: "measure" },
+            { name: "Discount", label: "İskonto", role: "measure" }
+        ];
+
+        const aggregationLabels = {
+            sum: "Toplam",
+            count: "Sayım",
+            average: "Ortalama",
+            min: "Minimum",
+            max: "Maksimum"
+        };
+
+        const formatTypeLabels = {
+            number: "Sayı",
+            currency: "Para",
+            percent: "Yüzde"
+        };
+
+        const showAsLabels = {
+            normal: "Normal",
+            percentOfRowTotal: "Satır toplamının %'si",
+            percentOfColumnTotal: "Sütun toplamının %'si",
+            percentOfGrandTotal: "Genel toplamın %'si",
+            differenceFromPrevious: "Önceki dönemden fark",
+            percentDifferenceFromPrevious: "Önceki döneme göre % fark",
+            runningTotal: "Kümülatif toplam"
+        };
+
+        const viewStorage = (() => {
+            try {
+                return window.localStorage;
+            } catch {
+                return null;
+            }
+        })();
+        const viewStore = new PivotForge.PivotViewStore(viewStorage, {
+            fields: fields.map(field => field.name),
+            aggregations: Object.keys(aggregationLabels),
+            formatTypes: Object.keys(formatTypeLabels),
+            showAsModes: Object.keys(showAsLabels)
+        });
+
+        const defaultLayout = {
+            rows: ["Region", "Category"],
+            columns: ["Year"],
+            values: [
+                { field: "Amount", aggregation: "sum", showAs: "normal", format: { type: "currency", decimals: 0, useGrouping: true, currency: "TRY" } },
+                { field: "Quantity", aggregation: "average", showAs: "normal", format: { type: "number", decimals: 2, useGrouping: true } },
+                { field: "Discount", aggregation: "max", showAs: "normal", format: { type: "number", decimals: 0, useGrouping: true } }
+            ],
+            filters: []
+        };
+        const restoredState = viewStore.loadLastState();
+        const layout = cloneLayout(restoredState?.layout ?? defaultLayout);
+
+        let fieldSearchTerm = "";
+        let activeRowSort = restoredState?.sort ?? null;
+        let activeViewId = null;
+        let activeViewBaseline = null;
+        let pendingDeleteViewId = null;
+        const viewSettings = {
+            layoutMode: restoredState?.viewSettings.layoutMode ?? "tabular",
+            repeatRowLabels: restoredState?.viewSettings.repeatRowLabels ?? false,
+            subtotals: restoredState?.viewSettings.subtotals ?? true,
+            largeData: restoredState?.viewSettings.largeData ?? false
+        };
+        const fieldAliases = { ...(restoredState?.fieldAliases ?? {}) };
+        const drillDownColumns = [
+            { key: "region", label: "Bölge" },
+            { key: "category", label: "Kategori" },
+            { key: "salesPerson", label: "Satış Temsilcisi" },
+            { key: "year", label: "Yıl" },
+            { key: "quarter", label: "Çeyrek" },
+            { key: "amount", label: "Tutar", format: value => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 }).format(value ?? 0) },
+            { key: "quantity", label: "Miktar", format: value => new Intl.NumberFormat("tr-TR").format(value ?? 0) },
+            { key: "discount", label: "İskonto", format: value => new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(value ?? 0) }
+        ];
+        let drillDownRecords = [];
+        let visibleDrillDownRecords = [];
+        let drillDownColumnFilters = {};
+        let drillDownSelection = null;
+        let drillDownResponse = null;
+        let drillDownController = null;
+        let drillDownRequestId = 0;
+        let cellCopyStatusTimer = null;
+        let conditionalSelection = null;
+        let conditionalAnchorCell = null;
+        let conditionalRules = restoredState?.conditionalRules?.map(rule => ({ ...rule })) ?? [];
+        const largeSourceRowCount = 100_000;
+        const virtualPageSize = 12;
+        const virtualRowHeight = 36;
+        let virtualPageOffset = 0;
+        let virtualScrollTimer = null;
+        let lastVirtualState = null;
+        let pivotRequestController = null;
+        const virtualDataSource = new PivotForge.PivotVirtualDataSource({
+            pageSize: virtualPageSize,
+            maxCachedPages: 6,
+            start: startLargePivotSession,
+            loadPage: loadLargePivotPage,
+            onStateChanged: handleVirtualDataState
+        });
+        renderer.applyViewState(restoredState, { rerender: false, notify: false });
+
+        elements.runButton.addEventListener("click", runPivot);
+        elements.fieldSearch.addEventListener("input", event => {
+            fieldSearchTerm = event.target.value.trim().toLocaleLowerCase("tr");
+            renderFieldPanel();
+        });
+        elements.jsonButton.addEventListener("click", () => toggleJsonModal(true));
+        elements.toolbarJsonButton.addEventListener("click", () => toggleJsonModal(true));
+        elements.expandAllButton.addEventListener("click", () => renderer.expandAll());
+        elements.collapseAllButton.addEventListener("click", () => renderer.collapseAll());
+        elements.resetColumnsButton.addEventListener("click", () => renderer.resetColumnWidths());
+        elements.resetLayoutButton.addEventListener("click", resetLayout);
+        elements.exportExcelButton.addEventListener("click", exportExcel);
+        elements.exportCsvButton.addEventListener("click", exportVisibleTableCsv);
+        elements.fullscreenButton.addEventListener("click", toggleFullscreen);
+        elements.viewModeButtons.forEach(button => {
+            button.addEventListener("click", () => {
+                viewSettings.layoutMode = button.dataset.viewMode;
+                syncViewControls();
+                runPivot();
+            });
+        });
+        elements.repeatLabelsToggle.addEventListener("change", event => {
+            viewSettings.repeatRowLabels = event.target.checked;
+            runPivot();
+        });
+        elements.subtotalsToggle.addEventListener("change", event => {
+            viewSettings.subtotals = event.target.checked;
+            runPivot();
+        });
+        elements.largeDataToggle.addEventListener("change", event => {
+            viewSettings.largeData = event.target.checked;
+            runPivot();
+        });
+        elements.tableHost.addEventListener("scroll", handleVirtualScroll, { passive: true });
+        elements.rowSortMode.addEventListener("change", event => {
+            activeRowSort = createRowSort(event.target.value);
+            runPivot();
+        });
+        elements.savedViewsButton.addEventListener("click", event => {
+            event.stopPropagation();
+            const willOpen = elements.savedViewsMenu.hidden;
+            closeAllDropdowns(elements.savedViewsMenu);
+            elements.savedViewsMenu.hidden = !willOpen;
+            elements.savedViewsButton.setAttribute("aria-expanded", String(willOpen));
+
+            if (willOpen) {
+                renderSavedViews();
+            }
+        });
+        elements.savedViewSelect.addEventListener("change", () => {
+            const view = viewStore.getView(elements.savedViewSelect.value);
+
+            if (view) {
+                applySavedView(view);
+            }
+        });
+        elements.saveViewButton.addEventListener("click", saveNamedView);
+        elements.updateViewButton.addEventListener("click", updateNamedView);
+        elements.deleteViewButton.addEventListener("click", deleteNamedView);
+        elements.savedViewName.addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                saveNamedView();
+            }
+        });
+        elements.drillDownButton.addEventListener("click", () => openDrillDown(renderer.getSelection()));
+        elements.closeDrillDownButton.addEventListener("click", closeDrillDown);
+        elements.drillDownModal.addEventListener("click", event => {
+            if (event.target === elements.drillDownModal) {
+                closeDrillDown();
+            }
+        });
+        elements.drillDownSearch.addEventListener("input", applyDrillDownFilters);
+        elements.drillDownCsvButton.addEventListener("click", exportDrillDownCsv);
+        elements.closeConditionalPanelButton.addEventListener("click", closeConditionalPanel);
+        elements.conditionalOperator.addEventListener("change", syncConditionalOperator);
+        elements.conditionalForm.addEventListener("submit", addConditionalRule);
+        elements.clearConditionalRulesButton.addEventListener("click", clearConditionalRulesForSelection);
+        elements.closeJsonButton.addEventListener("click", () => toggleJsonModal(false));
+        elements.jsonModal.addEventListener("click", event => {
+            if (event.target === elements.jsonModal) {
+                toggleJsonModal(false);
+            }
+        });
+        document.addEventListener("click", event => {
+            if (!event.target.closest(".pivot-dropdown-host, .pivot-chip-menu")) {
+                closeAllDropdowns();
+            }
+        });
+        document.addEventListener("pointerdown", handleFormatPointerDown, true);
+        document.addEventListener("pointerdown", event => {
+            if (!elements.conditionalPanel.hidden &&
+                !elements.conditionalPanel.contains(event.target) &&
+                !event.target.closest(".pivot-cell-menu")) {
+                closeConditionalPanel();
+            }
+        });
+        document.addEventListener("fullscreenchange", () => {
+            elements.fullscreenButton.textContent = document.fullscreenElement ? "Çık" : "Tam ekran";
+        });
+        document.addEventListener("keydown", event => {
+            if (event.key === "Escape") {
+                if (!elements.conditionalPanel.hidden) {
+                    closeConditionalPanel();
+                } else if (elements.drillDownModal.classList.contains("is-open")) {
+                    closeDrillDown();
+                }
+            }
+        });
+        syncViewControls();
+        syncSortControl();
+        renderSavedViews();
+        renderFieldPanel();
+        wireDropZones();
+        runPivot();
+
+        async function runPivot() {
+            if (viewSettings.largeData) {
+                await runLargePivot();
+                return;
+            }
+
+            const started = performance.now();
+            clearTimeout(cellCopyStatusTimer);
+            clearTimeout(virtualScrollTimer);
+            virtualDataSource.cancel();
+            pivotRequestController?.abort();
+            pivotRequestController = new AbortController();
+            const controller = pivotRequestController;
+            setLargeDataModeUi(false);
+            setStatus("Çalışıyor", false);
+
+            try {
+                ensureUsableLayout();
+                const response = await fetch("/pivotforge/pivot", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    signal: controller.signal,
+                    body: JSON.stringify(createPivotPayload())
+                });
+
+                if (!response.ok) {
+                    throw await createApiError(response);
+                }
+
+                const result = await response.json();
+
+                if (controller !== pivotRequestController) {
+                    return;
+                }
+
+                const duration = Math.round(performance.now() - started);
+                renderer.render(result, createRendererOptions());
+
+                renderMetrics(result, duration);
+                persistCurrentState();
+                updateSavedViewDirtyState();
+                setStatus("Hazır", false);
+            } catch (error) {
+                if (error.name === "AbortError") {
+                    return;
+                }
+
+                setStatus(error.message || String(error), true);
+            } finally {
+                if (pivotRequestController === controller) {
+                    pivotRequestController = null;
+                }
+            }
+        }
+
+        async function runLargePivot() {
+            const started = performance.now();
+            clearTimeout(cellCopyStatusTimer);
+            clearTimeout(virtualScrollTimer);
+            pivotRequestController?.abort();
+            pivotRequestController = null;
+            ensureUsableLayout();
+            setLargeDataModeUi(true);
+            elements.tableHost.scrollTop = 0;
+            virtualPageOffset = 0;
+            setStatus("Büyük veri hazırlanıyor", false);
+
+            try {
+                const page = await virtualDataSource.start(createPivotPayload());
+
+                if (!page || !viewSettings.largeData) {
+                    return;
+                }
+
+                renderVirtualPage(page, Math.round(performance.now() - started));
+                persistCurrentState();
+                updateSavedViewDirtyState();
+                setStatus("Hazır", false);
+            } catch (error) {
+                setLargeDataLoading(false);
+                setStatus(error.message || String(error), true);
+            }
+        }
+
+        function createPivotPayload() {
+            return {
+                rows: layout.rows,
+                columns: layout.columns,
+                values: layout.values,
+                filters: layout.filters,
+                rowSort: activeRowSort
+            };
+        }
+
+        function createRendererOptions(overrides = {}) {
+            return {
+                rowFields: layout.rows,
+                rowFieldLabels: layout.rows.map(fieldLabel),
+                layoutMode: viewSettings.layoutMode,
+                repeatRowLabels: viewSettings.repeatRowLabels,
+                subtotals: viewSettings.subtotals,
+                sortState: activeRowSort,
+                onSortRequested: handleHeaderSort,
+                conditionalRules,
+                values: layout.values.map(value => ({
+                    key: valueKey(value),
+                    label: valueDisplayLabel(value),
+                    aggregation: value.aggregation,
+                    showAs: normalizeShowAs(value.showAs),
+                    format: displayValueFormat(value)
+                })),
+                ...overrides
+            };
+        }
+
+        async function startLargePivotSession(request, pageSize, signal) {
+            const response = await fetch("/pivotforge/large/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                signal,
+                body: JSON.stringify({
+                    ...request,
+                    pageSize,
+                    sourceRowCount: largeSourceRowCount
+                })
+            });
+
+            if (!response.ok) {
+                throw await createApiError(response);
+            }
+
+            return response.json();
+        }
+
+        async function loadLargePivotPage(sessionId, offset, pageSize, signal) {
+            const response = await fetch("/pivotforge/large/page", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                signal,
+                body: JSON.stringify({ sessionId, offset, pageSize })
+            });
+
+            if (!response.ok) {
+                throw await createApiError(response);
+            }
+
+            return response.json();
+        }
+
+        async function createApiError(response) {
+            const payload = await response.json().catch(() => null);
+            const error = new Error(payload?.message ?? payload?.title ?? `İstek başarısız (${response.status})`);
+            error.status = response.status;
+            return error;
+        }
+
+        function handleVirtualDataState(state) {
+            lastVirtualState = state;
+            elements.tableHost.classList.toggle("is-page-loading", state.phase === "page-loading");
+
+            if (state.phase === "initial-loading") {
+                setLargeDataLoading(true);
+                setLargeDataInfo("Pivot hazırlanıyor...");
+            } else if (state.phase === "page-loading") {
+                setLargeDataInfo("Satırlar yükleniyor...");
+            } else if (state.phase === "ready") {
+                setLargeDataLoading(false);
+            } else if (state.phase === "error") {
+                setLargeDataLoading(false);
+            }
+        }
+
+        function handleVirtualScroll() {
+            if (!viewSettings.largeData || !virtualDataSource.sessionId) {
+                return;
+            }
+
+            clearTimeout(virtualScrollTimer);
+            virtualScrollTimer = setTimeout(() => {
+                const maximumScrollTop = Math.max(
+                    1,
+                    elements.tableHost.scrollHeight - elements.tableHost.clientHeight);
+                const scrollRatio = Math.min(1, elements.tableHost.scrollTop / maximumScrollTop);
+                const rowIndex = Math.floor(scrollRatio * Math.max(0, virtualDataSource.totalRowCount - 1));
+                const targetOffset = virtualDataSource.normalizeOffset(rowIndex);
+
+                if (targetOffset !== virtualPageOffset) {
+                    void loadVirtualPage(targetOffset);
+                }
+            }, 80);
+        }
+
+        async function loadVirtualPage(offset) {
+            try {
+                const page = await virtualDataSource.load(offset);
+
+                if (page && viewSettings.largeData) {
+                    renderVirtualPage(page);
+                }
+            } catch (error) {
+                if (error.status === 410 && viewSettings.largeData) {
+                    await runLargePivot();
+                    return;
+                }
+
+                setStatus(error.message || String(error), true);
+            }
+        }
+
+        function renderVirtualPage(page, duration = null) {
+            const scrollTop = elements.tableHost.scrollTop;
+            const scrollLeft = elements.tableHost.scrollLeft;
+            virtualPageOffset = page.offset;
+            renderer.render(page.result, createRendererOptions({
+                showGrandTotal: !page.hasMore,
+                restoreSelectionFocus: false,
+                virtualState: {
+                    offset: page.offset,
+                    pageRowCount: page.result.rowHeaders.length,
+                    totalRowCount: page.totalRowCount,
+                    rowHeight: virtualRowHeight
+                }
+            }));
+            elements.tableHost.scrollTop = scrollTop;
+            elements.tableHost.scrollLeft = scrollLeft;
+
+            const first = page.totalRowCount === 0 ? 0 : page.offset + 1;
+            const last = page.offset + page.result.rowHeaders.length;
+            const sourceLabel = lastVirtualState?.cacheHit ? "önbellek" : "sunucu";
+            setLargeDataInfo(`${first}-${last} / ${page.totalRowCount} satır · ${sourceLabel} · ${lastVirtualState?.cachedPageCount ?? 0}/6 parça`);
+            renderLargeMetrics(page, duration);
+        }
+
+        function renderLargeMetrics(page, duration) {
+            elements.metricRows.textContent = page.totalRowCount;
+            elements.metricColumns.textContent = page.result.metadata?.columnHeaderCount ?? 0;
+            elements.metricCells.textContent = `${page.result.metadata?.cellCount ?? 0} / parça`;
+
+            if (duration !== null) {
+                elements.metricDuration.textContent = `${duration} ms`;
+            }
+        }
+
+        function setLargeDataModeUi(enabled) {
+            elements.metricSource.textContent = enabled ? largeSourceRowCount.toLocaleString("tr-TR") : "@Model.Count";
+            elements.sourceDescription.textContent = enabled
+                ? `${largeSourceRowCount.toLocaleString("tr-TR")} kayıtlık satış verisi · server-side parçalı pivot`
+                : "100 kayıtlık satış verisi ile server-side C# pivot + saf HTML tablo renderer";
+            elements.largeDataInfo.hidden = !enabled;
+
+            if (!enabled) {
+                elements.tableHost.classList.remove("is-page-loading");
+                setLargeDataLoading(false);
+            }
+        }
+
+        function setLargeDataInfo(message) {
+            elements.largeDataInfo.textContent = message;
+            elements.largeDataInfo.hidden = false;
+        }
+
+        function setLargeDataLoading(visible) {
+            elements.largeDataLoading.hidden = !visible;
+        }
+
+        function renderFieldPanel() {
+            const visibleFields = fields.filter(field =>
+                field.name.toLocaleLowerCase("tr").includes(fieldSearchTerm) ||
+                field.label.toLocaleLowerCase("tr").includes(fieldSearchTerm));
+            elements.fieldList.replaceChildren(...visibleFields.map(field => createAvailableField(field)));
+
+            if (visibleFields.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "pivot-zone__empty";
+                empty.textContent = "Alan bulunamadı";
+                elements.fieldList.appendChild(empty);
+            }
+
+            renderZone("rows", elements.rowsZone);
+            renderZone("columns", elements.columnsZone);
+            renderZone("values", elements.valuesZone);
+            renderZone("filters", elements.filtersZone);
+            updateZoneCounts();
+        }
+
+        function createAvailableField(field) {
+            const chip = document.createElement("div");
+            chip.className = `pivot-field-chip is-${field.role}`;
+            chip.draggable = true;
+            chip.dataset.field = field.name;
+            chip.dataset.active = String(isFieldInLayout(field.name));
+            chip.innerHTML = `
+                <span class="pivot-field-chip__main">
+                    <span class="pivot-field-chip__name">${field.label}</span>
+                    <span class="pivot-field-chip__meta">${roleLabel(field.role)}</span>
+                </span>
+            `;
+
+            chip.addEventListener("dragstart", event => {
+                event.dataTransfer.setData("text/plain", field.name);
+                event.dataTransfer.setData("application/x-pivot-source", "field-list");
+                event.dataTransfer.effectAllowed = "move";
+                chip.classList.add("is-dragging");
+                document.body.classList.add("pivot-field-drag-active");
+            });
+            chip.addEventListener("dragend", () => {
+                chip.classList.remove("is-dragging");
+                document.body.classList.remove("pivot-field-drag-active");
+                clearDropStates();
+            });
+
+            return chip;
+        }
+
+        function renderZone(zone, host) {
+            host.replaceChildren();
+            const entries = zone === "values" ? layout.values : layout[zone];
+
+            if (entries.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "pivot-zone__empty";
+                empty.textContent = "Alanları buraya sürükleyin";
+                host.appendChild(empty);
+                return;
+            }
+
+            entries.forEach((entry, index) => {
+                host.appendChild(zone === "values"
+                    ? createValueChip(entry, index)
+                    : zone === "filters"
+                        ? createFilterChip(entry, index)
+                    : createPlacedFieldChip(entry, zone, index));
+            });
+        }
+
+        function createPlacedFieldChip(field, zone, index) {
+            const chip = document.createElement("div");
+            chip.className = "pivot-placed-chip pivot-dropdown-host";
+            chip.draggable = true;
+            chip.dataset.field = field;
+            chip.dataset.zone = zone;
+            chip.dataset.index = String(index);
+            chip.innerHTML = `
+                <span class="pivot-chip-handle" aria-hidden="true">⋮⋮</span>
+                <span class="pivot-placed-chip__main">
+                    <span class="pivot-placed-chip__name">${fieldLabel(field)}</span>
+                    <span class="pivot-placed-chip__meta">${zoneLabel(zone)}</span>
+                </span>
+                <div class="pivot-chip-actions">
+                    <button type="button" data-action="settings" title="Alan ayarları">⋯</button>
+                </div>
+                <div class="pivot-chip-menu" hidden></div>
+            `;
+
+            wirePlacedChipDrag(chip, field, zone, index);
+            wireChipSettings(chip, { field, zone, index });
+            return chip;
+        }
+
+        function createFilterChip(filter, index) {
+            const selectedCount = filter.values.length;
+            const totalCount = getFilterOptions(filter.field).length;
+            const chip = document.createElement("div");
+            chip.className = "pivot-placed-chip is-filter pivot-dropdown-host";
+            chip.draggable = true;
+            chip.dataset.field = filter.field;
+            chip.dataset.zone = "filters";
+            chip.dataset.index = String(index);
+            chip.innerHTML = `
+                <span class="pivot-chip-handle" aria-hidden="true">⋮⋮</span>
+                <span class="pivot-placed-chip__main">
+                    <span class="pivot-placed-chip__name">${fieldLabel(filter.field)}</span>
+                    <span class="pivot-placed-chip__meta">Filtre</span>
+                </span>
+                <button class="pivot-filter-button pivot-menu-button" type="button">${formatFilterSelection(selectedCount, totalCount)} <span aria-hidden="true">▾</span></button>
+                <div class="pivot-chip-actions">
+                    <button type="button" data-action="settings" title="Alan ayarları">⋯</button>
+                </div>
+                <div class="pivot-chip-menu" hidden></div>
+                <div class="pivot-filter-menu" hidden></div>
+            `;
+
+            const menu = chip.querySelector(".pivot-filter-menu");
+            chip.querySelector(".pivot-filter-button").addEventListener("click", event => {
+                event.stopPropagation();
+                closeAllDropdowns(menu);
+                renderFilterMenu(menu, filter, index, chip);
+                menu.hidden = !menu.hidden;
+                chip.classList.toggle("is-menu-open", !menu.hidden);
+            });
+            wirePlacedChipDrag(chip, filter.field, "filters", index);
+            wireChipSettings(chip, { field: filter.field, zone: "filters", index, filter });
+            return chip;
+        }
+
+        function renderFilterMenu(menu, filter, index, chip) {
+            const options = getFilterOptions(filter.field);
+            const selected = new Set(filter.values);
+            let filterSearchTerm = "";
+            menu.replaceChildren();
+
+            const search = document.createElement("input");
+            search.className = "pivot-filter-search";
+            search.type = "search";
+            search.placeholder = "Filtre ara";
+            search.autocomplete = "off";
+            menu.appendChild(search);
+
+            const toolbar = document.createElement("div");
+            toolbar.className = "pivot-filter-menu__toolbar";
+            toolbar.innerHTML = `
+                <button type="button" data-action="all">Tümünü seç</button>
+                <button type="button" data-action="clear">Temizle</button>
+            `;
+            menu.appendChild(toolbar);
+
+            const list = document.createElement("div");
+            list.className = "pivot-filter-options";
+            menu.appendChild(list);
+
+            const footer = document.createElement("div");
+            footer.className = "pivot-filter-menu__footer";
+            footer.innerHTML = `
+                <span class="pivot-filter-menu__summary" aria-live="polite"></span>
+                <button class="pivot-filter-cancel" type="button" data-action="cancel">İptal</button>
+                <button class="pivot-filter-apply" type="button" data-action="apply">Uygula</button>
+            `;
+            menu.appendChild(footer);
+
+            const updateSummary = () => {
+                const summary = footer.querySelector(".pivot-filter-menu__summary");
+                summary.textContent = `${selected.size}/${options.length} seçili`;
+            };
+
+            toolbar.querySelector('[data-action="all"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                selected.clear();
+                options.forEach(option => selected.add(option));
+                updateSummary();
+                renderOptions();
+            });
+            toolbar.querySelector('[data-action="clear"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                selected.clear();
+                updateSummary();
+                renderOptions();
+            });
+
+            const renderOptions = () => {
+                const normalizedSearch = filterSearchTerm.toLocaleLowerCase("tr");
+                const visibleOptions = options.filter(option => option.toLocaleLowerCase("tr").includes(normalizedSearch));
+                list.replaceChildren();
+
+                if (visibleOptions.length === 0) {
+                    const empty = document.createElement("div");
+                    empty.className = "pivot-filter-option-empty";
+                    empty.textContent = "Sonuç yok";
+                    list.appendChild(empty);
+                    return;
+                }
+
+                for (const option of visibleOptions) {
+                    const label = document.createElement("label");
+                    label.className = "pivot-filter-option";
+                    label.innerHTML = `
+                        <input type="checkbox" value="${option}" ${selected.has(option) ? "checked" : ""}>
+                        <span class="pivot-filter-option__box" aria-hidden="true"></span>
+                        <span>${option}</span>
+                    `;
+                    label.querySelector("input").addEventListener("change", event => {
+                        if (event.target.checked) {
+                            selected.add(option);
+                        } else {
+                            selected.delete(option);
+                        }
+
+                        updateSummary();
+                    });
+                    list.appendChild(label);
+                }
+            };
+
+            search.addEventListener("input", event => {
+                filterSearchTerm = event.target.value;
+                renderOptions();
+            });
+
+            footer.querySelector('[data-action="cancel"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                menu.hidden = true;
+                chip.classList.remove("is-menu-open");
+            });
+            footer.querySelector('[data-action="apply"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                layout.filters[index] = { field: filter.field, values: [...selected] };
+                chip.querySelector(".pivot-filter-button").innerHTML = `${formatFilterSelection(selected.size, options.length)} <span aria-hidden="true">▾</span>`;
+                menu.hidden = true;
+                chip.classList.remove("is-menu-open");
+                updateZoneCounts();
+                runPivot();
+            });
+
+            updateSummary();
+            renderOptions();
+        }
+
+        function createValueChip(value, index) {
+            const chip = document.createElement("div");
+            chip.className = "pivot-placed-chip is-value pivot-dropdown-host";
+            chip.draggable = true;
+            chip.dataset.field = value.field;
+            chip.dataset.zone = "values";
+            chip.dataset.valueIndex = String(index);
+            chip.dataset.index = String(index);
+            chip.style.zIndex = String(100 - index);
+            chip.innerHTML = `
+                <span class="pivot-chip-handle" aria-hidden="true">⋮⋮</span>
+                <span class="pivot-placed-chip__main">
+                    <span class="pivot-placed-chip__name">${fieldLabel(value.field)}</span>
+                    <span class="pivot-placed-chip__meta">${valueChipSummary(value)}</span>
+                </span>
+                <div class="pivot-chip-actions">
+                    <button type="button" data-action="settings" title="Alan ayarları">⋯</button>
+                </div>
+                <div class="pivot-chip-menu" hidden></div>
+            `;
+
+            wirePlacedChipDrag(chip, value.field, "values", index);
+            wireChipSettings(chip, { field: value.field, zone: "values", index, value });
+            return chip;
+        }
+
+        function wireChipSettings(chip, context) {
+            const button = chip.querySelector('[data-action="settings"]');
+            const menu = chip.querySelector(".pivot-chip-menu");
+
+            button.addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                const shouldOpen = menu.hidden;
+                closeAllDropdowns(menu);
+                renderChipSettingsMenu(menu, context, chip);
+
+                if (menu.parentElement !== document.body) {
+                    document.body.appendChild(menu);
+                }
+
+                menu.hidden = !shouldOpen;
+                chip.classList.toggle("is-menu-open", shouldOpen);
+
+                if (shouldOpen) {
+                    positionFloatingMenu(menu, button);
+                }
+            });
+        }
+
+        function renderChipSettingsMenu(menu, context, chip) {
+            const canMoveUp = context.index > 0;
+            const canMoveDown = context.index < getZoneEntries(context.zone).length - 1;
+            const currentLabel = fieldLabel(context.field);
+            const baseLabel = baseFieldLabel(context.field);
+
+            menu.replaceChildren();
+            menu.innerHTML = `
+                <div class="pivot-chip-menu__section">
+                    <label class="pivot-chip-menu__label">Alan adı</label>
+                    <input class="pivot-chip-menu__input" type="text" value="${escapeAttribute(currentLabel)}" placeholder="${escapeAttribute(baseLabel)}">
+                    <div class="pivot-chip-menu__row">
+                        <button type="button" data-menu-action="rename">Adı değiştir</button>
+                        <button type="button" data-menu-action="reset-name">Sıfırla</button>
+                    </div>
+                </div>
+                <div class="pivot-chip-menu__section">
+                    <span class="pivot-chip-menu__title">Konum</span>
+                    <div class="pivot-chip-menu__row">
+                        <button type="button" data-menu-action="move-up" ${canMoveUp ? "" : "disabled"}>Yukarı taşı</button>
+                        <button type="button" data-menu-action="move-down" ${canMoveDown ? "" : "disabled"}>Aşağı taşı</button>
+                    </div>
+                </div>
+                ${createSortMenuMarkup(context)}
+                ${context.zone === "values" ? createValueSettingsMarkup(context.value) : ""}
+                ${context.zone === "filters" ? `<button class="pivot-chip-menu__item" type="button" data-menu-action="open-filter">Filtre seçimlerini aç</button>` : ""}
+                <button class="pivot-chip-menu__item is-danger" type="button" data-menu-action="remove">Alanı kaldır</button>
+            `;
+
+            menu.querySelector('[data-menu-action="rename"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                const nextName = menu.querySelector(".pivot-chip-menu__input").value.trim();
+
+                if (nextName && nextName !== baseLabel) {
+                    fieldAliases[context.field] = nextName;
+                } else {
+                    delete fieldAliases[context.field];
+                }
+
+                renderFieldPanel();
+                runPivot();
+            });
+            menu.querySelector('[data-menu-action="reset-name"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                delete fieldAliases[context.field];
+                renderFieldPanel();
+                runPivot();
+            });
+            menu.querySelector('[data-menu-action="move-up"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                moveFieldWithinZone(context.zone, context.index, -1);
+            });
+            menu.querySelector('[data-menu-action="move-down"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                moveFieldWithinZone(context.zone, context.index, 1);
+            });
+            menu.querySelector('[data-menu-action="remove"]').addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                removeField(context.zone, context.field);
+            });
+
+            menu.querySelectorAll("[data-sort-action]").forEach(button => {
+                button.addEventListener("click", event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    applyChipSort(context, button.dataset.sortAction);
+                });
+            });
+
+            if (context.zone === "values") {
+                const value = context.value;
+                const format = normalizeValueFormat(value);
+
+                menu.querySelectorAll("[data-menu-aggregation]").forEach(button => {
+                    button.addEventListener("click", event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        layout.values[context.index] = { ...value, aggregation: button.dataset.menuAggregation, format };
+                        syncActiveSortWithLayout();
+                        renderFieldPanel();
+                        runPivot();
+                    });
+                });
+                menu.querySelectorAll("[data-menu-show-as]").forEach(button => {
+                    button.addEventListener("click", event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        layout.values[context.index] = {
+                            ...value,
+                            showAs: normalizeShowAs(button.dataset.menuShowAs),
+                            format
+                        };
+                        renderFieldPanel();
+                        runPivot();
+                    });
+                });
+                menu.querySelectorAll("[data-menu-format-type]").forEach(button => {
+                    button.addEventListener("click", event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        applyValueFormat(context.index, value, { ...format, type: button.dataset.menuFormatType });
+                    });
+                });
+                menu.querySelectorAll("[data-menu-format-decimals]").forEach(button => {
+                    button.addEventListener("click", event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        applyValueFormat(context.index, value, { ...format, decimals: Number(button.dataset.menuFormatDecimals) });
+                    });
+                });
+                menu.querySelector("[data-menu-format-grouping]").addEventListener("click", event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    applyValueFormat(context.index, value, { ...format, useGrouping: !format.useGrouping });
+                });
+            }
+
+            const openFilterButton = menu.querySelector('[data-menu-action="open-filter"]');
+
+            if (openFilterButton) {
+                openFilterButton.addEventListener("click", event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const filterMenu = chip.querySelector(".pivot-filter-menu");
+                    closeAllDropdowns(filterMenu);
+                    renderFilterMenu(filterMenu, context.filter, context.index, chip);
+                    filterMenu.hidden = false;
+                    chip.classList.add("is-menu-open");
+                });
+            }
+        }
+
+        function createSortMenuMarkup(context) {
+            if (context.zone === "rows") {
+                return `
+                    <div class="pivot-chip-menu__section">
+                        <span class="pivot-chip-menu__title">Sıralama</span>
+                        <div class="pivot-chip-menu__row">
+                            <button type="button" data-sort-action="row-asc">A-Z</button>
+                            <button type="button" data-sort-action="row-desc">Z-A</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (context.zone === "values") {
+                return `
+                    <div class="pivot-chip-menu__section">
+                        <span class="pivot-chip-menu__title">Sıralama</span>
+                        <div class="pivot-chip-menu__row">
+                            <button type="button" data-sort-action="value-desc">Büyükten küçüğe</button>
+                            <button type="button" data-sort-action="value-asc">Küçükten büyüğe</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="pivot-chip-menu__section">
+                    <span class="pivot-chip-menu__title">Sıralama</span>
+                    <span class="pivot-chip-menu__hint">Bu alan için sıralama tablo başlığından yapılır.</span>
+                </div>
+            `;
+        }
+
+        function createValueSettingsMarkup(value) {
+            const format = normalizeValueFormat(value);
+            const showAs = normalizeShowAs(value.showAs);
+
+            return `
+                <div class="pivot-chip-menu__section">
+                    <span class="pivot-chip-menu__title">Değer ayarları</span>
+                    <div class="pivot-chip-menu__grid">
+                        ${["sum", "count", "average", "min", "max"].map(aggregation => `
+                            <button type="button" data-menu-aggregation="${aggregation}" data-selected="${aggregation === value.aggregation}">
+                                ${aggregationLabel(aggregation)}
+                            </button>
+                        `).join("")}
+                    </div>
+                </div>
+                <div class="pivot-chip-menu__section">
+                    <span class="pivot-chip-menu__title">Değerleri farklı göster</span>
+                    <div class="pivot-chip-menu__show-as">
+                        ${Object.entries(showAsLabels).map(([mode, label]) => `
+                            <button class="pivot-chip-menu__item" type="button" data-menu-show-as="${mode}" data-selected="${mode === showAs}">
+                                ${label}
+                            </button>
+                        `).join("")}
+                    </div>
+                </div>
+                <div class="pivot-chip-menu__section">
+                    <span class="pivot-chip-menu__title">Biçimlendirme</span>
+                    <button class="pivot-chip-menu__item" type="button" data-menu-format-grouping data-selected="${format.useGrouping}">
+                        Binlik ayırıcı ${format.useGrouping ? "✓" : ""}
+                    </button>
+                    <div class="pivot-chip-menu__grid">
+                        ${["number", "currency", "percent"].map(type => `
+                            <button type="button" data-menu-format-type="${type}" data-selected="${format.type === type}">
+                                ${formatTypeLabels[type]}
+                            </button>
+                        `).join("")}
+                    </div>
+                    <div class="pivot-chip-menu__grid">
+                        ${[0, 1, 2, 3].map(decimals => `
+                            <button type="button" data-menu-format-decimals="${decimals}" data-selected="${format.decimals === decimals}">
+                                ${decimals}
+                            </button>
+                        `).join("")}
+                    </div>
+                </div>
+            `;
+        }
+
+        function wirePlacedChipDrag(chip, field, zone, index) {
+            chip.addEventListener("dragstart", event => {
+                if (shouldIgnoreChipDrag(event)) {
+                    event.preventDefault();
+                    return;
+                }
+
+                closeAllDropdowns();
+                event.dataTransfer.setData("text/plain", field);
+                event.dataTransfer.setData("application/x-pivot-source", zone);
+                event.dataTransfer.setData("application/x-pivot-index", String(index));
+                event.dataTransfer.effectAllowed = "move";
+                chip.classList.add("is-dragging");
+                document.body.classList.add("pivot-field-drag-active");
+            });
+            chip.addEventListener("dragend", () => {
+                chip.classList.remove("is-dragging");
+                document.body.classList.remove("pivot-field-drag-active");
+                clearDropStates();
+            });
+        }
+
+        function bindFormatControl(items, apply) {
+            items.forEach(item => {
+                if (!item) {
+                    return;
+                }
+
+                const handle = event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    apply(item);
+                };
+
+                item.addEventListener("pointerdown", handle);
+                item.addEventListener("click", event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+                item.addEventListener("keydown", event => {
+                    if (event.key === "Enter" || event.key === " ") {
+                        handle(event);
+                    }
+                });
+            });
+        }
+
+        function handleFormatPointerDown(event) {
+            const control = event.target.closest("[data-format-type], [data-format-decimals], [data-format-grouping]");
+
+            if (!control) {
+                return;
+            }
+
+            const chip = control.closest(".pivot-placed-chip.is-value");
+            const index = Number(chip?.dataset.valueIndex);
+            const value = layout.values[index];
+
+            if (!chip || !value) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            closeAllDropdowns();
+
+            const format = normalizeValueFormat(value);
+
+            if (control.matches("[data-format-type]")) {
+                applyValueFormat(index, value, { ...format, type: control.dataset.formatType });
+                return;
+            }
+
+            if (control.matches("[data-format-decimals]")) {
+                applyValueFormat(index, value, { ...format, decimals: Number(control.dataset.formatDecimals) });
+                return;
+            }
+
+            applyValueFormat(index, value, { ...format, useGrouping: !format.useGrouping });
+        }
+
+        function wireDropZones() {
+            document.querySelectorAll("[data-zone]").forEach(zoneElement => {
+                zoneElement.addEventListener("dragover", event => {
+                    event.preventDefault();
+                    const targetIndex = getDropIndex(zoneElement, event.clientY);
+                    updateDropIndicator(zoneElement, targetIndex);
+                });
+                zoneElement.addEventListener("dragenter", event => {
+                    event.preventDefault();
+                    zoneElement.classList.add("is-over");
+                });
+                zoneElement.addEventListener("dragleave", event => {
+                    if (!zoneElement.contains(event.relatedTarget)) {
+                        zoneElement.classList.remove("is-over");
+                        clearZoneDropIndicator(zoneElement);
+                    }
+                });
+                zoneElement.addEventListener("drop", event => {
+                    event.preventDefault();
+                    zoneElement.classList.remove("is-over");
+                    clearZoneDropIndicator(zoneElement);
+                    const field = event.dataTransfer.getData("text/plain");
+                    const sourceZone = event.dataTransfer.getData("application/x-pivot-source");
+                    const sourceIndex = Number(event.dataTransfer.getData("application/x-pivot-index"));
+                    const targetIndex = getDropIndex(zoneElement, event.clientY);
+                    moveField(field, zoneElement.dataset.zone, targetIndex, sourceZone, sourceIndex);
+                });
+            });
+        }
+
+        function getDropIndex(zoneElement, clientY) {
+            const chips = [...zoneElement.querySelectorAll(".pivot-placed-chip:not(.is-dragging)")];
+
+            if (chips.length === 0) {
+                return 0;
+            }
+
+            const afterChip = chips.find(chip => {
+                const rect = chip.getBoundingClientRect();
+                return clientY < rect.top + rect.height / 2;
+            });
+
+            return afterChip ? chips.indexOf(afterChip) : chips.length;
+        }
+
+        function updateDropIndicator(zoneElement, targetIndex) {
+            zoneElement.classList.add("is-over");
+            zoneElement.querySelectorAll(".pivot-placed-chip").forEach(chip => {
+                chip.classList.remove("is-drop-before", "is-drop-after");
+            });
+
+            const chips = [...zoneElement.querySelectorAll(".pivot-placed-chip:not(.is-dragging)")];
+
+            if (chips.length === 0) {
+                zoneElement.classList.add("is-empty-drop-target");
+                return;
+            }
+
+            zoneElement.classList.remove("is-empty-drop-target");
+
+            if (targetIndex >= chips.length) {
+                chips[chips.length - 1].classList.add("is-drop-after");
+                return;
+            }
+
+            chips[targetIndex].classList.add("is-drop-before");
+        }
+
+        function clearZoneDropIndicator(zoneElement) {
+            zoneElement.classList.remove("is-empty-drop-target");
+            zoneElement.querySelectorAll(".pivot-placed-chip").forEach(chip => {
+                chip.classList.remove("is-drop-before", "is-drop-after");
+            });
+        }
+
+        function moveField(field, zone, targetIndex = null, sourceZone = null, sourceIndex = null) {
+            if (!field || !["rows", "columns", "values", "filters"].includes(zone)) {
+                return;
+            }
+
+            const existingValue = layout.values.find(value => value.field === field);
+            const existingFilter = layout.filters.find(filter => filter.field === field);
+            const insertIndex = Number.isInteger(targetIndex) ? targetIndex : getZoneEntries(zone).length;
+            const nextIndex = insertIndex;
+
+            removeFieldFromLayoutAreas(field);
+
+            if (zone === "filters") {
+                layout.filters.splice(nextIndex, 0, existingFilter ?? { field, values: getFilterOptions(field) });
+            } else if (zone === "values") {
+                layout.values.splice(nextIndex, 0, existingValue ?? {
+                    field,
+                    aggregation: getDefaultAggregation(field),
+                    showAs: "normal",
+                    format: getDefaultFormat(field)
+                });
+            } else {
+                layout[zone].splice(nextIndex, 0, field);
+            }
+
+            syncActiveSortWithLayout();
+            renderFieldPanel();
+            runPivot();
+        }
+
+        function removeField(zone, field) {
+            if (zone === "values") {
+                layout.values = layout.values.filter(value => value.field !== field);
+            } else if (zone === "filters") {
+                layout.filters = layout.filters.filter(filter => filter.field !== field);
+            } else {
+                layout[zone] = layout[zone].filter(item => item !== field);
+            }
+
+            syncActiveSortWithLayout();
+            renderFieldPanel();
+            runPivot();
+        }
+
+        function removeFieldFromLayoutAreas(field) {
+            layout.rows = layout.rows.filter(item => item !== field);
+            layout.columns = layout.columns.filter(item => item !== field);
+            layout.values = layout.values.filter(value => value.field !== field);
+            layout.filters = layout.filters.filter(filter => filter.field !== field);
+        }
+
+        function resetLayout() {
+            const next = cloneLayout(defaultLayout);
+            layout.rows = next.rows;
+            layout.columns = next.columns;
+            layout.values = next.values;
+            layout.filters = next.filters;
+            activeRowSort = null;
+            elements.rowSortMode.value = "none";
+            viewSettings.layoutMode = "tabular";
+            viewSettings.repeatRowLabels = false;
+            viewSettings.subtotals = true;
+            viewSettings.largeData = false;
+            conditionalRules = [];
+            syncViewControls();
+            Object.keys(fieldAliases).forEach(field => delete fieldAliases[field]);
+            renderer.applyViewState({}, { rerender: false, notify: false });
+            activeViewId = null;
+            activeViewBaseline = null;
+            renderFieldPanel();
+            runPivot();
+        }
+
+        function syncViewControls() {
+            elements.viewModeButtons.forEach(button => {
+                button.dataset.selected = String(button.dataset.viewMode === viewSettings.layoutMode);
+            });
+            elements.repeatLabelsToggle.checked = viewSettings.repeatRowLabels;
+            elements.subtotalsToggle.checked = viewSettings.subtotals;
+            elements.largeDataToggle.checked = viewSettings.largeData;
+        }
+
+        function cloneLayout(source) {
+            return {
+                rows: [...source.rows],
+                columns: [...source.columns],
+                values: source.values.map(value => ({
+                    ...value,
+                    format: value.format ? { ...value.format } : undefined
+                })),
+                filters: source.filters.map(filter => ({
+                    field: filter.field,
+                    values: [...filter.values]
+                }))
+            };
+        }
+
+        function handlePivotSelectionChanged(selection) {
+            const canOpen = selection?.type === "cell" && selection.drillDownEnabled !== false;
+            elements.drillDownButton.disabled = !canOpen;
+        }
+
+        function handleCellCopied(_, succeeded, kind = "cell") {
+            clearTimeout(cellCopyStatusTimer);
+            const target = kind === "row" ? "Satır" : "Hücre";
+            setStatus(succeeded ? `${target} kopyalandı` : `${target} kopyalanamadı`, !succeeded);
+            cellCopyStatusTimer = setTimeout(() => setStatus("Hazır", false), 1200);
+        }
+
+        function filterByCellSelection(selection) {
+            const dimensionValues = [
+                ...layout.rows.slice(0, selection.rowHeader.length).map((field, index) => ({ field, value: selection.rowHeader[index] })),
+                ...layout.columns.slice(0, selection.columnHeader.length).map((field, index) => ({ field, value: selection.columnHeader[index] }))
+            ].filter(item => item.value !== null && item.value !== undefined);
+
+            if (dimensionValues.length === 0) {
+                setStatus("Bu hücre için uygulanabilir boyut filtresi yok", true);
+                return;
+            }
+
+            dimensionValues.forEach(({ field, value }) => {
+                const nextFilter = { field, values: [String(value)] };
+                const existingIndex = layout.filters.findIndex(filter => filter.field === field);
+
+                if (existingIndex >= 0) {
+                    layout.filters[existingIndex] = nextFilter;
+                } else {
+                    layout.filters.push(nextFilter);
+                }
+            });
+
+            renderFieldPanel();
+            setStatus("Hücre bağlamı filtrelere uygulandı", false);
+            runPivot();
+        }
+
+        function openConditionalPanel(selection, cell) {
+            if (selection?.type !== "cell" || typeof selection.value !== "number") {
+                return;
+            }
+
+            conditionalSelection = selection;
+            conditionalAnchorCell = cell;
+            const value = layout.values.find(item => valueKey(item) === selection.valueKey);
+            elements.conditionalPanelSummary.textContent = `${value ? valueDisplayLabel(value) : selection.valueKey} · ${cell.textContent.trim()}`;
+            elements.conditionalOperator.value = "greaterThanOrEqual";
+            elements.conditionalThreshold.value = String(selection.value);
+            elements.conditionalThreshold2.value = String(selection.value);
+            elements.conditionalPanel.querySelector('input[name="conditionalColor"][value="green"]').checked = true;
+            elements.conditionalPanel.hidden = false;
+            syncConditionalOperator();
+
+            const rect = cell.getBoundingClientRect();
+            const panelRect = elements.conditionalPanel.getBoundingClientRect();
+            const margin = 10;
+            elements.conditionalPanel.style.left = `${Math.max(margin, Math.min(rect.left, window.innerWidth - panelRect.width - margin))}px`;
+            elements.conditionalPanel.style.top = `${Math.max(margin, Math.min(rect.bottom + 6, window.innerHeight - panelRect.height - margin))}px`;
+            elements.conditionalOperator.focus();
+        }
+
+        function closeConditionalPanel() {
+            if (elements.conditionalPanel.hidden) {
+                return;
+            }
+
+            elements.conditionalPanel.hidden = true;
+            conditionalAnchorCell?.focus({ preventScroll: true });
+            conditionalAnchorCell = null;
+            conditionalSelection = null;
+        }
+
+        function syncConditionalOperator() {
+            const isBetween = elements.conditionalOperator.value === "between";
+            elements.conditionalThreshold2Label.parentElement.classList.toggle("is-between", isBetween);
+            elements.conditionalThreshold2Label.hidden = !isBetween;
+            elements.conditionalThreshold2.required = isBetween;
+        }
+
+        function addConditionalRule(event) {
+            event.preventDefault();
+
+            if (!conditionalSelection || !elements.conditionalForm.reportValidity()) {
+                return;
+            }
+
+            const operator = elements.conditionalOperator.value;
+            conditionalRules.push({
+                id: createConditionalRuleId(),
+                valueKey: conditionalSelection.valueKey,
+                operator,
+                threshold: Number(elements.conditionalThreshold.value),
+                ...(operator === "between" ? { threshold2: Number(elements.conditionalThreshold2.value) } : {}),
+                color: elements.conditionalForm.elements.conditionalColor.value
+            });
+            closeConditionalPanel();
+            setStatus("Koşullu biçimlendirme kuralı eklendi", false);
+            runPivot();
+        }
+
+        function clearConditionalRulesForSelection() {
+            if (!conditionalSelection) {
+                return;
+            }
+
+            const valueKeyToClear = conditionalSelection.valueKey;
+            const previousCount = conditionalRules.length;
+            conditionalRules = conditionalRules.filter(rule => rule.valueKey !== valueKeyToClear);
+            closeConditionalPanel();
+            setStatus(previousCount === conditionalRules.length ? "Bu ölçüde kural yok" : "Ölçü kuralları temizlendi", false);
+            runPivot();
+        }
+
+        function createConditionalRuleId() {
+            return window.crypto?.randomUUID?.() ?? `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
+        async function openDrillDown(selection) {
+            if (selection?.type !== "cell" || selection.drillDownEnabled === false) {
+                return;
+            }
+
+            const hasValue = layout.values.some(value => valueKey(value) === selection.valueKey);
+            const hasCompatiblePaths = selection.rowHeader.length <= layout.rows.length &&
+                selection.columnHeader.length <= layout.columns.length;
+
+            if (!hasValue || !hasCompatiblePaths) {
+                renderer.clearSelection();
+                setStatus("Seçili hücre mevcut pivot düzeninde bulunmuyor", true);
+                return;
+            }
+
+            drillDownController?.abort();
+            drillDownController = new AbortController();
+            const requestId = ++drillDownRequestId;
+            drillDownSelection = selection;
+            drillDownRecords = [];
+            visibleDrillDownRecords = [];
+            drillDownColumnFilters = {};
+            drillDownResponse = null;
+            elements.drillDownSearch.value = "";
+            elements.drillDownCsvButton.disabled = true;
+            elements.drillDownNotice.hidden = true;
+            elements.drillDownTableWrap.hidden = true;
+            elements.drillDownModal.classList.add("is-open");
+            elements.drillDownModal.setAttribute("aria-hidden", "false");
+            elements.drillDownTitle.textContent = createDrillDownTitle(selection);
+            elements.drillDownSummary.textContent = "";
+            setDrillDownState("Kayıtlar yükleniyor...", false);
+
+            try {
+                const response = await fetch("/pivotforge/drill-down", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    signal: drillDownController.signal,
+                    body: JSON.stringify({
+                        rows: layout.rows,
+                        columns: layout.columns,
+                        values: layout.values,
+                        filters: layout.filters,
+                        rowPath: selection.rowHeader,
+                        columnPath: selection.columnHeader,
+                        valueKey: selection.valueKey,
+                        sourceRowCount: viewSettings.largeData ? largeSourceRowCount : @Model.Count
+                    })
+                });
+
+                if (requestId !== drillDownRequestId) {
+                    return;
+                }
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => null);
+                    throw new Error(error?.message ?? "Kaynak kayıtlar alınamadı");
+                }
+
+                drillDownResponse = await response.json();
+                drillDownRecords = drillDownResponse.records ?? [];
+                renderDrillDownTable();
+            } catch (error) {
+                if (error.name !== "AbortError" && requestId === drillDownRequestId) {
+                    setDrillDownState(error.message || "Kaynak kayıtlar alınamadı", true);
+                    elements.drillDownSummary.textContent = "";
+                }
+            }
+        }
+
+        function closeDrillDown() {
+            drillDownController?.abort();
+            drillDownController = null;
+            drillDownRequestId++;
+            drillDownRecords = [];
+            visibleDrillDownRecords = [];
+            drillDownColumnFilters = {};
+            drillDownSelection = null;
+            drillDownResponse = null;
+            elements.drillDownSearch.value = "";
+            elements.drillDownModal.classList.remove("is-open");
+            elements.drillDownModal.setAttribute("aria-hidden", "true");
+        }
+
+        function createDrillDownTitle(selection) {
+            const rowLabel = selection.rowHeader.length > 0 ? selection.rowHeader.join(" / ") : "Tüm satırlar";
+            const columnLabel = selection.columnHeader.length > 0 ? selection.columnHeader.join(" / ") : "Tüm sütunlar";
+            const value = layout.values.find(item => valueKey(item) === selection.valueKey);
+            const valueLabel = value
+                ? valueDisplayLabel(value)
+                : selection.valueKey;
+            return `${rowLabel} · ${columnLabel} · ${valueLabel}`;
+        }
+
+        function renderDrillDownTable() {
+            elements.drillDownTableHead.replaceChildren();
+            const labelRow = document.createElement("tr");
+            const filterRow = document.createElement("tr");
+
+            drillDownColumns.forEach(column => {
+                const header = document.createElement("th");
+                header.textContent = column.label;
+                labelRow.appendChild(header);
+
+                const filterHeader = document.createElement("th");
+                const select = document.createElement("select");
+                select.setAttribute("aria-label", `${column.label} filtresi`);
+                const allOption = document.createElement("option");
+                allOption.value = "";
+                allOption.textContent = "Tümü";
+                select.appendChild(allOption);
+
+                PivotForge.PivotDrillDownData.distinctValues(drillDownRecords, column).forEach(value => {
+                    const option = document.createElement("option");
+                    option.value = value;
+                    option.textContent = value || "(Boş)";
+                    select.appendChild(option);
+                });
+
+                select.addEventListener("change", event => {
+                    drillDownColumnFilters[column.key] = event.target.value
+                        ? new Set([event.target.value])
+                        : new Set();
+                    applyDrillDownFilters();
+                });
+                filterHeader.appendChild(select);
+                filterRow.appendChild(filterHeader);
+            });
+
+            elements.drillDownTableHead.append(labelRow, filterRow);
+            elements.drillDownTableWrap.hidden = false;
+            elements.drillDownNotice.hidden = !drillDownResponse?.truncated;
+            elements.drillDownNotice.textContent = drillDownResponse?.truncated
+                ? `İlk ${drillDownResponse.limit} kayıt gösteriliyor.`
+                : "";
+            applyDrillDownFilters();
+        }
+
+        function applyDrillDownFilters() {
+            visibleDrillDownRecords = PivotForge.PivotDrillDownData.filterRecords(
+                drillDownRecords,
+                drillDownColumns,
+                elements.drillDownSearch.value,
+                drillDownColumnFilters);
+            elements.drillDownTableBody.replaceChildren();
+
+            visibleDrillDownRecords.forEach(record => {
+                const row = document.createElement("tr");
+
+                drillDownColumns.forEach(column => {
+                    const cell = document.createElement("td");
+                    cell.textContent = PivotForge.PivotDrillDownData.formatValue(record[column.key], column);
+                    row.appendChild(cell);
+                });
+
+                elements.drillDownTableBody.appendChild(row);
+            });
+
+            const totalCount = drillDownResponse?.totalCount ?? drillDownRecords.length;
+            elements.drillDownSummary.textContent = `${visibleDrillDownRecords.length} / ${totalCount} kayıt`;
+            elements.drillDownCsvButton.disabled = visibleDrillDownRecords.length === 0;
+
+            if (visibleDrillDownRecords.length === 0) {
+                setDrillDownState(drillDownRecords.length === 0 ? "Bu hücre için kaynak kayıt bulunamadı" : "Filtrelerle eşleşen kayıt yok", false);
+            } else {
+                setDrillDownState("", false);
+            }
+        }
+
+        function setDrillDownState(message, isError) {
+            elements.drillDownState.textContent = message;
+            elements.drillDownState.classList.toggle("error", isError);
+            elements.drillDownState.hidden = !message;
+        }
+
+        function exportDrillDownCsv() {
+            if (visibleDrillDownRecords.length === 0) {
+                return;
+            }
+
+            const csv = PivotForge.PivotDrillDownData.toCsv(visibleDrillDownRecords, drillDownColumns);
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `pivot-detay-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        function captureCurrentState() {
+            const rendererState = renderer.getViewState();
+            return viewStore.normalizeState({
+                version: 1,
+                layout: cloneLayout(layout),
+                viewSettings: { ...viewSettings },
+                sort: activeRowSort ? { ...activeRowSort } : null,
+                fieldAliases: { ...fieldAliases },
+                conditionalRules: conditionalRules.map(rule => ({ ...rule })),
+                columnWidths: rendererState.columnWidths,
+                collapsedGroups: rendererState.collapsedGroups
+            });
+        }
+
+        function persistCurrentState() {
+            const state = captureCurrentState();
+
+            if (state) {
+                viewStore.saveLastState(state);
+            }
+
+            updateSavedViewDirtyState();
+        }
+
+        function renderSavedViews() {
+            const views = viewStore.listViews();
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = views.length === 0 ? "Kayıtlı görünüm yok" : "Görünüm seçin";
+            elements.savedViewSelect.replaceChildren(placeholder);
+
+            views.forEach(view => {
+                const option = document.createElement("option");
+                option.value = view.id;
+                option.textContent = view.name;
+                elements.savedViewSelect.appendChild(option);
+            });
+
+            const activeView = views.find(view => view.id === activeViewId) ?? null;
+            elements.savedViewSelect.value = activeView?.id ?? "";
+            elements.updateViewButton.disabled = !activeView;
+            elements.deleteViewButton.disabled = !activeView;
+            elements.deleteViewButton.textContent = pendingDeleteViewId === activeView?.id ? "Onayla" : "Sil";
+
+            if (activeView && document.activeElement !== elements.savedViewName) {
+                elements.savedViewName.value = activeView.name;
+            }
+
+            updateSavedViewDirtyState();
+        }
+
+        function saveNamedView() {
+            const name = elements.savedViewName.value.trim();
+
+            if (!name) {
+                setSavedViewStatus("Görünüm adı girin", true);
+                elements.savedViewName.focus();
+                return;
+            }
+
+            const saved = viewStore.saveView(name, captureCurrentState());
+
+            if (!saved) {
+                setSavedViewStatus("Görünüm kaydedilemedi", true);
+                return;
+            }
+
+            activeViewId = saved.id;
+            activeViewBaseline = saved.state;
+            pendingDeleteViewId = null;
+            elements.savedViewName.value = saved.name;
+            renderSavedViews();
+            setSavedViewStatus("Görünüm kaydedildi", false);
+        }
+
+        function updateNamedView() {
+            const activeView = viewStore.getView(activeViewId);
+
+            if (!activeView) {
+                return;
+            }
+
+            const name = elements.savedViewName.value.trim() || activeView.name;
+            const saved = viewStore.saveView(name, captureCurrentState(), activeView.id);
+
+            if (!saved) {
+                setSavedViewStatus("Görünüm güncellenemedi", true);
+                return;
+            }
+
+            activeViewBaseline = saved.state;
+            pendingDeleteViewId = null;
+            renderSavedViews();
+            setSavedViewStatus("Görünüm güncellendi", false);
+        }
+
+        function deleteNamedView() {
+            const activeView = viewStore.getView(activeViewId);
+
+            if (!activeView) {
+                return;
+            }
+
+            if (pendingDeleteViewId !== activeView.id) {
+                pendingDeleteViewId = activeView.id;
+                elements.deleteViewButton.textContent = "Onayla";
+                setSavedViewStatus("Silmek için tekrar basın", true);
+                return;
+            }
+
+            if (!viewStore.deleteView(activeView.id)) {
+                setSavedViewStatus("Görünüm silinemedi", true);
+                return;
+            }
+
+            activeViewId = null;
+            activeViewBaseline = null;
+            pendingDeleteViewId = null;
+            elements.savedViewName.value = "";
+            renderSavedViews();
+            setSavedViewStatus("Görünüm silindi", false);
+        }
+
+        function applySavedView(view) {
+            const nextLayout = cloneLayout(view.state.layout);
+            layout.rows = nextLayout.rows;
+            layout.columns = nextLayout.columns;
+            layout.values = nextLayout.values;
+            layout.filters = nextLayout.filters;
+            viewSettings.layoutMode = view.state.viewSettings.layoutMode;
+            viewSettings.repeatRowLabels = view.state.viewSettings.repeatRowLabels;
+            viewSettings.subtotals = view.state.viewSettings.subtotals;
+            viewSettings.largeData = view.state.viewSettings.largeData;
+            activeRowSort = view.state.sort ? { ...view.state.sort } : null;
+            conditionalRules = view.state.conditionalRules.map(rule => ({ ...rule }));
+            Object.keys(fieldAliases).forEach(field => delete fieldAliases[field]);
+            Object.assign(fieldAliases, view.state.fieldAliases);
+            renderer.applyViewState(view.state, { rerender: false, notify: false });
+            activeViewId = view.id;
+            activeViewBaseline = view.state;
+            pendingDeleteViewId = null;
+            elements.savedViewName.value = view.name;
+            syncViewControls();
+            syncSortControl();
+            renderFieldPanel();
+            renderSavedViews();
+            elements.savedViewsMenu.hidden = true;
+            elements.savedViewsButton.setAttribute("aria-expanded", "false");
+            runPivot();
+        }
+
+        function syncSortControl() {
+            if (!activeRowSort) {
+                elements.rowSortMode.value = "none";
+                return;
+            }
+
+            if (activeRowSort.mode === "RowLabel") {
+                elements.rowSortMode.value = activeRowSort.direction === "Ascending" ? "label-asc" : "label-desc";
+                return;
+            }
+
+            elements.rowSortMode.value = activeRowSort.direction === "Ascending" ? "value-asc" : "value-desc";
+        }
+
+        function updateSavedViewDirtyState() {
+            const activeView = activeViewId ? viewStore.getView(activeViewId) : null;
+
+            if (!activeView) {
+                elements.activeViewLabel.textContent = "";
+                return;
+            }
+
+            const baseline = activeViewBaseline ?? activeView.state;
+            const isDirty = JSON.stringify(captureCurrentState()) !== JSON.stringify(baseline);
+            elements.activeViewLabel.textContent = `· ${activeView.name}${isDirty ? " *" : ""}`;
+        }
+
+        function setSavedViewStatus(message, isError) {
+            elements.savedViewStatus.textContent = message;
+            elements.savedViewStatus.classList.toggle("error", isError);
+        }
+
+        function exportVisibleTableCsv() {
+            const table = document.querySelector(".pivot-table__table");
+
+            if (!table) {
+                return;
+            }
+
+            const rows = [...table.querySelectorAll("tr")].map(row =>
+                [...row.children].map(cell => csvEscape(cell.innerText.trim())).join(","));
+            const blob = new Blob([`\uFEFF${rows.join("\n")}`], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `pivot-table-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        async function exportExcel() {
+            const model = renderer.getExcelExportModel({
+                title: "Pivot Tablo",
+                sheetName: "Pivot Tablo",
+                filterSummary: createExcelFilterSummary()
+            });
+
+            if (!model) {
+                setStatus("Excel'e aktarılacak tablo bulunamadı", true);
+                return;
+            }
+
+            elements.exportExcelButton.disabled = true;
+            setStatus("Excel hazırlanıyor", false);
+
+            try {
+                const response = await fetch("/pivotforge/excel", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(model)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => null);
+                    throw new Error(error?.message ?? "Excel dosyası oluşturulamadı");
+                }
+
+                const blob = await response.blob();
+                const disposition = response.headers.get("Content-Disposition") ?? "";
+                const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+                const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+                const fileName = encodedName ? decodeURIComponent(encodedName) : plainName ?? `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`;
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+                setStatus("Excel dosyası indirildi", false);
+            } catch (error) {
+                setStatus(error.message || "Excel dosyası oluşturulamadı", true);
+            } finally {
+                elements.exportExcelButton.disabled = false;
+            }
+        }
+
+        function createExcelFilterSummary() {
+            if (layout.filters.length === 0) {
+                return "Aktif filtre yok";
+            }
+
+            return layout.filters.map(filter => {
+                const options = getFilterOptions(filter.field);
+                const values = filter.values.length === options.length
+                    ? "Tümü"
+                    : filter.values.slice(0, 6).join(", ") + (filter.values.length > 6 ? ` +${filter.values.length - 6}` : "");
+                return `${fieldLabel(filter.field)}: ${values || "(Boş)"}`;
+            }).join("; ");
+        }
+
+        function csvEscape(value) {
+            const text = String(value ?? "");
+            return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+        }
+
+        async function toggleFullscreen() {
+            try {
+                if (document.fullscreenElement) {
+                    await document.exitFullscreen();
+                    return;
+                }
+
+                await elements.pivotCard.requestFullscreen();
+            } catch (error) {
+                setStatus(error.message || "Tam ekran açılamadı", true);
+            }
+        }
+
+        function moveFieldWithinZone(zone, index, direction) {
+            const entries = getZoneEntries(zone);
+            const targetIndex = index + direction;
+
+            if (targetIndex < 0 || targetIndex >= entries.length) {
+                return;
+            }
+
+            [entries[index], entries[targetIndex]] = [entries[targetIndex], entries[index]];
+            syncActiveSortWithLayout();
+            renderFieldPanel();
+            runPivot();
+        }
+
+        function getZoneEntries(zone) {
+            return zone === "values" || zone === "filters" ? layout[zone] : layout[zone];
+        }
+
+        function ensureUsableLayout() {
+            if (layout.rows.length === 0 && layout.columns.length === 0) {
+                layout.rows = ["Region"];
+            }
+
+            if (layout.values.length === 0) {
+                layout.values = [{ field: "Amount", aggregation: "sum", format: getDefaultFormat("Amount") }];
+            }
+
+            syncActiveSortWithLayout();
+        }
+
+        function applyValueFormat(index, value, format) {
+            layout.values[index] = { ...value, format };
+            renderFieldPanel();
+            runPivot();
+        }
+
+        function handleHeaderSort(request) {
+            if (!request || !request.mode) {
+                return;
+            }
+
+            if (request.mode === "RowLabel") {
+                const field = request.field ?? layout.rows[layout.rows.length - 1] ?? layout.rows[0] ?? null;
+
+                if (!field) {
+                    return;
+                }
+
+                const direction = activeRowSort?.mode === "RowLabel" &&
+                    activeRowSort.field === field &&
+                    activeRowSort.direction === "Ascending"
+                        ? "Descending"
+                        : "Ascending";
+
+                activeRowSort = { mode: "RowLabel", direction, field };
+                elements.rowSortMode.value = direction === "Ascending" ? "label-asc" : "label-desc";
+                runPivot();
+                return;
+            }
+
+            if (request.mode === "RowTotalValue") {
+                const valueKeyToSort = request.valueKey ?? valueKey(layout.values[0] ?? { field: "Amount", aggregation: "sum" });
+                const columnPath = request.columnPath ?? null;
+                const direction = activeRowSort?.mode === "RowTotalValue" &&
+                    activeRowSort.valueKey === valueKeyToSort &&
+                    sameColumnPath(activeRowSort.columnPath ?? null, columnPath) &&
+                    activeRowSort.direction === "Descending"
+                        ? "Ascending"
+                        : "Descending";
+
+                activeRowSort = { mode: "RowTotalValue", direction, valueKey: valueKeyToSort, columnPath };
+                elements.rowSortMode.value = direction === "Descending" ? "value-desc" : "value-asc";
+                runPivot();
+            }
+        }
+
+        function sameColumnPath(left, right) {
+            if (!left && !right) {
+                return true;
+            }
+
+            if (!left || !right || left.length !== right.length) {
+                return false;
+            }
+
+            return left.every((value, index) => value === right[index]);
+        }
+
+        function syncActiveSortWithLayout() {
+            if (!activeRowSort) {
+                return;
+            }
+
+            if (activeRowSort.mode === "RowLabel" && !layout.rows.includes(activeRowSort.field)) {
+                activeRowSort = null;
+                elements.rowSortMode.value = "none";
+                return;
+            }
+
+            if (activeRowSort.mode === "RowTotalValue" &&
+                !layout.values.some(value => valueKey(value) === activeRowSort.valueKey)) {
+                activeRowSort = null;
+                elements.rowSortMode.value = "none";
+            }
+        }
+
+        function getDefaultAggregation(field) {
+            const fieldInfo = fields.find(item => item.name === field);
+            return fieldInfo?.role === "measure" ? "sum" : "count";
+        }
+
+        function getDefaultFormat(field) {
+            if (field === "Amount") {
+                return { type: "currency", decimals: 0, useGrouping: true, currency: "TRY" };
+            }
+
+            if (field === "Quantity") {
+                return { type: "number", decimals: 2, useGrouping: true };
+            }
+
+            return { type: "number", decimals: 0, useGrouping: true };
+        }
+
+        function normalizeValueFormat(value) {
+            return {
+                ...getDefaultFormat(value.field),
+                ...(value.format ?? {})
+            };
+        }
+
+        function normalizeShowAs(showAs) {
+            return Object.hasOwn(showAsLabels, showAs) ? showAs : "normal";
+        }
+
+        function isPercentShowAs(showAs) {
+            return [
+                "percentOfRowTotal",
+                "percentOfColumnTotal",
+                "percentOfGrandTotal",
+                "percentDifferenceFromPrevious"
+            ].includes(normalizeShowAs(showAs));
+        }
+
+        function displayValueFormat(value) {
+            const format = normalizeValueFormat(value);
+            return isPercentShowAs(value.showAs) ? { ...format, type: "percent" } : format;
+        }
+
+        function valueDisplayLabel(value) {
+            const base = `${fieldLabel(value.field)} ${aggregationLabel(value.aggregation)}`;
+            const showAs = normalizeShowAs(value.showAs);
+            return showAs === "normal" ? base : `${base} · ${showAsLabels[showAs]}`;
+        }
+
+        function valueChipSummary(value) {
+            const aggregation = aggregationLabel(value.aggregation);
+            const showAs = normalizeShowAs(value.showAs);
+            return showAs === "normal" ? aggregation : `${aggregation} · ${showAsLabels[showAs]}`;
+        }
+
+        function createRowSort(mode) {
+            if (mode === "label-asc") {
+                return {
+                    mode: "RowLabel",
+                    direction: "Ascending",
+                    field: layout.rows[layout.rows.length - 1] ?? layout.rows[0] ?? null
+                };
+            }
+
+            if (mode === "label-desc") {
+                return {
+                    mode: "RowLabel",
+                    direction: "Descending",
+                    field: layout.rows[layout.rows.length - 1] ?? layout.rows[0] ?? null
+                };
+            }
+
+            if (mode === "value-desc" || mode === "value-asc") {
+                const value = layout.values[0] ?? { field: "Amount", aggregation: "sum" };
+                return {
+                    mode: "RowTotalValue",
+                    direction: mode === "value-desc" ? "Descending" : "Ascending",
+                    valueKey: valueKey(value)
+                };
+            }
+
+            return null;
+        }
+
+        function fieldLabel(field) {
+            return fieldAliases[field] ?? baseFieldLabel(field);
+        }
+
+        function baseFieldLabel(field) {
+            return fields.find(item => item.name === field)?.label ?? field;
+        }
+
+        function roleLabel(role) {
+            return role === "measure" ? "Ölçü" : "Boyut";
+        }
+
+        function zoneLabel(zone) {
+            return {
+                rows: "Satır",
+                columns: "Sütun",
+                filters: "Filtre",
+                values: "Değer"
+            }[zone] ?? zone;
+        }
+
+        function aggregationLabel(aggregation) {
+            return aggregationLabels[aggregation] ?? aggregation;
+        }
+
+        function formatSummary(format) {
+            const grouping = format.useGrouping ? "1.000" : "1000";
+            return `${formatTypeLabels[format.type] ?? "Sayı"} · ${format.decimals} · ${grouping}`;
+        }
+
+        function formatFilterSelection(selectedCount, totalCount) {
+            if (selectedCount === totalCount) {
+                return "Tümü";
+            }
+
+            if (selectedCount === 0) {
+                return "Hiçbiri";
+            }
+
+            return `${selectedCount}/${totalCount}`;
+        }
+
+        function closeAllDropdowns(except = null) {
+            document.querySelectorAll(".pivot-filter-menu, .pivot-chip-menu, .pivot-view-menu").forEach(menu => {
+                if (menu !== except) {
+                    menu.hidden = true;
+                    menu.closest(".pivot-placed-chip")?.classList.remove("is-menu-open");
+                    menu._pivotChip?.classList.remove("is-menu-open");
+
+                    if (menu === elements.savedViewsMenu) {
+                        elements.savedViewsButton.setAttribute("aria-expanded", "false");
+                    }
+                }
+            });
+        }
+
+        function positionFloatingMenu(menu, anchor) {
+            menu._pivotChip = anchor.closest(".pivot-placed-chip");
+            menu.style.left = "0px";
+            menu.style.top = "0px";
+
+            const anchorRect = anchor.getBoundingClientRect();
+            const menuRect = menu.getBoundingClientRect();
+            const margin = 8;
+            const left = Math.min(
+                window.innerWidth - menuRect.width - margin,
+                Math.max(margin, anchorRect.right - menuRect.width));
+            let top = anchorRect.bottom + 6;
+
+            if (top + menuRect.height > window.innerHeight - margin) {
+                top = Math.max(margin, anchorRect.top - menuRect.height - 6);
+            }
+
+            menu.style.left = `${left}px`;
+            menu.style.top = `${top}px`;
+        }
+
+        function shouldIgnoreChipDrag(event) {
+            return event.target.closest("button, input, label, a, summary, details, .pivot-filter-menu, .pivot-chip-menu") !== null;
+        }
+
+        function applyChipSort(context, action) {
+            if (action === "row-asc" || action === "row-desc") {
+                activeRowSort = {
+                    mode: "RowLabel",
+                    direction: action === "row-asc" ? "Ascending" : "Descending",
+                    field: context.field
+                };
+                elements.rowSortMode.value = action === "row-asc" ? "label-asc" : "label-desc";
+                runPivot();
+                return;
+            }
+
+            if (action === "value-desc" || action === "value-asc") {
+                const value = context.value ?? layout.values[context.index];
+
+                activeRowSort = {
+                    mode: "RowTotalValue",
+                    direction: action === "value-desc" ? "Descending" : "Ascending",
+                    valueKey: valueKey(value)
+                };
+                elements.rowSortMode.value = action === "value-desc" ? "value-desc" : "value-asc";
+                runPivot();
+            }
+        }
+
+        function escapeAttribute(value) {
+            return String(value)
+                .replaceAll("&", "&amp;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;");
+        }
+
+        function isFieldInLayout(field) {
+            return layout.rows.includes(field) ||
+                layout.columns.includes(field) ||
+                layout.values.some(value => value.field === field) ||
+                layout.filters.some(filter => filter.field === field);
+        }
+
+        function updateZoneCounts() {
+            elements.rowsCount.textContent = layout.rows.length;
+            elements.columnsCount.textContent = layout.columns.length;
+            elements.valuesCount.textContent = layout.values.length;
+            elements.filtersCount.textContent = layout.filters.length;
+        }
+
+        function clearDropStates() {
+            document.querySelectorAll(".pivot-zone.is-over").forEach(zone => zone.classList.remove("is-over"));
+            document.querySelectorAll(".pivot-zone").forEach(clearZoneDropIndicator);
+        }
+
+        function valueKey(value) {
+            return `${value.field}_${value.aggregation}`;
+        }
+
+        function getFilterOptions(field) {
+            const camelField = field.charAt(0).toLowerCase() + field.slice(1);
+            return [...new Set(sourceData.map(record => String(record[camelField] ?? "")))]
+                .filter(value => value !== "")
+                .sort((left, right) => left.localeCompare(right, "tr", { numeric: true }));
+        }
+
+        function renderMetrics(result, duration) {
+            elements.metricRows.textContent = result.metadata?.rowHeaderCount ?? 0;
+            elements.metricColumns.textContent = result.metadata?.columnHeaderCount ?? 0;
+            elements.metricCells.textContent = result.metadata?.cellCount ?? 0;
+            elements.metricDuration.textContent = `${duration} ms`;
+        }
+
+        function setStatus(message, isError) {
+            elements.status.textContent = message;
+            elements.status.classList.toggle("error", isError);
+        }
+
+        function toggleJsonModal(isOpen) {
+            elements.jsonModal.classList.toggle("is-open", isOpen);
+            elements.jsonModal.setAttribute("aria-hidden", String(!isOpen));
+        }
+    </script>
+}

@@ -1,0 +1,207 @@
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using PivotForge.AspNetCore.Caching;
+using PivotForge.AspNetCore.DependencyInjection;
+using PivotForge.AspNetCore.Endpoints;
+using PivotForge.Core;
+
+namespace PivotForge.AspNetCore.Tests;
+
+public sealed class PivotForgeAspNetCoreTests
+{
+    [Fact]
+    public void AddPivotForge_RegistersProviderCacheAndOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddPivotForge<Sale>(
+            (_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>([]),
+            options => options.MaximumSourceRowCount = 25_000);
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<PivotForgeDataProvider<Sale>>());
+        Assert.NotNull(provider.GetRequiredService<IPivotForgeResultCache>());
+        Assert.Equal(25_000, provider.GetRequiredService<IOptions<PivotForgeOptions>>().Value.MaximumSourceRowCount);
+    }
+
+    [Fact]
+    public async Task ResultCache_ReusesCompletedResultsAndSkipsCancelledResults()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddPivotForge<Sale>((_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>([]));
+
+        await using var provider = services.BuildServiceProvider();
+        var cache = provider.GetRequiredService<IPivotForgeResultCache>();
+        var factoryCalls = 0;
+        var identity = new { Rows = new[] { "Region" } };
+
+        var first = await cache.GetOrCreateAsync(
+            identity,
+            _ =>
+            {
+                factoryCalls++;
+                return ValueTask.FromResult(new PivotResult());
+            },
+            CancellationToken.None);
+        var second = await cache.GetOrCreateAsync(
+            identity,
+            _ =>
+            {
+                factoryCalls++;
+                return ValueTask.FromResult(new PivotResult());
+            },
+            CancellationToken.None);
+
+        Assert.False(first.CacheHit);
+        Assert.True(second.CacheHit);
+        Assert.Equal(first.SessionId, second.SessionId);
+        Assert.Equal(1, factoryCalls);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            cache.GetOrCreateAsync(
+                new { Rows = new[] { "Cancelled" } },
+                token => ValueTask.FromCanceled<PivotResult>(token),
+                cancellation.Token));
+    }
+
+    [Fact]
+    public async Task MapPivotForgeEndpoints_UsesExpectedRouteContract()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>([]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints("reports/pivot/");
+
+        var routes = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Select(endpoint => endpoint.RoutePattern.RawText)
+            .ToArray();
+
+        Assert.Contains("/reports/pivot/pivot", routes);
+        Assert.Contains("/reports/pivot/large/start", routes);
+        Assert.Contains("/reports/pivot/large/page", routes);
+        Assert.Contains("/reports/pivot/drill-down", routes);
+        Assert.Contains("/reports/pivot/excel", routes);
+    }
+
+    [Fact]
+    public async Task LargeStart_ReusesResultAcrossDifferentPageSizes()
+    {
+        var providerCalls = 0;
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) =>
+        {
+            providerCalls++;
+            return ValueTask.FromResult<IReadOnlyList<Sale>>(
+            [
+                new("North", 120m),
+                new("South", 90m)
+            ]);
+        });
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            var first = await PostLargeStartAsync(client, 10);
+            var second = await PostLargeStartAsync(client, 20);
+
+            Assert.False(first.GetProperty("cacheHit").GetBoolean());
+            Assert.True(second.GetProperty("cacheHit").GetBoolean());
+            Assert.Equal(first.GetProperty("sessionId").GetString(), second.GetProperty("sessionId").GetString());
+            Assert.Equal(1, providerCalls);
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PivotEndpoint_BindsJsonExecutesProviderAndSerializesResult()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>(
+        [
+            new("North", 120m),
+            new("South", 90m)
+        ]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        var json = """
+            {
+              "rows": ["Region"],
+              "columns": [],
+              "values": [{ "field": "Amount", "aggregation": "sum" }],
+              "filters": []
+            }
+            """;
+
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var httpResponse = await client.PostAsync("/pivotforge/pivot", content);
+            await using var responseStream = await httpResponse.Content.ReadAsStreamAsync();
+            using var response = await JsonDocument.ParseAsync(responseStream);
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, httpResponse.StatusCode);
+            Assert.Equal(2, response.RootElement.GetProperty("metadata").GetProperty("sourceRowCount").GetInt32());
+            Assert.Equal(2, response.RootElement.GetProperty("rowHeaders").GetArrayLength());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    private static async Task<JsonElement> PostLargeStartAsync(HttpClient client, int pageSize)
+    {
+        var json = $$"""
+            {
+              "rows": ["Region"],
+              "columns": [],
+              "values": [{ "field": "Amount", "aggregation": "sum" }],
+              "filters": [],
+              "pageSize": {{pageSize}},
+              "sourceRowCount": 1000
+            }
+            """;
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var response = await client.PostAsync("/pivotforge/large/start", content);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(stream);
+        return document.RootElement.Clone();
+    }
+
+    private sealed record Sale(string Region, decimal Amount);
+}
