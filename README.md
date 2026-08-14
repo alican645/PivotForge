@@ -1,12 +1,16 @@
 # PivotForge
 
+[![CI](https://github.com/alican645/PivotForge/actions/workflows/ci.yml/badge.svg)](https://github.com/alican645/PivotForge/actions/workflows/ci.yml)
+[![PivotForge.Core](https://img.shields.io/nuget/vpre/PivotForge.Core.svg?label=PivotForge.Core)](https://www.nuget.org/packages/PivotForge.Core)
+[![PivotForge.AspNetCore](https://img.shields.io/nuget/vpre/PivotForge.AspNetCore.svg?label=PivotForge.AspNetCore)](https://www.nuget.org/packages/PivotForge.AspNetCore)
+
 ![PivotForge icon](assets/brand/pivotforge-icon.png)
 
 Interactive pivot tables forged for .NET.
 
 PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel export, saved views, selection, conditional formatting, and large-data workflows.
 
-> The first public release is being prepared as `0.1.0-preview.1`. The packages in `artifacts/packages` are local release candidates until the NuGet publishing step is complete.
+> The current public preview is `0.1.0-preview.1`, available from NuGet.org and the matching GitHub Release.
 
 ## Packages
 
