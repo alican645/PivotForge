@@ -2,7 +2,7 @@ using PivotForge.Core;
 
 namespace PivotForge.AspNetCore.Internal;
 
-internal sealed class PivotForgeDataExecutor<TRecord>(PivotForgeDataProvider<TRecord> provider)
+internal sealed class PivotForgeDataExecutor<TRecord>(IPivotForgeDataProvider<TRecord> provider)
     : IPivotForgeDataExecutor
 {
     public async ValueTask<PivotResult> ExecuteAsync(
@@ -37,7 +37,9 @@ internal sealed class PivotForgeDataExecutor<TRecord>(PivotForgeDataProvider<TRe
         int? sourceRowCount,
         CancellationToken cancellationToken)
     {
-        var records = await provider(new PivotForgeDataRequest(sourceRowCount), cancellationToken);
+        var records = await provider.GetRecordsAsync(
+            new PivotForgeDataRequest(sourceRowCount),
+            cancellationToken);
         return records ?? throw new InvalidOperationException("The PivotForge data provider returned null.");
     }
 }

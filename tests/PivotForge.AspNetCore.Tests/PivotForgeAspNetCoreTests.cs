@@ -27,8 +27,31 @@ public sealed class PivotForgeAspNetCoreTests
         using var provider = services.BuildServiceProvider();
 
         Assert.NotNull(provider.GetRequiredService<PivotForgeDataProvider<Sale>>());
+        using var scope = provider.CreateScope();
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IPivotForgeDataProvider<Sale>>());
         Assert.NotNull(provider.GetRequiredService<IPivotForgeResultCache>());
         Assert.Equal(25_000, provider.GetRequiredService<IOptions<PivotForgeOptions>>().Value.MaximumSourceRowCount);
+    }
+
+    [Fact]
+    public void AddPivotForge_RegistersTypedProviderWithScopedLifetime()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<ScopedProviderDependency>();
+        services.AddPivotForge<Sale, ScopedSaleProvider>();
+
+        using var provider = services.BuildServiceProvider();
+        using var firstScope = provider.CreateScope();
+        using var secondScope = provider.CreateScope();
+
+        var first = firstScope.ServiceProvider.GetRequiredService<IPivotForgeDataProvider<Sale>>();
+        var firstAgain = firstScope.ServiceProvider.GetRequiredService<IPivotForgeDataProvider<Sale>>();
+        var second = secondScope.ServiceProvider.GetRequiredService<IPivotForgeDataProvider<Sale>>();
+
+        Assert.Same(first, firstAgain);
+        Assert.NotSame(first, second);
+        Assert.IsType<ScopedSaleProvider>(first);
     }
 
     [Fact]
@@ -139,6 +162,43 @@ public sealed class PivotForgeAspNetCoreTests
     }
 
     [Fact]
+    public async Task LargeStart_DoesNotReuseResultsAcrossDifferentRequestScopes()
+    {
+        var providerCalls = 0;
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) =>
+        {
+            providerCalls++;
+            return ValueTask.FromResult<IReadOnlyList<Sale>>([new("North", 120m)]);
+        });
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            var first = await PostLargeStartAsync(client, 10, "?branch=1&period=2026-08");
+            var second = await PostLargeStartAsync(client, 10, "?branch=2&period=2026-08");
+
+            Assert.False(first.GetProperty("cacheHit").GetBoolean());
+            Assert.False(second.GetProperty("cacheHit").GetBoolean());
+            Assert.NotEqual(first.GetProperty("sessionId").GetString(), second.GetProperty("sessionId").GetString());
+            Assert.Equal(2, providerCalls);
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task PivotEndpoint_BindsJsonExecutesProviderAndSerializesResult()
     {
         var builder = WebApplication.CreateBuilder();
@@ -183,7 +243,10 @@ public sealed class PivotForgeAspNetCoreTests
         }
     }
 
-    private static async Task<JsonElement> PostLargeStartAsync(HttpClient client, int pageSize)
+    private static async Task<JsonElement> PostLargeStartAsync(
+        HttpClient client,
+        int pageSize,
+        string requestScope = "")
     {
         var json = $$"""
             {
@@ -196,7 +259,7 @@ public sealed class PivotForgeAspNetCoreTests
             }
             """;
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await client.PostAsync("/pivotforge/large/start", content);
+        using var response = await client.PostAsync($"/pivotforge/large/start{requestScope}", content);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync();
         using var document = await JsonDocument.ParseAsync(stream);
@@ -204,4 +267,18 @@ public sealed class PivotForgeAspNetCoreTests
     }
 
     private sealed record Sale(string Region, decimal Amount);
+
+    private sealed class ScopedProviderDependency;
+
+    private sealed class ScopedSaleProvider(ScopedProviderDependency dependency)
+        : IPivotForgeDataProvider<Sale>
+    {
+        public ValueTask<IReadOnlyList<Sale>> GetRecordsAsync(
+            PivotForgeDataRequest request,
+            CancellationToken cancellationToken)
+        {
+            _ = dependency;
+            return ValueTask.FromResult<IReadOnlyList<Sale>>([]);
+        }
+    }
 }

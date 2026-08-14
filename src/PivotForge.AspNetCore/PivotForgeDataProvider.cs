@@ -4,6 +4,19 @@ namespace PivotForge.AspNetCore;
 /// <param name="SourceRowCount">An optional row-count hint supplied by large-data and drill-down endpoints.</param>
 public sealed record PivotForgeDataRequest(int? SourceRowCount);
 
+/// <summary>Loads source records for PivotForge endpoints within the current request scope.</summary>
+/// <typeparam name="TRecord">The source record type.</typeparam>
+public interface IPivotForgeDataProvider<TRecord>
+{
+    /// <summary>Loads records available to the current request.</summary>
+    /// <param name="request">The data request.</param>
+    /// <param name="cancellationToken">A token that can cancel data loading.</param>
+    /// <returns>The source records.</returns>
+    ValueTask<IReadOnlyList<TRecord>> GetRecordsAsync(
+        PivotForgeDataRequest request,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Loads source records for PivotForge endpoints.</summary>
 /// <typeparam name="TRecord">The source record type.</typeparam>
 /// <param name="request">The data request.</param>

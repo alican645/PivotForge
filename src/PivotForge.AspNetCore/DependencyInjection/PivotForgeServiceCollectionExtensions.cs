@@ -24,6 +24,38 @@ public static class PivotForgeServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(dataProvider);
 
+        AddPivotForgeServices(services, configure);
+        services.AddSingleton(dataProvider);
+        services.TryAddScoped<IPivotForgeDataProvider<TRecord>, DelegatePivotForgeDataProvider<TRecord>>();
+        services.TryAddScoped<IPivotForgeDataExecutor, PivotForgeDataExecutor<TRecord>>();
+
+        return services;
+    }
+
+    /// <summary>Registers PivotForge with a dependency-injection-aware scoped data provider.</summary>
+    /// <typeparam name="TRecord">The source record type.</typeparam>
+    /// <typeparam name="TProvider">The scoped data provider implementation.</typeparam>
+    /// <param name="services">The application service collection.</param>
+    /// <param name="configure">An optional options configuration delegate.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddPivotForge<TRecord, TProvider>(
+        this IServiceCollection services,
+        Action<PivotForgeOptions>? configure = null)
+        where TProvider : class, IPivotForgeDataProvider<TRecord>
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        AddPivotForgeServices(services, configure);
+        services.TryAddScoped<IPivotForgeDataProvider<TRecord>, TProvider>();
+        services.TryAddScoped<IPivotForgeDataExecutor, PivotForgeDataExecutor<TRecord>>();
+
+        return services;
+    }
+
+    private static void AddPivotForgeServices(
+        IServiceCollection services,
+        Action<PivotForgeOptions>? configure)
+    {
         var options = services.AddOptions<PivotForgeOptions>();
 
         if (configure is not null)
@@ -41,11 +73,7 @@ public static class PivotForgeServiceCollectionExtensions
                 json.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
             }
         });
-        services.AddSingleton(dataProvider);
-        services.TryAddSingleton<IPivotForgeDataExecutor, PivotForgeDataExecutor<TRecord>>();
         services.TryAddSingleton<IPivotForgeResultCache, PivotForgeResultCache>();
-
-        return services;
     }
 
     private static bool IsValid(PivotForgeOptions options) =>

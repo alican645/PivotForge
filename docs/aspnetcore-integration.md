@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.1.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.1.0-preview.2
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -36,6 +36,30 @@ builder.Services.AddPivotForge<Sale>(
 ```
 
 The provider receives `SourceRowCount = null` for a normal pivot. Large-data and drill-down requests receive a validated, bounded row count.
+
+For providers that depend on scoped services, implement `IPivotForgeDataProvider<TRecord>`:
+
+```csharp
+public sealed class TenantSaleProvider(AppDbContext db, IHttpContextAccessor httpContextAccessor)
+    : IPivotForgeDataProvider<Sale>
+{
+    public async ValueTask<IReadOnlyList<Sale>> GetRecordsAsync(
+        PivotForgeDataRequest request,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = httpContextAccessor.HttpContext?.User.FindFirst("tenant_id")?.Value;
+        return await db.Sales
+            .AsNoTracking()
+            .Where(sale => sale.TenantId == tenantId)
+            .Take(request.SourceRowCount ?? 500_000)
+            .ToListAsync(cancellationToken);
+    }
+}
+
+builder.Services.AddPivotForge<Sale, TenantSaleProvider>();
+```
+
+Typed providers are scoped and can safely consume request-scoped application services.
 
 The provider is responsible for tenant isolation, authorization-aware data access, and applying any application-level source restrictions. Pivot filters are applied by `PivotForge.Core` after records are loaded.
 
@@ -145,6 +169,7 @@ Load another page:
 ```
 
 Session identifiers are deterministic hashes of the normalized large-pivot request. Concurrent identical calculations share a keyed lock, and completed results use sliding-expiration memory cache entries.
+The authenticated user identifier, endpoint path, and query string are included in the cache identity so request-scoped data sets do not share large-result sessions.
 
 ## Options
 

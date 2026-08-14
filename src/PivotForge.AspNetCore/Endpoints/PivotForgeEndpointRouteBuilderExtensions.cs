@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -62,6 +63,7 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         IPivotForgeDataExecutor executor,
         IPivotForgeResultCache cache,
         IOptions<PivotForgeOptions> optionsAccessor,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var options = optionsAccessor.Value;
@@ -82,7 +84,8 @@ public static class PivotForgeEndpointRouteBuilderExtensions
                     request.Values,
                     request.Filters,
                     request.RowSort,
-                    SourceRowCount = sourceRowCount
+                    SourceRowCount = sourceRowCount,
+                    RequestScope = CreateRequestScopeIdentity(httpContext)
                 },
                 token => executor.ExecuteAsync(pivotRequest, sourceRowCount, token),
                 cancellationToken);
@@ -198,6 +201,13 @@ public static class PivotForgeEndpointRouteBuilderExtensions
 
     private static IResult BadRequest(string message) =>
         Results.BadRequest(new PivotForgeErrorResponse(message));
+
+    private static object CreateRequestScopeIdentity(HttpContext context) => new
+    {
+        UserId = context.User.FindFirstValue(ClaimTypes.NameIdentifier),
+        RequestPath = context.Request.Path.Value,
+        Query = context.Request.QueryString.Value
+    };
 
     private static bool IsInvalidPivotRequest(Exception exception) =>
         exception is ArgumentException or PivotFieldNotFoundException or PivotFieldTypeException;

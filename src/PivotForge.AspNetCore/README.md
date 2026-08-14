@@ -5,7 +5,7 @@ PivotForge.AspNetCore adds reusable browser assets and minimal API endpoints to 
 ## Installation
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.1.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.1.0-preview.2
 ```
 
 ## Register services
@@ -23,7 +23,15 @@ builder.Services.AddPivotForge<Sale>(
     });
 ```
 
+For request-scoped dependencies such as a tenant-aware database context, implement
+`IPivotForgeDataProvider<TRecord>` and register the provider type:
+
+```csharp
+builder.Services.AddPivotForge<Sale, TenantSaleProvider>();
+```
+
 The provider is called for pivot and drill-down requests. `SourceRowCount` is `null` for a normal pivot and contains the bounded requested size for large-data and drill-down requests.
+Large-result cache identities include the authenticated user, endpoint path, and query string.
 
 ## Map endpoints and assets
 
