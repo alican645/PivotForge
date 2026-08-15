@@ -333,13 +333,21 @@
             throw new Error("pivotGridWidget has no field designer; check that pivot-layout-state.js and pivot-field-designer.js loaded before this script.");
         }
 
-        const layoutState = widget.layoutState;
+        let layoutState = widget.layoutState;
         // The widget rebuilds its renderer whenever the field set changes, so the
         // current instance must be read on every use instead of being captured.
         const activeRenderer = () => widget.renderer;
+        // The full catalog, kept because widget.options.fields is narrowed to the
+        // placed fields on the first update and a new layout state needs all of them.
+        const catalogFields = widget.options.fields.map(field => ({ ...field }));
         // The Razor catalog is the demo's default layout; capture it before any
         // stored state is adopted so "Yerleşimi sıfırla" has something to restore.
         const defaultLayout = layoutState.getState();
+        // Cell-context filters are demo-owned. A field can be a row and still be
+        // filtered by a cell's context, which PivotLayoutState cannot express:
+        // its areas are exclusive, so a field listed in two of them would be
+        // detached from both at once.
+        const cellFilters = new Map();
 
         const sourceData = @Html.Raw(sampleJsonCompact);
 
@@ -562,22 +570,49 @@
         renderSavedViews();
         runPivot();
 
-        // Adopts a stored layout onto the state the widget already built from the
-        // Razor catalog, then repaints the designer so panel and request agree.
+        // Replaces the layout state with one built from the catalog and a stored
+        // layout, then rebuilds the designer on it. The state is constructed rather
+        // than mutated so its own invariants (known fields, a non-empty data area)
+        // are the thing that accepts or rejects the stored layout.
         function applyLayoutToState(nextLayout) {
-            if (!nextLayout || (nextLayout.values ?? []).length === 0) {
+            if (!nextLayout) {
                 return false;
             }
 
+            // A field that is placed in an area cannot also sit in the filter area,
+            // so stored filters on placed fields go back to the demo-owned map.
+            const placed = new Set([
+                ...(nextLayout.rows ?? []),
+                ...(nextLayout.columns ?? []),
+                ...(nextLayout.values ?? []).map(value => value.field)
+            ]);
+            const storedFilters = nextLayout.filters ?? [];
+            let nextState;
+
             try {
-                layoutState.layout = layoutState.adoptLayout(nextLayout);
+                nextState = new PivotForge.PivotLayoutState(catalogFields, {
+                    ...nextLayout,
+                    filters: storedFilters.filter(filter => !placed.has(filter.field))
+                });
             } catch (error) {
-                // A stored layout can name a field the current catalog no longer has.
+                // A stored layout can name a field the catalog no longer has, or
+                // leave the data area empty.
                 setStatus(error.message || String(error), true);
                 return false;
             }
 
-            widget.designer.render();
+            layoutState = nextState;
+            widget.layoutState = nextState;
+            widget.designer.dispose();
+            widget.designer = new PivotForge.PivotFieldDesigner(widget.options.fieldDesigner, {
+                state: nextState,
+                widget
+            });
+
+            cellFilters.clear();
+            storedFilters
+                .filter(filter => placed.has(filter.field) && filter.values.length > 0)
+                .forEach(filter => cellFilters.set(filter.field, [...filter.values]));
             return true;
         }
 
@@ -591,9 +626,11 @@
             clearTimeout(virtualScrollTimer);
             virtualDataSource.cancel();
             setLargeDataModeUi(false);
-            ensureUsableLayout();
 
             try {
+                // Guarded because the designer awaits this call: an escaping throw
+                // would surface as an unhandled rejection instead of a status message.
+                ensureUsableLayout();
                 // Rebuilding the field set replaces the renderer, so the options are
                 // published first and the view state is carried onto the new one.
                 syncRendererOptions();
@@ -620,8 +657,16 @@
             Object.assign(activeRenderer().options, widget.options.rendererOptions);
         }
 
+        // The filter zone and the cell-context filters are two independent sources;
+        // a cell context wins when both name the same field.
         function activeFilters() {
-            return layoutState.getState().filters.filter(filter => filter.values.length > 0);
+            const merged = new Map(
+                layoutState.getState().filters
+                    .filter(filter => filter.values.length > 0)
+                    .map(filter => [filter.field, filter.values]));
+
+            cellFilters.forEach((values, field) => merged.set(field, values));
+            return [...merged].map(([field, values]) => ({ field, values: [...values] }));
         }
 
         async function runLargePivot() {
@@ -630,14 +675,14 @@
             clearTimeout(virtualScrollTimer);
             // Drop any normal-mode request still in flight so its result cannot overwrite the paged view.
             widget.cancel();
-            ensureUsableLayout();
-            syncRendererOptions();
             setLargeDataModeUi(true);
             elements.tableHost.scrollTop = 0;
             virtualPageOffset = 0;
             setStatus("Büyük veri hazırlanıyor", false);
 
             try {
+                ensureUsableLayout();
+                syncRendererOptions();
                 const page = await virtualDataSource.start(createPivotPayload());
 
                 if (!page || !viewSettings.largeData) {
@@ -896,20 +941,8 @@
                 return;
             }
 
-            // A cell's context filters a field that is already a row or a column, which
-            // move() would refuse because it detaches first. The filter zone is written
-            // directly so the field keeps its place in the layout.
-            dimensionValues.forEach(({ field, value }) => {
-                const existing = layoutState.layout.filters.find(filter => filter.field === field);
-
-                if (existing) {
-                    existing.values = [String(value)];
-                } else {
-                    layoutState.layout.filters.push({ field, values: [String(value)] });
-                }
-            });
-
-            widget.designer.render();
+            // These fields stay rows and columns; only the request gains a filter.
+            dimensionValues.forEach(({ field, value }) => cellFilters.set(field, [String(value)]));
             setStatus("Hücre bağlamı filtrelere uygulandı", false);
             runPivot();
         }
@@ -1170,7 +1203,9 @@
                     rows: state.rows,
                     columns: state.columns,
                     values: state.values.map(value => ({ ...value, format: normalizeValueFormat(value) })),
-                    filters: state.filters
+                    // Both filter sources are stored together; applyLayoutToState
+                    // sorts them back apart on the way in.
+                    filters: activeFilters()
                 },
                 viewSettings: { ...viewSettings },
                 sort: activeRowSort ? { ...activeRowSort } : null,
