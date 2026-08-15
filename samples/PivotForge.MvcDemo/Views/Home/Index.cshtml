@@ -60,47 +60,11 @@
 
     <div class="pivot-workspace">
         <aside class="pivot-sidebar" aria-label="PivotTable alanları">
-            <section class="pivot-section">
-                <div class="pivot-section__head">
-                    <h2>PivotTable Alanları</h2>
-                    <span>Alan listesi</span>
-                </div>
-                <div class="pivot-search">
-                    <input id="fieldSearch" type="search" placeholder="Alan ara" autocomplete="off">
-                </div>
-                <div class="pivot-field-list" id="fieldList" aria-label="Field list"></div>
-            </section>
-
-            <div class="pivot-layout-grid" aria-label="Pivot alan yerleşimi">
-                    <div class="pivot-zone" data-zone="filters">
-                        <div class="pivot-zone__head">
-                            <strong>Filtreler</strong>
-                            <span id="filtersCount">0</span>
-                        </div>
-                        <div class="pivot-zone__body" id="filtersZone"></div>
-                    </div>
-                    <div class="pivot-zone" data-zone="columns">
-                        <div class="pivot-zone__head">
-                            <strong>Sütunlar</strong>
-                            <span id="columnsCount">0</span>
-                        </div>
-                        <div class="pivot-zone__body" id="columnsZone"></div>
-                    </div>
-                    <div class="pivot-zone" data-zone="rows">
-                        <div class="pivot-zone__head">
-                            <strong>Satırlar</strong>
-                            <span id="rowsCount">0</span>
-                        </div>
-                        <div class="pivot-zone__body" id="rowsZone"></div>
-                    </div>
-                    <div class="pivot-zone" data-zone="values">
-                        <div class="pivot-zone__head">
-                            <strong>Değerler</strong>
-                            <span id="valuesCount">0</span>
-                        </div>
-                        <div class="pivot-zone__body" id="valuesZone"></div>
-                    </div>
-            </div>
+            @* The packaged designer owns this element and replaces its children,
+               so nothing else may live inside it. *@
+            <div id="designerHost" aria-label="Pivot alan tasarımcısı"></div>
+            @* The sort panel is not part of the packaged designer, so it stays a
+               sibling of the host rather than being lost with the old zones. *@
             <div class="pivot-sort-panel">
                 <label for="rowSortMode">Sıralama</label>
                 <select id="rowSortMode">
@@ -184,6 +148,7 @@
                         .AllowDrillDown(true)
                         .AllowExcelExport(true)
                         .SourceRowCount(Model.Count)
+                        .FieldDesigner("#designerHost")
                         .Fields(fields =>
                         {
                             fields.Add().Caption("Bölge").DataField("Region").Area(PivotArea.Row);
@@ -191,6 +156,14 @@
                             fields.Add().Caption("Yıl").DataField("Year").Area(PivotArea.Column);
                             fields.Add().Caption("Tutar").DataField("Amount")
                                 .Aggregation(PivotAggregation.Sum).Area(PivotArea.Data);
+                            fields.Add().Caption("Satış Temsilcisi").DataField("SalesPerson")
+                                .Area(PivotArea.Available).Role(PivotFieldRole.Dimension);
+                            fields.Add().Caption("Çeyrek").DataField("Quarter")
+                                .Area(PivotArea.Available).Role(PivotFieldRole.Dimension);
+                            fields.Add().Caption("Miktar").DataField("Quantity")
+                                .Area(PivotArea.Available).Role(PivotFieldRole.Measure);
+                            fields.Add().Caption("İskonto").DataField("Discount")
+                                .Area(PivotArea.Available).Role(PivotFieldRole.Measure);
                         }))
                     <div class="pivot-large-loading" id="largeDataLoading" hidden aria-live="polite">
                         <strong>Pivot hazırlanıyor</strong>
@@ -290,16 +263,6 @@
 @section Scripts {
     <script>
         const elements = {
-            fieldSearch: document.getElementById("fieldSearch"),
-            fieldList: document.getElementById("fieldList"),
-            rowsZone: document.getElementById("rowsZone"),
-            columnsZone: document.getElementById("columnsZone"),
-            valuesZone: document.getElementById("valuesZone"),
-            filtersZone: document.getElementById("filtersZone"),
-            rowsCount: document.getElementById("rowsCount"),
-            columnsCount: document.getElementById("columnsCount"),
-            valuesCount: document.getElementById("valuesCount"),
-            filtersCount: document.getElementById("filtersCount"),
             runButton: document.getElementById("runButton"),
             jsonButton: document.getElementById("jsonButton"),
             closeJsonButton: document.getElementById("closeJsonButton"),
@@ -360,36 +323,25 @@
             pivotCard: document.querySelector(".pivot-card")
         };
 
-        // The declarative helper created the widget and its renderer; this page only
-        // supplies the demo-specific renderer defaults and drives the widget.
+        // The declarative helper created the widget, its renderer and — because the
+        // grid declares field-designer — the packaged field designer with its own
+        // layout state. This page only supplies the demo-specific display settings
+        // and the features the designer does not own.
         const widget = window.pivotGridWidget;
-        if (!widget?.renderer) {
-            throw new Error("pivotGridWidget is missing its renderer; check that pivot-widget.js loaded before this script.");
+
+        if (!widget?.layoutState || !widget.designer) {
+            throw new Error("pivotGridWidget has no field designer; check that pivot-layout-state.js and pivot-field-designer.js loaded before this script.");
         }
-        const renderer = widget.renderer;
-        Object.assign(renderer.options, {
-            totalText: "Toplam",
-            emptyText: "-",
-            onViewStateChanged: persistCurrentState,
-            onSelectionChanged: handlePivotSelectionChanged,
-            onCellDoubleClick: openDrillDown,
-            onCellCopied: handleCellCopied,
-            onCellFilterRequested: filterByCellSelection,
-            onConditionalFormatRequested: openConditionalPanel
-        });
+
+        const layoutState = widget.layoutState;
+        // The widget rebuilds its renderer whenever the field set changes, so the
+        // current instance must be read on every use instead of being captured.
+        const activeRenderer = () => widget.renderer;
+        // The Razor catalog is the demo's default layout; capture it before any
+        // stored state is adopted so "Yerleşimi sıfırla" has something to restore.
+        const defaultLayout = layoutState.getState();
 
         const sourceData = @Html.Raw(sampleJsonCompact);
-
-        const fields = [
-            { name: "Region", label: "Bölge", role: "dimension" },
-            { name: "Category", label: "Kategori", role: "dimension" },
-            { name: "SalesPerson", label: "Satış Temsilcisi", role: "dimension" },
-            { name: "Year", label: "Yıl", role: "dimension" },
-            { name: "Quarter", label: "Çeyrek", role: "dimension" },
-            { name: "Amount", label: "Tutar", role: "measure" },
-            { name: "Quantity", label: "Miktar", role: "measure" },
-            { name: "Discount", label: "İskonto", role: "measure" }
-        ];
 
         const aggregationLabels = {
             sum: "Toplam",
@@ -423,26 +375,18 @@
             }
         })();
         const viewStore = new PivotForge.PivotViewStore(viewStorage, {
-            fields: fields.map(field => field.name),
+            fields: [...layoutState.catalog.keys()],
             aggregations: Object.keys(aggregationLabels),
             formatTypes: Object.keys(formatTypeLabels),
             showAsModes: Object.keys(showAsLabels)
         });
 
-        const defaultLayout = {
-            rows: ["Region", "Category"],
-            columns: ["Year"],
-            values: [
-                { field: "Amount", aggregation: "sum", showAs: "normal", format: { type: "currency", decimals: 0, useGrouping: true, currency: "TRY" } },
-                { field: "Quantity", aggregation: "average", showAs: "normal", format: { type: "number", decimals: 2, useGrouping: true } },
-                { field: "Discount", aggregation: "max", showAs: "normal", format: { type: "number", decimals: 0, useGrouping: true } }
-            ],
-            filters: []
-        };
         const restoredState = viewStore.loadLastState();
-        const layout = cloneLayout(restoredState?.layout ?? defaultLayout);
 
-        let fieldSearchTerm = "";
+        if (restoredState) {
+            applyLayoutToState(restoredState.layout);
+        }
+
         let activeRowSort = restoredState?.sort ?? null;
         let activeViewId = null;
         let activeViewBaseline = null;
@@ -453,7 +397,6 @@
             subtotals: restoredState?.viewSettings.subtotals ?? true,
             largeData: restoredState?.viewSettings.largeData ?? false
         };
-        const fieldAliases = { ...(restoredState?.fieldAliases ?? {}) };
         const drillDownColumns = [
             { key: "region", label: "Bölge" },
             { key: "category", label: "Kategori" },
@@ -488,7 +431,15 @@
             loadPage: loadLargePivotPage,
             onStateChanged: handleVirtualDataState
         });
-        renderer.applyViewState(restoredState, { rerender: false, notify: false });
+
+        // The packaged designer reports every layout change by calling widget.update().
+        // Routing that through runPivot keeps the demo's renderer options, row sort and
+        // large-data path in play instead of letting a bare refresh discard them.
+        const widgetUpdate = widget.update.bind(widget);
+        widget.update = () => runPivot();
+
+        syncRendererOptions();
+        activeRenderer().applyViewState(restoredState, { rerender: false, notify: false });
 
         widget.on("dataLoading", () => {
             pivotStartedAt = performance.now();
@@ -503,15 +454,11 @@
         widget.on("error", error => setStatus(error.message || String(error), true));
 
         elements.runButton.addEventListener("click", runPivot);
-        elements.fieldSearch.addEventListener("input", event => {
-            fieldSearchTerm = event.target.value.trim().toLocaleLowerCase("tr");
-            renderFieldPanel();
-        });
         elements.jsonButton.addEventListener("click", () => toggleJsonModal(true));
         elements.toolbarJsonButton.addEventListener("click", () => toggleJsonModal(true));
-        elements.expandAllButton.addEventListener("click", () => renderer.expandAll());
-        elements.collapseAllButton.addEventListener("click", () => renderer.collapseAll());
-        elements.resetColumnsButton.addEventListener("click", () => renderer.resetColumnWidths());
+        elements.expandAllButton.addEventListener("click", () => activeRenderer().expandAll());
+        elements.collapseAllButton.addEventListener("click", () => activeRenderer().collapseAll());
+        elements.resetColumnsButton.addEventListener("click", () => activeRenderer().resetColumnWidths());
         elements.resetLayoutButton.addEventListener("click", resetLayout);
         elements.exportExcelButton.addEventListener("click", exportExcel);
         elements.exportCsvButton.addEventListener("click", exportVisibleTableCsv);
@@ -567,7 +514,7 @@
                 saveNamedView();
             }
         });
-        elements.drillDownButton.addEventListener("click", () => openDrillDown(renderer.getSelection()));
+        elements.drillDownButton.addEventListener("click", () => openDrillDown(activeRenderer().getSelection()));
         elements.closeDrillDownButton.addEventListener("click", closeDrillDown);
         elements.drillDownModal.addEventListener("click", event => {
             if (event.target === elements.drillDownModal) {
@@ -587,11 +534,10 @@
             }
         });
         document.addEventListener("click", event => {
-            if (!event.target.closest(".pivot-dropdown-host, .pivot-chip-menu")) {
+            if (!event.target.closest(".pivot-dropdown-host")) {
                 closeAllDropdowns();
             }
         });
-        document.addEventListener("pointerdown", handleFormatPointerDown, true);
         document.addEventListener("pointerdown", event => {
             if (!elements.conditionalPanel.hidden &&
                 !elements.conditionalPanel.contains(event.target) &&
@@ -614,9 +560,26 @@
         syncViewControls();
         syncSortControl();
         renderSavedViews();
-        renderFieldPanel();
-        wireDropZones();
         runPivot();
+
+        // Adopts a stored layout onto the state the widget already built from the
+        // Razor catalog, then repaints the designer so panel and request agree.
+        function applyLayoutToState(nextLayout) {
+            if (!nextLayout || (nextLayout.values ?? []).length === 0) {
+                return false;
+            }
+
+            try {
+                layoutState.layout = layoutState.adoptLayout(nextLayout);
+            } catch (error) {
+                // A stored layout can name a field the current catalog no longer has.
+                setStatus(error.message || String(error), true);
+                return false;
+            }
+
+            widget.designer.render();
+            return true;
+        }
 
         async function runPivot() {
             if (viewSettings.largeData) {
@@ -631,42 +594,34 @@
             ensureUsableLayout();
 
             try {
-                syncWidgetRequest();
+                // Rebuilding the field set replaces the renderer, so the options are
+                // published first and the view state is carried onto the new one.
                 syncRendererOptions();
-                await widget.refresh();
+                const carriedViewState = activeRenderer().getViewState();
+                const pending = widgetUpdate({
+                    fields: layoutState.toFields(),
+                    filters: activeFilters(),
+                    rowSort: activeRowSort
+                });
+                activeRenderer().applyViewState(carriedViewState, { rerender: false, notify: false });
+                await pending;
             } catch (error) {
                 // Configuration errors surface synchronously; request failures arrive on the error event.
                 setStatus(error.message || String(error), true);
             }
         }
 
-        // Pushes the drag-and-drop layout onto the declarative widget. The demo layout is
-        // dynamic, so the field list is rebuilt before every request instead of being declared once.
-        function syncWidgetRequest() {
-            const fieldConfiguration = [
-                ...layout.rows.map(field => ({ dataField: field, caption: fieldLabel(field), area: "row" })),
-                ...layout.columns.map(field => ({ dataField: field, caption: fieldLabel(field), area: "column" })),
-                ...layout.values.map(value => ({
-                    dataField: value.field,
-                    caption: valueDisplayLabel(value),
-                    area: "data",
-                    aggregation: value.aggregation,
-                    showAs: normalizeShowAs(value.showAs),
-                    format: displayValueFormat(value)
-                }))
-            ];
-
-            widget.options.fields = fieldConfiguration;
-            widget.fields = PivotForge.PivotRequestBuilder.normalizeFields(fieldConfiguration);
-            widget.filters = layout.filters.map(filter => ({ field: filter.field, values: [...filter.values] }));
-            widget.rowSort = activeRowSort;
-            widget.options.sourceRowCount = viewSettings.largeData ? largeSourceRowCount : @Model.Count;
-        }
-
         // The widget renders with the renderer's own defaults, so the per-run display
         // settings (layout mode, subtotals, formats, conditional rules) live there.
+        // They are published on the widget too, because the widget rebuilds the
+        // renderer from options whenever the field set changes.
         function syncRendererOptions() {
-            Object.assign(renderer.options, createRendererOptions());
+            widget.options.rendererOptions = createRendererOptions();
+            Object.assign(activeRenderer().options, widget.options.rendererOptions);
+        }
+
+        function activeFilters() {
+            return layoutState.getState().filters.filter(filter => filter.values.length > 0);
         }
 
         async function runLargePivot() {
@@ -676,6 +631,7 @@
             // Drop any normal-mode request still in flight so its result cannot overwrite the paged view.
             widget.cancel();
             ensureUsableLayout();
+            syncRendererOptions();
             setLargeDataModeUi(true);
             elements.tableHost.scrollTop = 0;
             virtualPageOffset = 0;
@@ -699,32 +655,44 @@
         }
 
         function createPivotPayload() {
+            const state = layoutState.getState();
+
             return {
-                rows: layout.rows,
-                columns: layout.columns,
-                values: layout.values,
-                filters: layout.filters,
+                rows: state.rows,
+                columns: state.columns,
+                values: state.values,
+                filters: activeFilters(),
                 rowSort: activeRowSort
             };
         }
 
         function createRendererOptions(overrides = {}) {
+            const state = layoutState.getState();
+
             return {
-                rowFields: layout.rows,
-                rowFieldLabels: layout.rows.map(fieldLabel),
+                totalText: "Toplam",
+                emptyText: "-",
+                rowFields: state.rows,
+                rowFieldLabels: state.rows.map(fieldLabel),
                 layoutMode: viewSettings.layoutMode,
                 repeatRowLabels: viewSettings.repeatRowLabels,
                 subtotals: viewSettings.subtotals,
                 sortState: activeRowSort,
-                onSortRequested: handleHeaderSort,
                 conditionalRules,
-                values: layout.values.map(value => ({
+                values: state.values.map(value => ({
                     key: valueKey(value),
                     label: valueDisplayLabel(value),
                     aggregation: value.aggregation,
                     showAs: normalizeShowAs(value.showAs),
                     format: displayValueFormat(value)
                 })),
+                onSortRequested: handleHeaderSort,
+                onViewStateChanged: persistCurrentState,
+                onSelectionChanged: handlePivotSelectionChanged,
+                onCellDoubleClick: openDrillDown,
+                onCellCopied: handleCellCopied,
+                onCellFilterRequested: filterByCellSelection,
+                onConditionalFormatRequested: openConditionalPanel,
                 ...overrides
             };
         }
@@ -827,7 +795,7 @@
             const scrollTop = elements.tableHost.scrollTop;
             const scrollLeft = elements.tableHost.scrollLeft;
             virtualPageOffset = page.offset;
-            renderer.render(page.result, createRendererOptions({
+            activeRenderer().render(page.result, createRendererOptions({
                 showGrandTotal: !page.hasMore,
                 restoreSelectionFocus: false,
                 virtualState: {
@@ -879,732 +847,8 @@
             elements.largeDataLoading.hidden = !visible;
         }
 
-        function renderFieldPanel() {
-            const visibleFields = fields.filter(field =>
-                field.name.toLocaleLowerCase("tr").includes(fieldSearchTerm) ||
-                field.label.toLocaleLowerCase("tr").includes(fieldSearchTerm));
-            elements.fieldList.replaceChildren(...visibleFields.map(field => createAvailableField(field)));
-
-            if (visibleFields.length === 0) {
-                const empty = document.createElement("div");
-                empty.className = "pivot-zone__empty";
-                empty.textContent = "Alan bulunamadı";
-                elements.fieldList.appendChild(empty);
-            }
-
-            renderZone("rows", elements.rowsZone);
-            renderZone("columns", elements.columnsZone);
-            renderZone("values", elements.valuesZone);
-            renderZone("filters", elements.filtersZone);
-            updateZoneCounts();
-        }
-
-        function createAvailableField(field) {
-            const chip = document.createElement("div");
-            chip.className = `pivot-field-chip is-${field.role}`;
-            chip.draggable = true;
-            chip.dataset.field = field.name;
-            chip.dataset.active = String(isFieldInLayout(field.name));
-            chip.innerHTML = `
-                <span class="pivot-field-chip__main">
-                    <span class="pivot-field-chip__name">${field.label}</span>
-                    <span class="pivot-field-chip__meta">${roleLabel(field.role)}</span>
-                </span>
-            `;
-
-            chip.addEventListener("dragstart", event => {
-                event.dataTransfer.setData("text/plain", field.name);
-                event.dataTransfer.setData("application/x-pivot-source", "field-list");
-                event.dataTransfer.effectAllowed = "move";
-                chip.classList.add("is-dragging");
-                document.body.classList.add("pivot-field-drag-active");
-            });
-            chip.addEventListener("dragend", () => {
-                chip.classList.remove("is-dragging");
-                document.body.classList.remove("pivot-field-drag-active");
-                clearDropStates();
-            });
-
-            return chip;
-        }
-
-        function renderZone(zone, host) {
-            host.replaceChildren();
-            const entries = zone === "values" ? layout.values : layout[zone];
-
-            if (entries.length === 0) {
-                const empty = document.createElement("div");
-                empty.className = "pivot-zone__empty";
-                empty.textContent = "Alanları buraya sürükleyin";
-                host.appendChild(empty);
-                return;
-            }
-
-            entries.forEach((entry, index) => {
-                host.appendChild(zone === "values"
-                    ? createValueChip(entry, index)
-                    : zone === "filters"
-                        ? createFilterChip(entry, index)
-                    : createPlacedFieldChip(entry, zone, index));
-            });
-        }
-
-        function createPlacedFieldChip(field, zone, index) {
-            const chip = document.createElement("div");
-            chip.className = "pivot-placed-chip pivot-dropdown-host";
-            chip.draggable = true;
-            chip.dataset.field = field;
-            chip.dataset.zone = zone;
-            chip.dataset.index = String(index);
-            chip.innerHTML = `
-                <span class="pivot-chip-handle" aria-hidden="true">⋮⋮</span>
-                <span class="pivot-placed-chip__main">
-                    <span class="pivot-placed-chip__name">${fieldLabel(field)}</span>
-                    <span class="pivot-placed-chip__meta">${zoneLabel(zone)}</span>
-                </span>
-                <div class="pivot-chip-actions">
-                    <button type="button" data-action="settings" title="Alan ayarları">⋯</button>
-                </div>
-                <div class="pivot-chip-menu" hidden></div>
-            `;
-
-            wirePlacedChipDrag(chip, field, zone, index);
-            wireChipSettings(chip, { field, zone, index });
-            return chip;
-        }
-
-        function createFilterChip(filter, index) {
-            const selectedCount = filter.values.length;
-            const totalCount = getFilterOptions(filter.field).length;
-            const chip = document.createElement("div");
-            chip.className = "pivot-placed-chip is-filter pivot-dropdown-host";
-            chip.draggable = true;
-            chip.dataset.field = filter.field;
-            chip.dataset.zone = "filters";
-            chip.dataset.index = String(index);
-            chip.innerHTML = `
-                <span class="pivot-chip-handle" aria-hidden="true">⋮⋮</span>
-                <span class="pivot-placed-chip__main">
-                    <span class="pivot-placed-chip__name">${fieldLabel(filter.field)}</span>
-                    <span class="pivot-placed-chip__meta">Filtre</span>
-                </span>
-                <button class="pivot-filter-button pivot-menu-button" type="button">${formatFilterSelection(selectedCount, totalCount)} <span aria-hidden="true">▾</span></button>
-                <div class="pivot-chip-actions">
-                    <button type="button" data-action="settings" title="Alan ayarları">⋯</button>
-                </div>
-                <div class="pivot-chip-menu" hidden></div>
-                <div class="pivot-filter-menu" hidden></div>
-            `;
-
-            const menu = chip.querySelector(".pivot-filter-menu");
-            chip.querySelector(".pivot-filter-button").addEventListener("click", event => {
-                event.stopPropagation();
-                closeAllDropdowns(menu);
-                renderFilterMenu(menu, filter, index, chip);
-                menu.hidden = !menu.hidden;
-                chip.classList.toggle("is-menu-open", !menu.hidden);
-            });
-            wirePlacedChipDrag(chip, filter.field, "filters", index);
-            wireChipSettings(chip, { field: filter.field, zone: "filters", index, filter });
-            return chip;
-        }
-
-        function renderFilterMenu(menu, filter, index, chip) {
-            const options = getFilterOptions(filter.field);
-            const selected = new Set(filter.values);
-            let filterSearchTerm = "";
-            menu.replaceChildren();
-
-            const search = document.createElement("input");
-            search.className = "pivot-filter-search";
-            search.type = "search";
-            search.placeholder = "Filtre ara";
-            search.autocomplete = "off";
-            menu.appendChild(search);
-
-            const toolbar = document.createElement("div");
-            toolbar.className = "pivot-filter-menu__toolbar";
-            toolbar.innerHTML = `
-                <button type="button" data-action="all">Tümünü seç</button>
-                <button type="button" data-action="clear">Temizle</button>
-            `;
-            menu.appendChild(toolbar);
-
-            const list = document.createElement("div");
-            list.className = "pivot-filter-options";
-            menu.appendChild(list);
-
-            const footer = document.createElement("div");
-            footer.className = "pivot-filter-menu__footer";
-            footer.innerHTML = `
-                <span class="pivot-filter-menu__summary" aria-live="polite"></span>
-                <button class="pivot-filter-cancel" type="button" data-action="cancel">İptal</button>
-                <button class="pivot-filter-apply" type="button" data-action="apply">Uygula</button>
-            `;
-            menu.appendChild(footer);
-
-            const updateSummary = () => {
-                const summary = footer.querySelector(".pivot-filter-menu__summary");
-                summary.textContent = `${selected.size}/${options.length} seçili`;
-            };
-
-            toolbar.querySelector('[data-action="all"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                selected.clear();
-                options.forEach(option => selected.add(option));
-                updateSummary();
-                renderOptions();
-            });
-            toolbar.querySelector('[data-action="clear"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                selected.clear();
-                updateSummary();
-                renderOptions();
-            });
-
-            const renderOptions = () => {
-                const normalizedSearch = filterSearchTerm.toLocaleLowerCase("tr");
-                const visibleOptions = options.filter(option => option.toLocaleLowerCase("tr").includes(normalizedSearch));
-                list.replaceChildren();
-
-                if (visibleOptions.length === 0) {
-                    const empty = document.createElement("div");
-                    empty.className = "pivot-filter-option-empty";
-                    empty.textContent = "Sonuç yok";
-                    list.appendChild(empty);
-                    return;
-                }
-
-                for (const option of visibleOptions) {
-                    const label = document.createElement("label");
-                    label.className = "pivot-filter-option";
-                    label.innerHTML = `
-                        <input type="checkbox" value="${option}" ${selected.has(option) ? "checked" : ""}>
-                        <span class="pivot-filter-option__box" aria-hidden="true"></span>
-                        <span>${option}</span>
-                    `;
-                    label.querySelector("input").addEventListener("change", event => {
-                        if (event.target.checked) {
-                            selected.add(option);
-                        } else {
-                            selected.delete(option);
-                        }
-
-                        updateSummary();
-                    });
-                    list.appendChild(label);
-                }
-            };
-
-            search.addEventListener("input", event => {
-                filterSearchTerm = event.target.value;
-                renderOptions();
-            });
-
-            footer.querySelector('[data-action="cancel"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                menu.hidden = true;
-                chip.classList.remove("is-menu-open");
-            });
-            footer.querySelector('[data-action="apply"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                layout.filters[index] = { field: filter.field, values: [...selected] };
-                chip.querySelector(".pivot-filter-button").innerHTML = `${formatFilterSelection(selected.size, options.length)} <span aria-hidden="true">▾</span>`;
-                menu.hidden = true;
-                chip.classList.remove("is-menu-open");
-                updateZoneCounts();
-                runPivot();
-            });
-
-            updateSummary();
-            renderOptions();
-        }
-
-        function createValueChip(value, index) {
-            const chip = document.createElement("div");
-            chip.className = "pivot-placed-chip is-value pivot-dropdown-host";
-            chip.draggable = true;
-            chip.dataset.field = value.field;
-            chip.dataset.zone = "values";
-            chip.dataset.valueIndex = String(index);
-            chip.dataset.index = String(index);
-            chip.style.zIndex = String(100 - index);
-            chip.innerHTML = `
-                <span class="pivot-chip-handle" aria-hidden="true">⋮⋮</span>
-                <span class="pivot-placed-chip__main">
-                    <span class="pivot-placed-chip__name">${fieldLabel(value.field)}</span>
-                    <span class="pivot-placed-chip__meta">${valueChipSummary(value)}</span>
-                </span>
-                <div class="pivot-chip-actions">
-                    <button type="button" data-action="settings" title="Alan ayarları">⋯</button>
-                </div>
-                <div class="pivot-chip-menu" hidden></div>
-            `;
-
-            wirePlacedChipDrag(chip, value.field, "values", index);
-            wireChipSettings(chip, { field: value.field, zone: "values", index, value });
-            return chip;
-        }
-
-        function wireChipSettings(chip, context) {
-            const button = chip.querySelector('[data-action="settings"]');
-            const menu = chip.querySelector(".pivot-chip-menu");
-
-            button.addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                const shouldOpen = menu.hidden;
-                closeAllDropdowns(menu);
-                renderChipSettingsMenu(menu, context, chip);
-
-                if (menu.parentElement !== document.body) {
-                    document.body.appendChild(menu);
-                }
-
-                menu.hidden = !shouldOpen;
-                chip.classList.toggle("is-menu-open", shouldOpen);
-
-                if (shouldOpen) {
-                    positionFloatingMenu(menu, button);
-                }
-            });
-        }
-
-        function renderChipSettingsMenu(menu, context, chip) {
-            const canMoveUp = context.index > 0;
-            const canMoveDown = context.index < getZoneEntries(context.zone).length - 1;
-            const currentLabel = fieldLabel(context.field);
-            const baseLabel = baseFieldLabel(context.field);
-
-            menu.replaceChildren();
-            menu.innerHTML = `
-                <div class="pivot-chip-menu__section">
-                    <label class="pivot-chip-menu__label">Alan adı</label>
-                    <input class="pivot-chip-menu__input" type="text" value="${escapeAttribute(currentLabel)}" placeholder="${escapeAttribute(baseLabel)}">
-                    <div class="pivot-chip-menu__row">
-                        <button type="button" data-menu-action="rename">Adı değiştir</button>
-                        <button type="button" data-menu-action="reset-name">Sıfırla</button>
-                    </div>
-                </div>
-                <div class="pivot-chip-menu__section">
-                    <span class="pivot-chip-menu__title">Konum</span>
-                    <div class="pivot-chip-menu__row">
-                        <button type="button" data-menu-action="move-up" ${canMoveUp ? "" : "disabled"}>Yukarı taşı</button>
-                        <button type="button" data-menu-action="move-down" ${canMoveDown ? "" : "disabled"}>Aşağı taşı</button>
-                    </div>
-                </div>
-                ${createSortMenuMarkup(context)}
-                ${context.zone === "values" ? createValueSettingsMarkup(context.value) : ""}
-                ${context.zone === "filters" ? `<button class="pivot-chip-menu__item" type="button" data-menu-action="open-filter">Filtre seçimlerini aç</button>` : ""}
-                <button class="pivot-chip-menu__item is-danger" type="button" data-menu-action="remove">Alanı kaldır</button>
-            `;
-
-            menu.querySelector('[data-menu-action="rename"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                const nextName = menu.querySelector(".pivot-chip-menu__input").value.trim();
-
-                if (nextName && nextName !== baseLabel) {
-                    fieldAliases[context.field] = nextName;
-                } else {
-                    delete fieldAliases[context.field];
-                }
-
-                renderFieldPanel();
-                runPivot();
-            });
-            menu.querySelector('[data-menu-action="reset-name"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                delete fieldAliases[context.field];
-                renderFieldPanel();
-                runPivot();
-            });
-            menu.querySelector('[data-menu-action="move-up"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                moveFieldWithinZone(context.zone, context.index, -1);
-            });
-            menu.querySelector('[data-menu-action="move-down"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                moveFieldWithinZone(context.zone, context.index, 1);
-            });
-            menu.querySelector('[data-menu-action="remove"]').addEventListener("click", event => {
-                event.preventDefault();
-                event.stopPropagation();
-                removeField(context.zone, context.field);
-            });
-
-            menu.querySelectorAll("[data-sort-action]").forEach(button => {
-                button.addEventListener("click", event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    applyChipSort(context, button.dataset.sortAction);
-                });
-            });
-
-            if (context.zone === "values") {
-                const value = context.value;
-                const format = normalizeValueFormat(value);
-
-                menu.querySelectorAll("[data-menu-aggregation]").forEach(button => {
-                    button.addEventListener("click", event => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        layout.values[context.index] = { ...value, aggregation: button.dataset.menuAggregation, format };
-                        syncActiveSortWithLayout();
-                        renderFieldPanel();
-                        runPivot();
-                    });
-                });
-                menu.querySelectorAll("[data-menu-show-as]").forEach(button => {
-                    button.addEventListener("click", event => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        layout.values[context.index] = {
-                            ...value,
-                            showAs: normalizeShowAs(button.dataset.menuShowAs),
-                            format
-                        };
-                        renderFieldPanel();
-                        runPivot();
-                    });
-                });
-                menu.querySelectorAll("[data-menu-format-type]").forEach(button => {
-                    button.addEventListener("click", event => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        applyValueFormat(context.index, value, { ...format, type: button.dataset.menuFormatType });
-                    });
-                });
-                menu.querySelectorAll("[data-menu-format-decimals]").forEach(button => {
-                    button.addEventListener("click", event => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        applyValueFormat(context.index, value, { ...format, decimals: Number(button.dataset.menuFormatDecimals) });
-                    });
-                });
-                menu.querySelector("[data-menu-format-grouping]").addEventListener("click", event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    applyValueFormat(context.index, value, { ...format, useGrouping: !format.useGrouping });
-                });
-            }
-
-            const openFilterButton = menu.querySelector('[data-menu-action="open-filter"]');
-
-            if (openFilterButton) {
-                openFilterButton.addEventListener("click", event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const filterMenu = chip.querySelector(".pivot-filter-menu");
-                    closeAllDropdowns(filterMenu);
-                    renderFilterMenu(filterMenu, context.filter, context.index, chip);
-                    filterMenu.hidden = false;
-                    chip.classList.add("is-menu-open");
-                });
-            }
-        }
-
-        function createSortMenuMarkup(context) {
-            if (context.zone === "rows") {
-                return `
-                    <div class="pivot-chip-menu__section">
-                        <span class="pivot-chip-menu__title">Sıralama</span>
-                        <div class="pivot-chip-menu__row">
-                            <button type="button" data-sort-action="row-asc">A-Z</button>
-                            <button type="button" data-sort-action="row-desc">Z-A</button>
-                        </div>
-                    </div>
-                `;
-            }
-
-            if (context.zone === "values") {
-                return `
-                    <div class="pivot-chip-menu__section">
-                        <span class="pivot-chip-menu__title">Sıralama</span>
-                        <div class="pivot-chip-menu__row">
-                            <button type="button" data-sort-action="value-desc">Büyükten küçüğe</button>
-                            <button type="button" data-sort-action="value-asc">Küçükten büyüğe</button>
-                        </div>
-                    </div>
-                `;
-            }
-
-            return `
-                <div class="pivot-chip-menu__section">
-                    <span class="pivot-chip-menu__title">Sıralama</span>
-                    <span class="pivot-chip-menu__hint">Bu alan için sıralama tablo başlığından yapılır.</span>
-                </div>
-            `;
-        }
-
-        function createValueSettingsMarkup(value) {
-            const format = normalizeValueFormat(value);
-            const showAs = normalizeShowAs(value.showAs);
-
-            return `
-                <div class="pivot-chip-menu__section">
-                    <span class="pivot-chip-menu__title">Değer ayarları</span>
-                    <div class="pivot-chip-menu__grid">
-                        ${["sum", "count", "average", "min", "max"].map(aggregation => `
-                            <button type="button" data-menu-aggregation="${aggregation}" data-selected="${aggregation === value.aggregation}">
-                                ${aggregationLabel(aggregation)}
-                            </button>
-                        `).join("")}
-                    </div>
-                </div>
-                <div class="pivot-chip-menu__section">
-                    <span class="pivot-chip-menu__title">Değerleri farklı göster</span>
-                    <div class="pivot-chip-menu__show-as">
-                        ${Object.entries(showAsLabels).map(([mode, label]) => `
-                            <button class="pivot-chip-menu__item" type="button" data-menu-show-as="${mode}" data-selected="${mode === showAs}">
-                                ${label}
-                            </button>
-                        `).join("")}
-                    </div>
-                </div>
-                <div class="pivot-chip-menu__section">
-                    <span class="pivot-chip-menu__title">Biçimlendirme</span>
-                    <button class="pivot-chip-menu__item" type="button" data-menu-format-grouping data-selected="${format.useGrouping}">
-                        Binlik ayırıcı ${format.useGrouping ? "✓" : ""}
-                    </button>
-                    <div class="pivot-chip-menu__grid">
-                        ${["number", "currency", "percent"].map(type => `
-                            <button type="button" data-menu-format-type="${type}" data-selected="${format.type === type}">
-                                ${formatTypeLabels[type]}
-                            </button>
-                        `).join("")}
-                    </div>
-                    <div class="pivot-chip-menu__grid">
-                        ${[0, 1, 2, 3].map(decimals => `
-                            <button type="button" data-menu-format-decimals="${decimals}" data-selected="${format.decimals === decimals}">
-                                ${decimals}
-                            </button>
-                        `).join("")}
-                    </div>
-                </div>
-            `;
-        }
-
-        function wirePlacedChipDrag(chip, field, zone, index) {
-            chip.addEventListener("dragstart", event => {
-                if (shouldIgnoreChipDrag(event)) {
-                    event.preventDefault();
-                    return;
-                }
-
-                closeAllDropdowns();
-                event.dataTransfer.setData("text/plain", field);
-                event.dataTransfer.setData("application/x-pivot-source", zone);
-                event.dataTransfer.setData("application/x-pivot-index", String(index));
-                event.dataTransfer.effectAllowed = "move";
-                chip.classList.add("is-dragging");
-                document.body.classList.add("pivot-field-drag-active");
-            });
-            chip.addEventListener("dragend", () => {
-                chip.classList.remove("is-dragging");
-                document.body.classList.remove("pivot-field-drag-active");
-                clearDropStates();
-            });
-        }
-
-        function bindFormatControl(items, apply) {
-            items.forEach(item => {
-                if (!item) {
-                    return;
-                }
-
-                const handle = event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    apply(item);
-                };
-
-                item.addEventListener("pointerdown", handle);
-                item.addEventListener("click", event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                });
-                item.addEventListener("keydown", event => {
-                    if (event.key === "Enter" || event.key === " ") {
-                        handle(event);
-                    }
-                });
-            });
-        }
-
-        function handleFormatPointerDown(event) {
-            const control = event.target.closest("[data-format-type], [data-format-decimals], [data-format-grouping]");
-
-            if (!control) {
-                return;
-            }
-
-            const chip = control.closest(".pivot-placed-chip.is-value");
-            const index = Number(chip?.dataset.valueIndex);
-            const value = layout.values[index];
-
-            if (!chip || !value) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            closeAllDropdowns();
-
-            const format = normalizeValueFormat(value);
-
-            if (control.matches("[data-format-type]")) {
-                applyValueFormat(index, value, { ...format, type: control.dataset.formatType });
-                return;
-            }
-
-            if (control.matches("[data-format-decimals]")) {
-                applyValueFormat(index, value, { ...format, decimals: Number(control.dataset.formatDecimals) });
-                return;
-            }
-
-            applyValueFormat(index, value, { ...format, useGrouping: !format.useGrouping });
-        }
-
-        function wireDropZones() {
-            document.querySelectorAll("[data-zone]").forEach(zoneElement => {
-                zoneElement.addEventListener("dragover", event => {
-                    event.preventDefault();
-                    const targetIndex = getDropIndex(zoneElement, event.clientY);
-                    updateDropIndicator(zoneElement, targetIndex);
-                });
-                zoneElement.addEventListener("dragenter", event => {
-                    event.preventDefault();
-                    zoneElement.classList.add("is-over");
-                });
-                zoneElement.addEventListener("dragleave", event => {
-                    if (!zoneElement.contains(event.relatedTarget)) {
-                        zoneElement.classList.remove("is-over");
-                        clearZoneDropIndicator(zoneElement);
-                    }
-                });
-                zoneElement.addEventListener("drop", event => {
-                    event.preventDefault();
-                    zoneElement.classList.remove("is-over");
-                    clearZoneDropIndicator(zoneElement);
-                    const field = event.dataTransfer.getData("text/plain");
-                    const sourceZone = event.dataTransfer.getData("application/x-pivot-source");
-                    const sourceIndex = Number(event.dataTransfer.getData("application/x-pivot-index"));
-                    const targetIndex = getDropIndex(zoneElement, event.clientY);
-                    moveField(field, zoneElement.dataset.zone, targetIndex, sourceZone, sourceIndex);
-                });
-            });
-        }
-
-        function getDropIndex(zoneElement, clientY) {
-            const chips = [...zoneElement.querySelectorAll(".pivot-placed-chip:not(.is-dragging)")];
-
-            if (chips.length === 0) {
-                return 0;
-            }
-
-            const afterChip = chips.find(chip => {
-                const rect = chip.getBoundingClientRect();
-                return clientY < rect.top + rect.height / 2;
-            });
-
-            return afterChip ? chips.indexOf(afterChip) : chips.length;
-        }
-
-        function updateDropIndicator(zoneElement, targetIndex) {
-            zoneElement.classList.add("is-over");
-            zoneElement.querySelectorAll(".pivot-placed-chip").forEach(chip => {
-                chip.classList.remove("is-drop-before", "is-drop-after");
-            });
-
-            const chips = [...zoneElement.querySelectorAll(".pivot-placed-chip:not(.is-dragging)")];
-
-            if (chips.length === 0) {
-                zoneElement.classList.add("is-empty-drop-target");
-                return;
-            }
-
-            zoneElement.classList.remove("is-empty-drop-target");
-
-            if (targetIndex >= chips.length) {
-                chips[chips.length - 1].classList.add("is-drop-after");
-                return;
-            }
-
-            chips[targetIndex].classList.add("is-drop-before");
-        }
-
-        function clearZoneDropIndicator(zoneElement) {
-            zoneElement.classList.remove("is-empty-drop-target");
-            zoneElement.querySelectorAll(".pivot-placed-chip").forEach(chip => {
-                chip.classList.remove("is-drop-before", "is-drop-after");
-            });
-        }
-
-        function moveField(field, zone, targetIndex = null, sourceZone = null, sourceIndex = null) {
-            if (!field || !["rows", "columns", "values", "filters"].includes(zone)) {
-                return;
-            }
-
-            const existingValue = layout.values.find(value => value.field === field);
-            const existingFilter = layout.filters.find(filter => filter.field === field);
-            const insertIndex = Number.isInteger(targetIndex) ? targetIndex : getZoneEntries(zone).length;
-            const nextIndex = insertIndex;
-
-            removeFieldFromLayoutAreas(field);
-
-            if (zone === "filters") {
-                layout.filters.splice(nextIndex, 0, existingFilter ?? { field, values: getFilterOptions(field) });
-            } else if (zone === "values") {
-                layout.values.splice(nextIndex, 0, existingValue ?? {
-                    field,
-                    aggregation: getDefaultAggregation(field),
-                    showAs: "normal",
-                    format: getDefaultFormat(field)
-                });
-            } else {
-                layout[zone].splice(nextIndex, 0, field);
-            }
-
-            syncActiveSortWithLayout();
-            renderFieldPanel();
-            runPivot();
-        }
-
-        function removeField(zone, field) {
-            if (zone === "values") {
-                layout.values = layout.values.filter(value => value.field !== field);
-            } else if (zone === "filters") {
-                layout.filters = layout.filters.filter(filter => filter.field !== field);
-            } else {
-                layout[zone] = layout[zone].filter(item => item !== field);
-            }
-
-            syncActiveSortWithLayout();
-            renderFieldPanel();
-            runPivot();
-        }
-
-        function removeFieldFromLayoutAreas(field) {
-            layout.rows = layout.rows.filter(item => item !== field);
-            layout.columns = layout.columns.filter(item => item !== field);
-            layout.values = layout.values.filter(value => value.field !== field);
-            layout.filters = layout.filters.filter(filter => filter.field !== field);
-        }
-
         function resetLayout() {
-            const next = cloneLayout(defaultLayout);
-            layout.rows = next.rows;
-            layout.columns = next.columns;
-            layout.values = next.values;
-            layout.filters = next.filters;
+            applyLayoutToState(defaultLayout);
             activeRowSort = null;
             elements.rowSortMode.value = "none";
             viewSettings.layoutMode = "tabular";
@@ -1613,11 +857,9 @@
             viewSettings.largeData = false;
             conditionalRules = [];
             syncViewControls();
-            Object.keys(fieldAliases).forEach(field => delete fieldAliases[field]);
-            renderer.applyViewState({}, { rerender: false, notify: false });
+            activeRenderer().applyViewState({}, { rerender: false, notify: false });
             activeViewId = null;
             activeViewBaseline = null;
-            renderFieldPanel();
             runPivot();
         }
 
@@ -1628,21 +870,6 @@
             elements.repeatLabelsToggle.checked = viewSettings.repeatRowLabels;
             elements.subtotalsToggle.checked = viewSettings.subtotals;
             elements.largeDataToggle.checked = viewSettings.largeData;
-        }
-
-        function cloneLayout(source) {
-            return {
-                rows: [...source.rows],
-                columns: [...source.columns],
-                values: source.values.map(value => ({
-                    ...value,
-                    format: value.format ? { ...value.format } : undefined
-                })),
-                filters: source.filters.map(filter => ({
-                    field: filter.field,
-                    values: [...filter.values]
-                }))
-            };
         }
 
         function handlePivotSelectionChanged(selection) {
@@ -1658,9 +885,10 @@
         }
 
         function filterByCellSelection(selection) {
+            const state = layoutState.getState();
             const dimensionValues = [
-                ...layout.rows.slice(0, selection.rowHeader.length).map((field, index) => ({ field, value: selection.rowHeader[index] })),
-                ...layout.columns.slice(0, selection.columnHeader.length).map((field, index) => ({ field, value: selection.columnHeader[index] }))
+                ...state.rows.slice(0, selection.rowHeader.length).map((field, index) => ({ field, value: selection.rowHeader[index] })),
+                ...state.columns.slice(0, selection.columnHeader.length).map((field, index) => ({ field, value: selection.columnHeader[index] }))
             ].filter(item => item.value !== null && item.value !== undefined);
 
             if (dimensionValues.length === 0) {
@@ -1668,18 +896,20 @@
                 return;
             }
 
+            // A cell's context filters a field that is already a row or a column, which
+            // move() would refuse because it detaches first. The filter zone is written
+            // directly so the field keeps its place in the layout.
             dimensionValues.forEach(({ field, value }) => {
-                const nextFilter = { field, values: [String(value)] };
-                const existingIndex = layout.filters.findIndex(filter => filter.field === field);
+                const existing = layoutState.layout.filters.find(filter => filter.field === field);
 
-                if (existingIndex >= 0) {
-                    layout.filters[existingIndex] = nextFilter;
+                if (existing) {
+                    existing.values = [String(value)];
                 } else {
-                    layout.filters.push(nextFilter);
+                    layoutState.layout.filters.push({ field, values: [String(value)] });
                 }
             });
 
-            renderFieldPanel();
+            widget.designer.render();
             setStatus("Hücre bağlamı filtrelere uygulandı", false);
             runPivot();
         }
@@ -1691,7 +921,7 @@
 
             conditionalSelection = selection;
             conditionalAnchorCell = cell;
-            const value = layout.values.find(item => valueKey(item) === selection.valueKey);
+            const value = layoutState.getState().values.find(item => valueKey(item) === selection.valueKey);
             elements.conditionalPanelSummary.textContent = `${value ? valueDisplayLabel(value) : selection.valueKey} · ${cell.textContent.trim()}`;
             elements.conditionalOperator.value = "greaterThanOrEqual";
             elements.conditionalThreshold.value = String(selection.value);
@@ -1769,12 +999,13 @@
                 return;
             }
 
-            const hasValue = layout.values.some(value => valueKey(value) === selection.valueKey);
-            const hasCompatiblePaths = selection.rowHeader.length <= layout.rows.length &&
-                selection.columnHeader.length <= layout.columns.length;
+            const state = layoutState.getState();
+            const hasValue = state.values.some(value => valueKey(value) === selection.valueKey);
+            const hasCompatiblePaths = selection.rowHeader.length <= state.rows.length &&
+                selection.columnHeader.length <= state.columns.length;
 
             if (!hasValue || !hasCompatiblePaths) {
-                renderer.clearSelection();
+                activeRenderer().clearSelection();
                 setStatus("Seçili hücre mevcut pivot düzeninde bulunmuyor", true);
                 return;
             }
@@ -1796,7 +1027,6 @@
             setDrillDownState("Kayıtlar yükleniyor...", false);
 
             try {
-                syncWidgetRequest();
                 const response = await widget.drillDown({
                     rowPath: selection.rowHeader,
                     columnPath: selection.columnHeader,
@@ -1833,7 +1063,7 @@
         function createDrillDownTitle(selection) {
             const rowLabel = selection.rowHeader.length > 0 ? selection.rowHeader.join(" / ") : "Tüm satırlar";
             const columnLabel = selection.columnHeader.length > 0 ? selection.columnHeader.join(" / ") : "Tüm sütunlar";
-            const value = layout.values.find(item => valueKey(item) === selection.valueKey);
+            const value = layoutState.getState().values.find(item => valueKey(item) === selection.valueKey);
             const valueLabel = value
                 ? valueDisplayLabel(value)
                 : selection.valueKey;
@@ -1927,25 +1157,23 @@
             }
 
             const csv = PivotForge.PivotDrillDownData.toCsv(visibleDrillDownRecords, drillDownColumns);
-            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `pivot-detay-${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
+            downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `pivot-detay-${new Date().toISOString().slice(0, 10)}.csv`);
         }
 
         function captureCurrentState() {
-            const rendererState = renderer.getViewState();
+            const rendererState = activeRenderer().getViewState();
+            const state = layoutState.getState();
+
             return viewStore.normalizeState({
                 version: 1,
-                layout: cloneLayout(layout),
+                layout: {
+                    rows: state.rows,
+                    columns: state.columns,
+                    values: state.values.map(value => ({ ...value, format: normalizeValueFormat(value) })),
+                    filters: state.filters
+                },
                 viewSettings: { ...viewSettings },
                 sort: activeRowSort ? { ...activeRowSort } : null,
-                fieldAliases: { ...fieldAliases },
                 conditionalRules: conditionalRules.map(rule => ({ ...rule })),
                 columnWidths: rendererState.columnWidths,
                 collapsedGroups: rendererState.collapsedGroups
@@ -2062,27 +1290,20 @@
         }
 
         function applySavedView(view) {
-            const nextLayout = cloneLayout(view.state.layout);
-            layout.rows = nextLayout.rows;
-            layout.columns = nextLayout.columns;
-            layout.values = nextLayout.values;
-            layout.filters = nextLayout.filters;
+            applyLayoutToState(view.state.layout);
             viewSettings.layoutMode = view.state.viewSettings.layoutMode;
             viewSettings.repeatRowLabels = view.state.viewSettings.repeatRowLabels;
             viewSettings.subtotals = view.state.viewSettings.subtotals;
             viewSettings.largeData = view.state.viewSettings.largeData;
             activeRowSort = view.state.sort ? { ...view.state.sort } : null;
             conditionalRules = view.state.conditionalRules.map(rule => ({ ...rule }));
-            Object.keys(fieldAliases).forEach(field => delete fieldAliases[field]);
-            Object.assign(fieldAliases, view.state.fieldAliases);
-            renderer.applyViewState(view.state, { rerender: false, notify: false });
+            activeRenderer().applyViewState(view.state, { rerender: false, notify: false });
             activeViewId = view.id;
             activeViewBaseline = view.state;
             pendingDeleteViewId = null;
             elements.savedViewName.value = view.name;
             syncViewControls();
             syncSortControl();
-            renderFieldPanel();
             renderSavedViews();
             elements.savedViewsMenu.hidden = true;
             elements.savedViewsButton.setAttribute("aria-expanded", "false");
@@ -2130,15 +1351,9 @@
 
             const rows = [...table.querySelectorAll("tr")].map(row =>
                 [...row.children].map(cell => csvEscape(cell.innerText.trim())).join(","));
-            const blob = new Blob([`\uFEFF${rows.join("\n")}`], { type: "text/csv;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `pivot-table-${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
+            downloadBlob(
+                new Blob([`\uFEFF${rows.join("\n")}`], { type: "text/csv;charset=utf-8" }),
+                `pivot-table-${new Date().toISOString().slice(0, 10)}.csv`);
         }
 
         async function exportExcel() {
@@ -2151,14 +1366,7 @@
                     sheetName: "Pivot Tablo",
                     filterSummary: createExcelFilterSummary()
                 });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = fileName ?? `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`;
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-                URL.revokeObjectURL(url);
+                downloadBlob(blob, fileName ?? `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`);
                 setStatus("Excel dosyası indirildi", false);
             } catch (error) {
                 setStatus(error.message || "Excel dosyası oluşturulamadı", true);
@@ -2167,12 +1375,25 @@
             }
         }
 
+        function downloadBlob(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        }
+
         function createExcelFilterSummary() {
-            if (layout.filters.length === 0) {
+            const filters = activeFilters();
+
+            if (filters.length === 0) {
                 return "Aktif filtre yok";
             }
 
-            return layout.filters.map(filter => {
+            return filters.map(filter => {
                 const options = getFilterOptions(filter.field);
                 const values = filter.values.length === options.length
                     ? "Tümü"
@@ -2199,40 +1420,21 @@
             }
         }
 
-        function moveFieldWithinZone(zone, index, direction) {
-            const entries = getZoneEntries(zone);
-            const targetIndex = index + direction;
-
-            if (targetIndex < 0 || targetIndex >= entries.length) {
-                return;
-            }
-
-            [entries[index], entries[targetIndex]] = [entries[targetIndex], entries[index]];
-            syncActiveSortWithLayout();
-            renderFieldPanel();
-            runPivot();
-        }
-
-        function getZoneEntries(zone) {
-            return zone === "values" || zone === "filters" ? layout[zone] : layout[zone];
-        }
-
+        // A pivot with neither rows nor columns has nothing to group by, so the first
+        // free dimension is put back rather than sending a degenerate request.
         function ensureUsableLayout() {
-            if (layout.rows.length === 0 && layout.columns.length === 0) {
-                layout.rows = ["Region"];
-            }
+            const state = layoutState.getState();
 
-            if (layout.values.length === 0) {
-                layout.values = [{ field: "Amount", aggregation: "sum", format: getDefaultFormat("Amount") }];
+            if (state.rows.length === 0 && state.columns.length === 0) {
+                const fallback = state.available.find(name => layoutState.field(name).role === "dimension");
+
+                if (fallback) {
+                    layoutState.move(fallback, "row");
+                    widget.designer.render();
+                }
             }
 
             syncActiveSortWithLayout();
-        }
-
-        function applyValueFormat(index, value, format) {
-            layout.values[index] = { ...value, format };
-            renderFieldPanel();
-            runPivot();
         }
 
         function handleHeaderSort(request) {
@@ -2240,8 +1442,10 @@
                 return;
             }
 
+            const state = layoutState.getState();
+
             if (request.mode === "RowLabel") {
-                const field = request.field ?? layout.rows[layout.rows.length - 1] ?? layout.rows[0] ?? null;
+                const field = request.field ?? state.rows[state.rows.length - 1] ?? null;
 
                 if (!field) {
                     return;
@@ -2260,7 +1464,7 @@
             }
 
             if (request.mode === "RowTotalValue") {
-                const valueKeyToSort = request.valueKey ?? valueKey(layout.values[0] ?? { field: "Amount", aggregation: "sum" });
+                const valueKeyToSort = request.valueKey ?? valueKey(state.values[0] ?? { field: "Amount", aggregation: "sum" });
                 const columnPath = request.columnPath ?? null;
                 const direction = activeRowSort?.mode === "RowTotalValue" &&
                     activeRowSort.valueKey === valueKeyToSort &&
@@ -2292,22 +1496,19 @@
                 return;
             }
 
-            if (activeRowSort.mode === "RowLabel" && !layout.rows.includes(activeRowSort.field)) {
+            const state = layoutState.getState();
+
+            if (activeRowSort.mode === "RowLabel" && !state.rows.includes(activeRowSort.field)) {
                 activeRowSort = null;
                 elements.rowSortMode.value = "none";
                 return;
             }
 
             if (activeRowSort.mode === "RowTotalValue" &&
-                !layout.values.some(value => valueKey(value) === activeRowSort.valueKey)) {
+                !state.values.some(value => valueKey(value) === activeRowSort.valueKey)) {
                 activeRowSort = null;
                 elements.rowSortMode.value = "none";
             }
-        }
-
-        function getDefaultAggregation(field) {
-            const fieldInfo = fields.find(item => item.name === field);
-            return fieldInfo?.role === "measure" ? "sum" : "count";
         }
 
         function getDefaultFormat(field) {
@@ -2353,35 +1554,22 @@
             return showAs === "normal" ? base : `${base} · ${showAsLabels[showAs]}`;
         }
 
-        function valueChipSummary(value) {
-            const aggregation = aggregationLabel(value.aggregation);
-            const showAs = normalizeShowAs(value.showAs);
-            return showAs === "normal" ? aggregation : `${aggregation} · ${showAsLabels[showAs]}`;
-        }
-
         function createRowSort(mode) {
-            if (mode === "label-asc") {
-                return {
-                    mode: "RowLabel",
-                    direction: "Ascending",
-                    field: layout.rows[layout.rows.length - 1] ?? layout.rows[0] ?? null
-                };
-            }
+            const state = layoutState.getState();
 
-            if (mode === "label-desc") {
+            if (mode === "label-asc" || mode === "label-desc") {
                 return {
                     mode: "RowLabel",
-                    direction: "Descending",
-                    field: layout.rows[layout.rows.length - 1] ?? layout.rows[0] ?? null
+                    direction: mode === "label-asc" ? "Ascending" : "Descending",
+                    field: state.rows[state.rows.length - 1] ?? null
                 };
             }
 
             if (mode === "value-desc" || mode === "value-asc") {
-                const value = layout.values[0] ?? { field: "Amount", aggregation: "sum" };
                 return {
                     mode: "RowTotalValue",
                     direction: mode === "value-desc" ? "Descending" : "Ascending",
-                    valueKey: valueKey(value)
+                    valueKey: valueKey(state.values[0] ?? { field: "Amount", aggregation: "sum" })
                 };
             }
 
@@ -2389,136 +1577,18 @@
         }
 
         function fieldLabel(field) {
-            return fieldAliases[field] ?? baseFieldLabel(field);
-        }
-
-        function baseFieldLabel(field) {
-            return fields.find(item => item.name === field)?.label ?? field;
-        }
-
-        function roleLabel(role) {
-            return role === "measure" ? "Ölçü" : "Boyut";
-        }
-
-        function zoneLabel(zone) {
-            return {
-                rows: "Satır",
-                columns: "Sütun",
-                filters: "Filtre",
-                values: "Değer"
-            }[zone] ?? zone;
+            return layoutState.catalog.get(field)?.caption ?? field;
         }
 
         function aggregationLabel(aggregation) {
             return aggregationLabels[aggregation] ?? aggregation;
         }
 
-        function formatSummary(format) {
-            const grouping = format.useGrouping ? "1.000" : "1000";
-            return `${formatTypeLabels[format.type] ?? "Sayı"} · ${format.decimals} · ${grouping}`;
-        }
-
-        function formatFilterSelection(selectedCount, totalCount) {
-            if (selectedCount === totalCount) {
-                return "Tümü";
-            }
-
-            if (selectedCount === 0) {
-                return "Hiçbiri";
-            }
-
-            return `${selectedCount}/${totalCount}`;
-        }
-
         function closeAllDropdowns(except = null) {
-            document.querySelectorAll(".pivot-filter-menu, .pivot-chip-menu, .pivot-view-menu").forEach(menu => {
-                if (menu !== except) {
-                    menu.hidden = true;
-                    menu.closest(".pivot-placed-chip")?.classList.remove("is-menu-open");
-                    menu._pivotChip?.classList.remove("is-menu-open");
-
-                    if (menu === elements.savedViewsMenu) {
-                        elements.savedViewsButton.setAttribute("aria-expanded", "false");
-                    }
-                }
-            });
-        }
-
-        function positionFloatingMenu(menu, anchor) {
-            menu._pivotChip = anchor.closest(".pivot-placed-chip");
-            menu.style.left = "0px";
-            menu.style.top = "0px";
-
-            const anchorRect = anchor.getBoundingClientRect();
-            const menuRect = menu.getBoundingClientRect();
-            const margin = 8;
-            const left = Math.min(
-                window.innerWidth - menuRect.width - margin,
-                Math.max(margin, anchorRect.right - menuRect.width));
-            let top = anchorRect.bottom + 6;
-
-            if (top + menuRect.height > window.innerHeight - margin) {
-                top = Math.max(margin, anchorRect.top - menuRect.height - 6);
+            if (elements.savedViewsMenu !== except) {
+                elements.savedViewsMenu.hidden = true;
+                elements.savedViewsButton.setAttribute("aria-expanded", "false");
             }
-
-            menu.style.left = `${left}px`;
-            menu.style.top = `${top}px`;
-        }
-
-        function shouldIgnoreChipDrag(event) {
-            return event.target.closest("button, input, label, a, summary, details, .pivot-filter-menu, .pivot-chip-menu") !== null;
-        }
-
-        function applyChipSort(context, action) {
-            if (action === "row-asc" || action === "row-desc") {
-                activeRowSort = {
-                    mode: "RowLabel",
-                    direction: action === "row-asc" ? "Ascending" : "Descending",
-                    field: context.field
-                };
-                elements.rowSortMode.value = action === "row-asc" ? "label-asc" : "label-desc";
-                runPivot();
-                return;
-            }
-
-            if (action === "value-desc" || action === "value-asc") {
-                const value = context.value ?? layout.values[context.index];
-
-                activeRowSort = {
-                    mode: "RowTotalValue",
-                    direction: action === "value-desc" ? "Descending" : "Ascending",
-                    valueKey: valueKey(value)
-                };
-                elements.rowSortMode.value = action === "value-desc" ? "value-desc" : "value-asc";
-                runPivot();
-            }
-        }
-
-        function escapeAttribute(value) {
-            return String(value)
-                .replaceAll("&", "&amp;")
-                .replaceAll('"', "&quot;")
-                .replaceAll("<", "&lt;")
-                .replaceAll(">", "&gt;");
-        }
-
-        function isFieldInLayout(field) {
-            return layout.rows.includes(field) ||
-                layout.columns.includes(field) ||
-                layout.values.some(value => value.field === field) ||
-                layout.filters.some(filter => filter.field === field);
-        }
-
-        function updateZoneCounts() {
-            elements.rowsCount.textContent = layout.rows.length;
-            elements.columnsCount.textContent = layout.columns.length;
-            elements.valuesCount.textContent = layout.values.length;
-            elements.filtersCount.textContent = layout.filters.length;
-        }
-
-        function clearDropStates() {
-            document.querySelectorAll(".pivot-zone.is-over").forEach(zone => zone.classList.remove("is-over"));
-            document.querySelectorAll(".pivot-zone").forEach(clearZoneDropIndicator);
         }
 
         function valueKey(value) {
