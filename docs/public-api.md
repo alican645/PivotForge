@@ -1,6 +1,6 @@
 # Public API Surface
 
-This document records the supported public surface for `0.1.0-preview.1`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
+This document records the supported public surface for `0.2.0-preview.1`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
 
 ## PivotForge.Core
 
@@ -36,6 +36,15 @@ This document records the supported public surface for `0.1.0-preview.1`. Public
 - Response models: `PivotForgeLargeStartResponse`, `PivotForgeDrillDownResponse`, `PivotForgeErrorResponse`.
 - Cache contract: `IPivotForgeResultCache`, `PivotForgeResultCache`, `PivotForgeCacheEntry`.
 
+### Declarative rendering
+
+- `PivotForge.AspNetCore.Rendering.PivotForgeHtmlHelperExtensions`: exposes `Html.PivotForge()` on `IHtmlHelper`.
+- `PivotForge.AspNetCore.Rendering.PivotForgeFactory`: creates component builders; `PivotGrid()` returns a `PivotGridBuilder`.
+- `PivotForge.AspNetCore.Rendering.PivotGridBuilder`: declares a pivot grid's container, options, and fields, and renders its markup plus the `PivotForge.create` initialization script.
+- `PivotForge.AspNetCore.Rendering.PivotFieldCollectionBuilder`: collects fields in declaration order via `Add()`.
+- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, aggregation, show-as, format, caption, and visibility.
+- `PivotForge.AspNetCore.Rendering.PivotArea`: `Row`, `Column`, `Data`, `Filter`.
+
 ### Endpoint contract
 
 All routes are relative to the configured group prefix:
@@ -53,9 +62,13 @@ All routes are relative to the configured group prefix:
 Razor Class Library scripts expose these constructors and helpers under `window.PivotForge`:
 
 - `PivotForge.PivotTableRenderer`
+- `PivotForge.PivotRequestBuilder`
+- `PivotForge.create` / `PivotForge.PivotWidget`
 - `PivotForge.PivotViewStore`
 - `PivotForge.PivotDrillDownData`
 - `PivotForge.PivotVirtualDataSource`
+
+`PivotForge.create(target, options)` builds and returns a `PivotWidget` from a declarative field list; see the [ASP.NET Core integration guide](aspnetcore-integration.md#declarative-api) for its full contract. `PivotForge.PivotRequestBuilder` normalizes and validates the field model shared by the declarative Razor and JavaScript APIs.
 
 Static assets are served from `/_content/PivotForge.AspNetCore/`.
 
