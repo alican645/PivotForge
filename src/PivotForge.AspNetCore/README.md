@@ -77,6 +77,21 @@ With the fields declared in the view, no manual JavaScript wiring is needed:
     }))
 ```
 
+The same grid is also available as tag helpers. Register them once in
+`_ViewImports.cshtml` with `@addTagHelper *, PivotForge.AspNetCore`:
+
+```cshtml
+<pivot-grid id="pivotGrid" allow-sorting="true" allow-filtering="true">
+    <pivot-field field="Region"   caption="Bölge"    area="Row" />
+    <pivot-field field="Category" caption="Kategori" area="Row" />
+    <pivot-field field="Year"     caption="Yıl"      area="Column" />
+    <pivot-field field="Amount"   caption="Tutar"    area="Data" aggregation="Sum" />
+</pivot-grid>
+```
+
+Both Razor forms render identical markup. `area`, `aggregation`, and `show-as`
+are enum-typed, so a misspelled value is a compile error.
+
 The same configuration is available directly from JavaScript:
 
 ```js

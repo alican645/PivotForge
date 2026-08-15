@@ -185,6 +185,42 @@ Obtained from `Html.PivotForge().PivotGrid()`. All setters return the builder fo
 
 `WriteTo` emits the container `<div>`, a JSON `<script>` block with the serialized configuration, and an inline `<script>PivotForge.create(...)</script>` call. Because that call runs inline as the page is parsed, register any `pivotforge:ready` listener before this markup (see below).
 
+### Tag helpers (Razor)
+
+The same grid can be declared as markup. Register the tag helpers once, in
+`_ViewImports.cshtml`:
+
+```cshtml
+@addTagHelper *, PivotForge.AspNetCore
+```
+
+```cshtml
+<pivot-grid id="pivotGrid" allow-sorting="true" allow-excel-export="true">
+    <pivot-field field="Region" caption="Bölge" area="Row" />
+    <pivot-field field="Amount" caption="Tutar" area="Data" aggregation="Sum" />
+</pivot-grid>
+```
+
+`<pivot-grid>` attributes mirror the builder methods in kebab-case: `id`,
+`endpoint-prefix`, `allow-sorting`, `allow-filtering`, `allow-drill-down`,
+`allow-excel-export`, `auto-load`, `large-data`, `page-size`,
+`source-row-count`, and `css-class`. An attribute you do not write is omitted
+from the configuration, so the browser default applies — writing
+`allow-sorting="false"` disables sorting, but omitting it leaves sorting on.
+
+`<pivot-field>` attributes are `field` (the source column, required),
+`caption`, `area`, `aggregation`, `show-as`, `format`, and `visible`. `area`
+defaults to `Data`, matching `PivotFieldBuilder`.
+
+`area`, `aggregation`, and `show-as` bind to the `PivotArea`,
+`PivotAggregation`, and `PivotShowAs` enums, so a misspelled value such as
+`area="Roww"` fails the Razor compile rather than surfacing in the browser.
+
+A `<pivot-field>` outside a `<pivot-grid>` throws, as does a grid with no
+fields or no `id`. The tag helpers hold no pivot logic of their own — they
+collect attributes and delegate to `PivotGridBuilder`, so both Razor forms
+emit identical markup.
+
 ### `PivotForge.create(target, options)` (JavaScript)
 
 `target` is an element or CSS selector. `options` accepts the same properties as the Razor builder, in camelCase, plus:
