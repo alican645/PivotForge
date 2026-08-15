@@ -169,7 +169,29 @@
                     <button type="button" id="fullscreenButton">Tam ekran</button>
                 </div>
                 <div class="pivot-table-stage">
-                    <div id="tableHost"></div>
+                    @* Capture the widget the helper creates; the listener must exist before the helper's inline script runs. *@
+                    <script>
+                        document.addEventListener(
+                            "pivotforge:ready",
+                            event => { window.pivotGridWidget = event.detail.widget; },
+                            true);
+                    </script>
+                    @(Html.PivotForge().PivotGrid()
+                        .Id("pivotGrid")
+                        .AutoLoad(false)
+                        .AllowSorting(true)
+                        .AllowFiltering(true)
+                        .AllowDrillDown(true)
+                        .AllowExcelExport(true)
+                        .SourceRowCount(Model.Count)
+                        .Fields(fields =>
+                        {
+                            fields.Add().Caption("Bölge").DataField("Region").Area(PivotArea.Row);
+                            fields.Add().Caption("Kategori").DataField("Category").Area(PivotArea.Row);
+                            fields.Add().Caption("Yıl").DataField("Year").Area(PivotArea.Column);
+                            fields.Add().Caption("Tutar").DataField("Amount")
+                                .Aggregation(PivotAggregation.Sum).Area(PivotArea.Data);
+                        }))
                     <div class="pivot-large-loading" id="largeDataLoading" hidden aria-live="polite">
                         <strong>Pivot hazırlanıyor</strong>
                         <span>Veriler sunucuda işleniyor...</span>
@@ -304,7 +326,7 @@
             largeDataToggle: document.getElementById("largeDataToggle"),
             largeDataInfo: document.getElementById("largeDataInfo"),
             largeDataLoading: document.getElementById("largeDataLoading"),
-            tableHost: document.getElementById("tableHost"),
+            tableHost: document.getElementById("pivotGrid"),
             savedViewsButton: document.getElementById("savedViewsButton"),
             savedViewsMenu: document.getElementById("savedViewsMenu"),
             savedViewSelect: document.getElementById("savedViewSelect"),
@@ -338,7 +360,11 @@
             pivotCard: document.querySelector(".pivot-card")
         };
 
-        const renderer = new PivotForge.PivotTableRenderer(elements.tableHost, {
+        // The declarative helper created the widget and its renderer; this page only
+        // supplies the demo-specific renderer defaults and drives the widget.
+        const widget = window.pivotGridWidget;
+        const renderer = widget.renderer;
+        Object.assign(renderer.options, {
             totalText: "Toplam",
             emptyText: "-",
             onViewStateChanged: persistCurrentState,
@@ -440,7 +466,6 @@
         let drillDownColumnFilters = {};
         let drillDownSelection = null;
         let drillDownResponse = null;
-        let drillDownController = null;
         let drillDownRequestId = 0;
         let cellCopyStatusTimer = null;
         let conditionalSelection = null;
@@ -452,7 +477,7 @@
         let virtualPageOffset = 0;
         let virtualScrollTimer = null;
         let lastVirtualState = null;
-        let pivotRequestController = null;
+        let pivotStartedAt = 0;
         const virtualDataSource = new PivotForge.PivotVirtualDataSource({
             pageSize: virtualPageSize,
             maxCachedPages: 6,
@@ -461,6 +486,18 @@
             onStateChanged: handleVirtualDataState
         });
         renderer.applyViewState(restoredState, { rerender: false, notify: false });
+
+        widget.on("dataLoading", () => {
+            pivotStartedAt = performance.now();
+            setStatus("Çalışıyor", false);
+        });
+        widget.on("dataLoaded", ({ result }) => {
+            renderMetrics(result, Math.round(performance.now() - pivotStartedAt));
+            persistCurrentState();
+            updateSavedViewDirtyState();
+            setStatus("Hazır", false);
+        });
+        widget.on("error", error => setStatus(error.message || String(error), true));
 
         elements.runButton.addEventListener("click", runPivot);
         elements.fieldSearch.addEventListener("input", event => {
@@ -584,61 +621,54 @@
                 return;
             }
 
-            const started = performance.now();
             clearTimeout(cellCopyStatusTimer);
             clearTimeout(virtualScrollTimer);
             virtualDataSource.cancel();
-            pivotRequestController?.abort();
-            pivotRequestController = new AbortController();
-            const controller = pivotRequestController;
             setLargeDataModeUi(false);
-            setStatus("Çalışıyor", false);
+            ensureUsableLayout();
 
             try {
-                ensureUsableLayout();
-                const response = await fetch("/pivotforge/pivot", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    signal: controller.signal,
-                    body: JSON.stringify(createPivotPayload())
-                });
-
-                if (!response.ok) {
-                    throw await createApiError(response);
-                }
-
-                const result = await response.json();
-
-                if (controller !== pivotRequestController) {
-                    return;
-                }
-
-                const duration = Math.round(performance.now() - started);
-                renderer.render(result, createRendererOptions());
-
-                renderMetrics(result, duration);
-                persistCurrentState();
-                updateSavedViewDirtyState();
-                setStatus("Hazır", false);
+                syncWidget();
+                await widget.refresh();
             } catch (error) {
-                if (error.name === "AbortError") {
-                    return;
-                }
-
+                // Configuration errors surface synchronously; request failures arrive on the error event.
                 setStatus(error.message || String(error), true);
-            } finally {
-                if (pivotRequestController === controller) {
-                    pivotRequestController = null;
-                }
             }
+        }
+
+        // Pushes the drag-and-drop layout onto the declarative widget. The demo layout is
+        // dynamic, so the field list is rebuilt before every run instead of being declared once.
+        function syncWidget() {
+            const fieldConfiguration = [
+                ...layout.rows.map(field => ({ dataField: field, caption: fieldLabel(field), area: "row" })),
+                ...layout.columns.map(field => ({ dataField: field, caption: fieldLabel(field), area: "column" })),
+                ...layout.values.map(value => ({
+                    dataField: value.field,
+                    caption: valueDisplayLabel(value),
+                    area: "data",
+                    aggregation: value.aggregation,
+                    showAs: normalizeShowAs(value.showAs),
+                    format: displayValueFormat(value)
+                }))
+            ];
+
+            widget.options.fields = fieldConfiguration;
+            widget.fields = PivotForge.PivotRequestBuilder.normalizeFields(fieldConfiguration);
+            widget.filters = layout.filters.map(filter => ({ field: filter.field, values: [...filter.values] }));
+            widget.rowSort = activeRowSort;
+            widget.options.sourceRowCount = viewSettings.largeData ? largeSourceRowCount : @Model.Count;
+
+            // The widget renders with the renderer's own defaults, so the per-run display
+            // settings (layout mode, subtotals, formats, conditional rules) live there.
+            Object.assign(renderer.options, createRendererOptions());
         }
 
         async function runLargePivot() {
             const started = performance.now();
             clearTimeout(cellCopyStatusTimer);
             clearTimeout(virtualScrollTimer);
-            pivotRequestController?.abort();
-            pivotRequestController = null;
+            // Drop any normal-mode request still in flight so its result cannot overwrite the paged view.
+            widget.controller?.abort();
             ensureUsableLayout();
             setLargeDataModeUi(true);
             elements.tableHost.scrollTop = 0;
@@ -1743,8 +1773,6 @@
                 return;
             }
 
-            drillDownController?.abort();
-            drillDownController = new AbortController();
             const requestId = ++drillDownRequestId;
             drillDownSelection = selection;
             drillDownRecords = [];
@@ -1762,32 +1790,18 @@
             setDrillDownState("Kayıtlar yükleniyor...", false);
 
             try {
-                const response = await fetch("/pivotforge/drill-down", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    signal: drillDownController.signal,
-                    body: JSON.stringify({
-                        rows: layout.rows,
-                        columns: layout.columns,
-                        values: layout.values,
-                        filters: layout.filters,
-                        rowPath: selection.rowHeader,
-                        columnPath: selection.columnHeader,
-                        valueKey: selection.valueKey,
-                        sourceRowCount: viewSettings.largeData ? largeSourceRowCount : @Model.Count
-                    })
+                syncWidget();
+                const response = await widget.drillDown({
+                    rowPath: selection.rowHeader,
+                    columnPath: selection.columnHeader,
+                    valueKey: selection.valueKey
                 });
 
                 if (requestId !== drillDownRequestId) {
                     return;
                 }
 
-                if (!response.ok) {
-                    const error = await response.json().catch(() => null);
-                    throw new Error(error?.message ?? "Kaynak kayıtlar alınamadı");
-                }
-
-                drillDownResponse = await response.json();
+                drillDownResponse = response;
                 drillDownRecords = drillDownResponse.records ?? [];
                 renderDrillDownTable();
             } catch (error) {
@@ -1799,8 +1813,6 @@
         }
 
         function closeDrillDown() {
-            drillDownController?.abort();
-            drillDownController = null;
             drillDownRequestId++;
             drillDownRecords = [];
             visibleDrillDownRecords = [];

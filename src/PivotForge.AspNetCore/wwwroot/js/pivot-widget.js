@@ -347,6 +347,14 @@
     if (widget.options.autoLoad) {
       widget.refresh();
     }
+
+    // Announce the instance so page code that cannot see the create() call
+    // (server-rendered helpers, for example) can still reach the widget.
+    if (typeof widget.container.dispatchEvent === "function" && root.CustomEvent) {
+      widget.container.dispatchEvent(
+        new root.CustomEvent("pivotforge:ready", { detail: { widget } }));
+    }
+
     return widget;
   };
 

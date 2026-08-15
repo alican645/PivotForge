@@ -233,3 +233,24 @@ test("refresh after dispose throws", async () => {
 
   await assert.rejects(() => widget.refresh(), /disposed/);
 });
+
+test("create dispatches a ready event carrying the widget", () => {
+  const container = createContainer();
+  const received = [];
+  container.dispatchEvent = event => received.push(event);
+  globalThis.CustomEvent ??= class CustomEvent {
+    constructor(type, init) { this.type = type; this.detail = init?.detail; }
+  };
+
+  const widget = PivotForge.create(container, {
+    fields,
+    autoLoad: false,
+    renderImpl: () => {},
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+  });
+
+  assert.equal(received.length, 1);
+  assert.equal(received[0].type, "pivotforge:ready");
+  assert.equal(received[0].detail.widget, widget);
+  widget.dispose();
+});

@@ -63,6 +63,11 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder AllowExcelExport(bool allow) => Set("allowExcelExport", allow);
 
+    /// <summary>Enables or disables the initial load performed when the grid is created.</summary>
+    /// <param name="autoLoad">True to load data as soon as the grid is created.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder AutoLoad(bool autoLoad) => Set("autoLoad", autoLoad);
+
     /// <summary>Enables cached, paged loading for large results.</summary>
     /// <param name="enabled">True to use the large-data endpoints.</param>
     /// <returns>The same builder.</returns>

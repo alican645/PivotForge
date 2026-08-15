@@ -333,7 +333,8 @@ select {
   background: var(--pt-panel);
 }
 
-.pivot-card:fullscreen #tableHost {
+.pivot-card:fullscreen #tableHost,
+.pivot-card:fullscreen .pivotforge-grid {
   height: 100%;
   min-height: 0;
   overflow: auto;
