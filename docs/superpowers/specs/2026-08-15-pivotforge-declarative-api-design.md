@@ -123,7 +123,7 @@ the JSON payload itself is not subject to script CSP rules (`application/json`
 is not executable). This does **not** make the builder's output CSP-safe end
 to end: `PivotGridBuilder` also emits a second, inline `<script>PivotForge.create(...)</script>`
 block with no nonce or hash support, and a strict Content Security Policy
-without `unsafe-inline` blocks that block. Supporting such a policy would
+without `unsafe-inline` blocks it. Supporting such a policy would
 require adding nonce/hash support to the inline script; that is not
 implemented by this branch.
 
