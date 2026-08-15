@@ -89,8 +89,10 @@ public sealed class PivotFieldBuilder
     /// <summary>Builds the browser field configuration.</summary>
     /// <returns>A dictionary matching the JavaScript field model.</returns>
     /// <exception cref="InvalidOperationException">
-    /// No data field was supplied, or <see cref="Aggregation"/>/<see cref="ShowAs"/> was set on a field
-    /// whose <see cref="Area"/> is not <see cref="PivotArea.Data"/>.
+    /// No data field was supplied, a field in the <see cref="PivotArea.Available"/> area has no <see cref="Role"/>,
+    /// a <see cref="Role"/> contradicts its <see cref="Area"/> (e.g., <see cref="PivotFieldRole.Measure"/> outside
+    /// <see cref="PivotArea.Data"/>), or <see cref="Aggregation"/>/<see cref="ShowAs"/> was set on a field whose
+    /// <see cref="Area"/> is not <see cref="PivotArea.Data"/>.
     /// </exception>
     public IDictionary<string, object?> Build()
     {
