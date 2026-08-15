@@ -44,6 +44,8 @@ This document records the supported public surface for `0.2.0-preview.1`. Public
 - `PivotForge.AspNetCore.Rendering.PivotFieldCollectionBuilder`: collects fields in declaration order via `Add()`.
 - `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, aggregation, show-as, format, caption, and visibility.
 - `PivotForge.AspNetCore.Rendering.PivotArea`: `Row`, `Column`, `Data`, `Filter`.
+- `PivotForge.AspNetCore.Rendering.PivotGridTagHelper`: targets `<pivot-grid>`; mirrors the builder's options as kebab-case attributes and delegates to `PivotGridBuilder`.
+- `PivotForge.AspNetCore.Rendering.PivotFieldTagHelper`: targets `<pivot-field>` inside a `<pivot-grid>`; declares one field. Requires `@addTagHelper *, PivotForge.AspNetCore`.
 
 ### Endpoint contract
 
