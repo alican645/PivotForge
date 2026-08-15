@@ -38,7 +38,7 @@ The existing layer is unchanged: `PivotEngine`, the HTTP endpoints, and
 `PivotTableRenderer`. No public member changes and no behavior changes.
 
 The widget layer is new JavaScript, shipped as
-`wwwroot/js/pivot-forge-widget.js` and exposed as `PivotForge.create`. It owns
+`wwwroot/js/pivot-widget.js` and exposed as `PivotForge.create`. It owns
 field-to-request translation, endpoint calls, renderer lifecycle, and
 interaction wiring.
 
