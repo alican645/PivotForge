@@ -674,7 +674,7 @@
             clearTimeout(cellCopyStatusTimer);
             clearTimeout(virtualScrollTimer);
             // Drop any normal-mode request still in flight so its result cannot overwrite the paged view.
-            widget.controller?.abort();
+            widget.cancel();
             ensureUsableLayout();
             setLargeDataModeUi(true);
             elements.tableHost.scrollTop = 0;
@@ -2146,7 +2146,7 @@
             setStatus("Excel hazırlanıyor", false);
 
             try {
-                const blob = await widget.exportToExcel({
+                const { blob, fileName } = await widget.exportToExcel({
                     title: "Pivot Tablo",
                     sheetName: "Pivot Tablo",
                     filterSummary: createExcelFilterSummary()
@@ -2154,7 +2154,7 @@
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.href = url;
-                link.download = `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`;
+                link.download = fileName ?? `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`;
                 document.body.appendChild(link);
                 link.click();
                 link.remove();

@@ -79,12 +79,13 @@ test("exportToExcel posts the rendered document model, not the pivot request", a
   const requested = [];
   widget.renderer = { getExcelExportModel: options => { requested.push(options); return exportModel; } };
 
-  const blob = await widget.exportToExcel({ sheetName: "Pivot Tablo" });
+  const { blob, fileName } = await widget.exportToExcel({ sheetName: "Pivot Tablo" });
 
   assert.equal(calls[0].url, "/pivotforge/excel");
   assert.deepEqual(calls[0].body, exportModel);
   assert.deepEqual(requested, [{ sheetName: "Pivot Tablo" }]);
   assert.equal(blob.size, 2048);
+  assert.equal(fileName, null);
   widget.dispose();
 });
 

@@ -286,12 +286,36 @@ test("exportToExcel posts the rendered document model, not the pivot request", a
   const requested = [];
   widget.renderer = { getExcelExportModel: options => { requested.push(options); return exportModel; } };
 
-  const blob = await widget.exportToExcel({ sheetName: "Pivot Tablo" });
+  const { blob, fileName } = await widget.exportToExcel({ sheetName: "Pivot Tablo" });
 
   assert.equal(blob, "xlsx-bytes");
+  assert.equal(fileName, null);
   assert.equal(calls[0].url, "/pivotforge/excel");
   assert.deepEqual(calls[0].body, exportModel);
   assert.deepEqual(requested, [{ sheetName: "Pivot Tablo" }]);
+  widget.dispose();
+});
+
+test("exportToExcel reads the file name from the Content-Disposition header", async () => {
+  const exportModel = { title: "Pivot Tablo", rows: [] };
+  const { widget } = createWidget({
+    allowExcelExport: true,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      blob: async () => "xlsx-bytes",
+      headers: {
+        get: name => name === "Content-Disposition"
+          ? "attachment; filename=pivot.xlsx; filename*=UTF-8''pivot%20tablo.xlsx"
+          : null
+      }
+    })
+  });
+  widget.renderer = { getExcelExportModel: () => exportModel };
+
+  const { fileName } = await widget.exportToExcel();
+
+  assert.equal(fileName, "pivot tablo.xlsx");
   widget.dispose();
 });
 

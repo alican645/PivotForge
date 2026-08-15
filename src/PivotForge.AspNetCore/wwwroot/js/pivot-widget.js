@@ -38,6 +38,26 @@
     return withLeading.endsWith("/") ? withLeading.slice(0, -1) : withLeading;
   }
 
+  // Extracts the file name the server suggested for a download, preferring the
+  // RFC 5987 encoded form (filename*=) over the plain quoted form (filename=).
+  function parseContentDispositionFileName(headerValue) {
+    if (!headerValue) {
+      return null;
+    }
+
+    const encodedName = headerValue.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    if (encodedName) {
+      try {
+        return decodeURIComponent(encodedName);
+      } catch {
+        // Fall through to the plain form when the encoded value is malformed.
+      }
+    }
+
+    const plainName = headerValue.match(/filename="?([^";]+)"?/i)?.[1];
+    return plainName ?? null;
+  }
+
   class PivotWidget {
     constructor(container, options) {
       this.container = container;
@@ -303,7 +323,9 @@
         throw new Error(`Excel export failed with status ${response.status}.`);
       }
 
-      return await response.blob();
+      const blob = await response.blob();
+      const fileName = parseContentDispositionFileName(response.headers?.get?.("Content-Disposition"));
+      return { blob, fileName };
     }
 
     cancel() {
