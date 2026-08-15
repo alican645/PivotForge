@@ -228,6 +228,29 @@
       this.container.appendChild(node);
     }
 
+    async update({ fields, filters, rowSort } = {}) {
+      // One call, one refresh: a designer changes several pieces per interaction
+      // and must not produce a request per piece.
+      if (fields !== undefined) {
+        PivotForge.PivotRequestBuilder.buildRequest(fields);
+        this.options.fields = fields;
+        this.fields = PivotForge.PivotRequestBuilder.normalizeFields(fields);
+        if (this.renderer) {
+          this.renderer = this.createRenderer();
+        }
+      }
+
+      if (filters !== undefined) {
+        this.filters = filters.map(filter => ({ field: filter.field, values: [...filter.values] }));
+      }
+
+      if (rowSort !== undefined) {
+        this.rowSort = rowSort;
+      }
+
+      await this.refresh();
+    }
+
     async updateFields(fields) {
       PivotForge.PivotRequestBuilder.buildRequest(fields);
       this.options.fields = fields;

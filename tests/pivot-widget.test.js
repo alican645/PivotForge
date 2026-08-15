@@ -311,3 +311,54 @@ test("exportToExcel explains itself when the widget renders through renderImpl",
   await assert.rejects(() => widget.exportToExcel(), /renderImpl/);
   widget.dispose();
 });
+
+test("update applies fields, filters, and sort in a single refresh", async () => {
+  const { widget, calls } = createWidget();
+
+  await widget.update({
+    fields: [
+      { dataField: "bolge", area: "row" },
+      { dataField: "tutar", area: "data", aggregation: "average" }
+    ],
+    filters: [{ field: "bolge", values: ["Kuzey"] }],
+    rowSort: { mode: "rowLabel", direction: "descending", field: "bolge" }
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body.rows, ["bolge"]);
+  assert.deepEqual(calls[0].body.values, [
+    { field: "tutar", aggregation: "average", showAs: "normal" }
+  ]);
+  assert.deepEqual(calls[0].body.filters, [{ field: "bolge", values: ["Kuzey"] }]);
+  assert.equal(calls[0].body.rowSort.direction, "descending");
+  widget.dispose();
+});
+
+test("update leaves omitted members untouched", async () => {
+  const { widget, calls } = createWidget();
+
+  await widget.setFilter("urun", ["Lokum"]);
+  await widget.update({ rowSort: { mode: "rowLabel", direction: "ascending", field: "urun" } });
+
+  assert.deepEqual(calls[1].body.filters, [{ field: "urun", values: ["Lokum"] }]);
+  assert.deepEqual(calls[1].body.rows, ["urun"]);
+  widget.dispose();
+});
+
+test("update with no arguments still refreshes once", async () => {
+  const { widget, calls } = createWidget();
+
+  await widget.update();
+
+  assert.equal(calls.length, 1);
+  widget.dispose();
+});
+
+test("update reflects new fields in getState", async () => {
+  const { widget } = createWidget();
+
+  await widget.update({ fields: [{ dataField: "tutar", area: "data" }] });
+
+  assert.deepEqual(widget.getState().fields.map(field => field.dataField), ["tutar"]);
+  widget.dispose();
+});
