@@ -5,7 +5,7 @@ PivotForge.AspNetCore adds reusable browser assets and minimal API endpoints to 
 ## Installation
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.2.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.3.0-preview.1
 ```
 
 ## Register services
@@ -49,12 +49,14 @@ The default endpoint prefix is `/pivotforge`. Static assets are available at:
 <script src="/_content/PivotForge.AspNetCore/js/pivot-table.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-request-builder.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-layout-state.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 ```
 
-Load them in `<head>`, not at the end of `<body>`: `pivot-table.js` must load before `pivot-widget.js`, and any Razor helper that calls `PivotForge.create` inline (see below) needs both already loaded when its markup runs.
+Load them in `<head>`, not at the end of `<body>`, and in the order shown: `pivot-table.js` must load before `pivot-widget.js`, `pivot-layout-state.js` and `pivot-field-designer.js` must load before `pivot-widget.js` is asked to build a designer, and any Razor helper that calls `PivotForge.create` inline (see below) needs all of them already loaded when its markup runs.
 
 The scripts expose their browser APIs under `window.PivotForge`.
 
@@ -117,6 +119,25 @@ To capture the widget instance from page code, register a capture-phase `pivotfo
 ```
 
 Saved views, conditional formatting, and selection/clipboard behavior still use the lower-level `PivotTableRenderer` API. See the [ASP.NET Core integration guide](https://github.com/alican645/PivotForge/blob/main/docs/aspnetcore-integration.md) for the full declarative API reference.
+
+## Field designer
+
+Name a host element and get a drag-and-drop panel — a searchable available-field list plus filters/columns/rows/values drop zones — that builds the layout at runtime:
+
+```cshtml
+<div id="designerHost"></div>
+
+<pivot-grid id="pivotGrid" field-designer="#designerHost">
+    <pivot-field field="Region"   caption="Bölge"  area="Row" />
+    <pivot-field field="Year"     caption="Yıl"    area="Column" />
+    <pivot-field field="Amount"   caption="Tutar"  area="Data" aggregation="Sum" />
+    <pivot-field field="Quantity" caption="Miktar" area="Available" role="Measure" />
+</pivot-grid>
+```
+
+A field placed in `Available` needs an explicit `role` (`Dimension` or `Measure`), because there is no area to infer it from; role rules then govern where it can be dropped — a measure only into the data area, a dimension into row/column/filter.
+
+The designer is desktop-only (HTML5 drag-and-drop does not fire on touch devices) and does not include filter value selection, a show-as menu, or a sort panel. See [Field designer](https://github.com/alican645/PivotForge/blob/main/docs/aspnetcore-integration.md#field-designer) in the integration guide for the full reference.
 
 ## Endpoint routes
 

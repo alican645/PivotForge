@@ -10,7 +10,7 @@ Interactive pivot tables forged for .NET.
 
 PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel export, saved views, selection, conditional formatting, and large-data workflows.
 
-> The current preview is `0.2.0-preview.1`.
+> The current preview is `0.3.0-preview.1`.
 
 ## Packages
 
@@ -26,8 +26,8 @@ Both packages can be consumed by .NET 8, .NET 9, and .NET 10 applications.
 After the preview is published to NuGet:
 
 ```bash
-dotnet add package PivotForge.Core --version 0.2.0-preview.1
-dotnet add package PivotForge.AspNetCore --version 0.2.0-preview.1
+dotnet add package PivotForge.Core --version 0.3.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.3.0-preview.1
 ```
 
 Installing `PivotForge.AspNetCore` brings `PivotForge.Core` transitively.
@@ -85,6 +85,8 @@ Reference the Razor Class Library assets. Load them in `<head>`, not at the end 
 <script src="/_content/PivotForge.AspNetCore/js/pivot-table.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-request-builder.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-layout-state.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
@@ -163,6 +165,23 @@ To capture the created widget instance (for example, to call `sortBy`, `setFilte
 ```
 
 The declarative API covers field configuration, sorting, filtering, drill-down, and Excel export. Saved views, conditional formatting, and selection/clipboard behavior are lower-level features and still use the manual `PivotTableRenderer` API described in the [ASP.NET Core integration guide](docs/aspnetcore-integration.md).
+
+### Field Designer
+
+Name a host element and get a drag-and-drop panel — a searchable available-field list plus filters/columns/rows/values drop zones — that builds the layout at runtime:
+
+```cshtml
+<div id="designerHost"></div>
+
+<pivot-grid id="pivotGrid" field-designer="#designerHost">
+    <pivot-field field="Region"   caption="Bölge"  area="Row" />
+    <pivot-field field="Year"     caption="Yıl"    area="Column" />
+    <pivot-field field="Amount"   caption="Tutar"  area="Data" aggregation="Sum" />
+    <pivot-field field="Quantity" caption="Miktar" area="Available" role="Measure" />
+</pivot-grid>
+```
+
+A field placed in `Available` needs an explicit `role` (`Dimension` or `Measure`), because there is no area to infer it from; role rules then govern where it can be dropped — a measure only into the data area, a dimension into row/column/filter. The designer is desktop-only (it uses HTML5 drag-and-drop, which does not fire on touch devices) and does not include filter value selection, a show-as menu, or a sort panel. See [Field designer](docs/aspnetcore-integration.md#field-designer) in the integration guide for the full reference.
 
 ## Run the Demo
 
