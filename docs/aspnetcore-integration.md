@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.1.0-preview.2
+dotnet add package PivotForge.AspNetCore --version 0.2.0-preview.1
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -91,14 +91,20 @@ app.MapPivotForgeEndpoints()
 ```html
 <link rel="stylesheet" href="/_content/PivotForge.AspNetCore/css/pivotforge.css">
 <script src="/_content/PivotForge.AspNetCore/js/pivot-table.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-request-builder.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 ```
 
-Load scripts in the order shown. They add these members to `window.PivotForge`:
+Load scripts in the order shown; `pivot-table.js` must load before `pivot-widget.js` because the widget builds its default renderer from `PivotForge.PivotTableRenderer` at construction time. If a Razor helper on the page calls `PivotForge.create` inline (see [Declarative API](#declarative-api) below), load every PivotForge script in `<head>` rather than at the end of `<body>` — the helper's inline script runs while the page body is still being parsed, before a `<body>`-end script block would have executed.
+
+The scripts add these members to `window.PivotForge`:
 
 - `PivotTableRenderer`
+- `PivotRequestBuilder`
+- `PivotWidget`
 - `PivotViewStore`
 - `PivotDrillDownData`
 - `PivotVirtualDataSource`
@@ -130,6 +136,112 @@ Load scripts in the order shown. They add these members to `window.PivotForge`:
 ```
 
 `AddPivotForge` registers string-enum JSON conversion for the minimal API contracts.
+
+## Declarative API
+
+Instead of writing `fetch` calls and driving `PivotTableRenderer` by hand, a grid can be declared as a set of fields — in Razor with `PivotGridBuilder`, or directly in JavaScript with `PivotForge.create`. Both paths validate the field configuration eagerly and translate it into the same `POST /pivot` request shape; the server computes the pivot, the browser only renders it.
+
+### Field model
+
+Every field belongs to exactly one of four areas:
+
+| Area | Purpose |
+| --- | --- |
+| `row` | Placed on the row axis. |
+| `column` | Placed on the column axis. |
+| `data` | Aggregated as a pivot value. At least one `data` field is required. |
+| `filter` | Exposed for filtering without appearing in the row/column layout. |
+
+Field properties and their defaults (JavaScript field object shape; `PivotFieldBuilder` exposes the same properties as fluent methods):
+
+| Property | Default | Notes |
+| --- | --- | --- |
+| `dataField` | — | Required, non-empty. |
+| `area` | `"data"` | One of `row`, `column`, `data`, `filter`. |
+| `caption` | the `dataField` value | Display label. |
+| `aggregation` | `"sum"` (only on `data` fields) | One of `sum`, `count`, `average`, `min`, `max`. Setting `aggregation` on a non-`data` field is a validation error. |
+| `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`. |
+| `format` | `null` | A format identifier understood by the browser renderer. |
+| `visible` | `true` | `false` configures a field without including it in the rendered request. |
+
+### `PivotGridBuilder` (Razor)
+
+Obtained from `Html.PivotForge().PivotGrid()`. All setters return the builder for chaining.
+
+| Method | Default | Purpose |
+| --- | --- | --- |
+| `Id(string id)` | — | Required. The container element id; letters, digits, `-`, and `_` only. |
+| `Fields(Action<PivotFieldCollectionBuilder>)` | — | Required. At least one field, added with `fields.Add()...`. |
+| `EndpointPrefix(string prefix)` | `/pivotforge` | Server route prefix. |
+| `AllowSorting(bool)` | `true` | Enables `sortBy`. |
+| `AllowFiltering(bool)` | `true` | Enables `setFilter` / `clearFilters`. |
+| `AllowDrillDown(bool)` | `true` | Enables `drillDown`. |
+| `AllowExcelExport(bool)` | `false` | Enables `exportToExcel`. |
+| `AutoLoad(bool)` | `true` | Set `false` to suppress the initial automatic load, for pages that configure fields at runtime before the first `refresh()`. |
+| `LargeData(bool)` | `false` | Routes through the large-data session endpoints instead of `/pivot`. |
+| `PageSize(int)` | `40` | Rows per page when `LargeData` is enabled. |
+| `SourceRowCount(int)` | `100000` | Source-row hint passed to the data provider. |
+| `CssClass(string)` | — | Additional class appended to the container's `pivotforge-grid` class. |
+
+`WriteTo` emits the container `<div>`, a JSON `<script>` block with the serialized configuration, and an inline `<script>PivotForge.create(...)</script>` call. Because that call runs inline as the page is parsed, register any `pivotforge:ready` listener before this markup (see below).
+
+### `PivotForge.create(target, options)` (JavaScript)
+
+`target` is an element or CSS selector. `options` accepts the same properties as the Razor builder, in camelCase, plus:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `fields` | `[]` | Required — the field array described above. |
+| `filters` | `[]` | Initial filters: `{ field, values }` entries. |
+| `rowSort` | `null` | Initial row sort. |
+| `rendererOptions` | `null` | Merged into the default `PivotTableRenderer` options. |
+| `fetchImpl` | `null` | Override for `fetch`, mainly for tests. |
+| `renderImpl` | `null` | Replaces the built-in `PivotTableRenderer` entirely; when set, the widget has no renderer and `exportToExcel` cannot be used. |
+
+`create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
+
+### `PivotWidget` methods
+
+| Method | Behavior |
+| --- | --- |
+| `refresh()` | Builds the request from the current fields/filters/sort and loads it. Aborts any request already in flight. |
+| `cancel()` | Aborts the in-flight request (if any) and resets loading state, without loading anything new. Prefer this over reaching into `widget.controller` directly. |
+| `updateFields(fields)` | Validates and replaces the field set, rebuilds the renderer, and refreshes. |
+| `sortBy(sort)` | Sets `rowSort` and refreshes. Throws if `allowSorting` is `false`. |
+| `setFilter(field, values)` | Replaces the filter for `field` (removes it when `values` is empty) and refreshes. Throws if `allowFiltering` is `false`. |
+| `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
+| `drillDown({ rowPath, columnPath, valueKey })` | Returns the source records behind a pivot coordinate. Throws if `allowDrillDown` is `false`. |
+| `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
+| `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
+| `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, sessionId, totalRowCount }`. |
+| `dispose()` | Aborts any in-flight request, detaches all `on()` handlers, and empties the container. The widget throws if used afterward. |
+
+### Events
+
+Register handlers with `widget.on(eventName, handler)`, which returns an unsubscribe function.
+
+| Event | Payload | Fires |
+| --- | --- | --- |
+| `dataLoading` | `{ request }` | Before each request is sent. |
+| `dataLoaded` | `{ result }` | After a request succeeds and the result has been rendered. |
+| `error` | the `Error` | When a request fails (network or server-side), after it is shown next to the table. |
+
+In addition, `PivotForge.create` dispatches a plain DOM `CustomEvent` named `pivotforge:ready` on the container element, carrying `{ detail: { widget } }`. This is **not** a `widget.on()` event — it fires synchronously during `create`, before `create` returns the widget. Because of that timing, a listener added to the element by id *after* the helper's markup runs can never see it fire. Register a capture-phase listener on `document` before the markup, as shown in the [root README](../README.md#declarative-quick-start):
+
+```html
+<script>
+  document.addEventListener(
+    "pivotforge:ready",
+    event => { window.pivotGridWidget = event.detail.widget; },
+    true);
+</script>
+```
+
+### Known limitations
+
+- **Large-data paging is not wired to a virtual-scrolling UI.** `loadPage()` exists and is unit-tested, but `PivotWidget` has no page cache, no cache-hit state, and does not pass a `virtualState` to the renderer. Driving an actual virtual-scrolling grid still requires orchestrating `PivotVirtualDataSource` and `PivotTableRenderer` manually — see the MVC demo, which deliberately keeps its own `/large/start` + `/large/page` code for this reason.
+- **No single call changes multiple pieces of state and refreshes once.** Changing fields, filters, and sort together currently means calling `updateFields`, `setFilter`, and `sortBy` in sequence (each triggering its own `refresh()`), or mutating `widget.options.fields` / `widget.filters` / `widget.rowSort` directly before calling `refresh()` once, as the demo does.
+- **Saved views, conditional formatting, and selection/clipboard UI** are not part of the declarative API. They remain lower-level features built on `PivotViewStore`, `PivotTableRenderer`'s `conditionalRules`/`onSelectionChanged`/`onCellCopied` options, and manual request construction — see [Render a Result](#render-a-result) above.
 
 ## Endpoint Contract
 

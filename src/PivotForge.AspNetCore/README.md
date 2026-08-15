@@ -5,7 +5,7 @@ PivotForge.AspNetCore adds reusable browser assets and minimal API endpoints to 
 ## Installation
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.1.0-preview.2
+dotnet add package PivotForge.AspNetCore --version 0.2.0-preview.1
 ```
 
 ## Register services
@@ -47,12 +47,61 @@ The default endpoint prefix is `/pivotforge`. Static assets are available at:
 ```html
 <link rel="stylesheet" href="/_content/PivotForge.AspNetCore/css/pivotforge.css">
 <script src="/_content/PivotForge.AspNetCore/js/pivot-table.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-request-builder.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 ```
 
+Load them in `<head>`, not at the end of `<body>`: `pivot-table.js` must load before `pivot-widget.js`, and any Razor helper that calls `PivotForge.create` inline (see below) needs both already loaded when its markup runs.
+
 The scripts expose their browser APIs under `window.PivotForge`.
+
+## Declarative rendering
+
+With the fields declared in the view, no manual JavaScript wiring is needed:
+
+```cshtml
+@(Html.PivotForge().PivotGrid()
+    .Id("pivotGrid")
+    .AllowSorting(true)
+    .AllowFiltering(true)
+    .Fields(fields =>
+    {
+        fields.Add().Caption("Bölge").DataField("Region").Area(PivotArea.Row);
+        fields.Add().Caption("Kategori").DataField("Category").Area(PivotArea.Row);
+        fields.Add().Caption("Yıl").DataField("Year").Area(PivotArea.Column);
+        fields.Add().Caption("Tutar").DataField("Amount")
+            .Aggregation(PivotAggregation.Sum).Area(PivotArea.Data);
+    }))
+```
+
+The same configuration is available directly from JavaScript:
+
+```js
+PivotForge.create("#pivotGrid", {
+  fields: [
+    { caption: "Bölge", dataField: "Region", area: "row" },
+    { caption: "Kategori", dataField: "Category", area: "row" },
+    { caption: "Yıl", dataField: "Year", area: "column" },
+    { caption: "Tutar", dataField: "Amount", area: "data", aggregation: "sum" }
+  ]
+});
+```
+
+To capture the widget instance from page code, register a capture-phase `pivotforge:ready` listener on `document` before the helper's markup runs — a listener attached to the container afterward never fires:
+
+```html
+<script>
+  document.addEventListener(
+    "pivotforge:ready",
+    event => { window.pivotGridWidget = event.detail.widget; },
+    true);
+</script>
+```
+
+Saved views, conditional formatting, and selection/clipboard behavior still use the lower-level `PivotTableRenderer` API. See the [ASP.NET Core integration guide](https://github.com/alican645/PivotForge/blob/main/docs/aspnetcore-integration.md) for the full declarative API reference.
 
 ## Endpoint routes
 
