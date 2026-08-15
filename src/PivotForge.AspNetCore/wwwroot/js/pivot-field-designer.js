@@ -10,6 +10,7 @@
     data: "Değerler",
     filter: "Filtreler",
     remove: "Kaldır",
+    search: "Alan ara...",
     lastValue: "Bir pivot en az bir değer alanı gerektirir.",
     aggregations: {
       sum: "Toplam",
@@ -47,6 +48,9 @@
       // track the field being dragged on the instance so dragover can ask
       // canDrop() without touching dataTransfer.
       this.draggedField = null;
+      // Filters the available-field list only; never touched by mutations, and
+      // must survive the re-renders they trigger, so it lives on the instance.
+      this.searchTerm = "";
       this.render();
     }
 
@@ -164,7 +168,7 @@
     createAvailable() {
       const document = root.document;
       const section = document.createElement("section");
-      section.className = "pivot-field-list";
+      section.className = "pivot-field-list-panel";
       section.dataset.zone = "available";
 
       const head = document.createElement("div");
@@ -172,10 +176,42 @@
       head.textContent = this.labels.available;
       section.appendChild(head);
 
-      this.namesIn("available")
-        .forEach(name => section.appendChild(this.createChip(name, "available")));
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "pivot-search";
+      const search = document.createElement("input");
+      search.dataset.action = "search";
+      search.value = this.searchTerm;
+      search.setAttribute("placeholder", this.labels.search);
+      // Search is a pure display filter over the already-loaded available list:
+      // it must never touch the state and must never trigger widget.update(),
+      // so it re-renders only the chip body directly, bypassing apply().
+      search.addEventListener("input", event => {
+        this.searchTerm = event.target.value;
+        this.renderAvailableChips(body);
+      });
+      searchWrap.appendChild(search);
+      section.appendChild(searchWrap);
+
+      const body = document.createElement("div");
+      body.className = "pivot-field-list";
+      section.appendChild(body);
+
+      this.renderAvailableChips(body);
 
       return section;
+    }
+
+    renderAvailableChips(body) {
+      const term = this.searchTerm.trim().toLowerCase();
+      const names = this.namesIn("available").filter(name => {
+        if (!term) {
+          return true;
+        }
+        const caption = this.state.field(name).caption ?? "";
+        return caption.toLowerCase().includes(term);
+      });
+
+      body.replaceChildren(...names.map(name => this.createChip(name, "available")));
     }
 
     render() {

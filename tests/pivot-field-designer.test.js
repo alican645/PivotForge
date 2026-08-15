@@ -87,6 +87,20 @@ function zone(node, area) {
   return null;
 }
 
+// Finds the first rendered element carrying a given data-action, at any depth.
+function findByAction(node, action) {
+  if (node.dataset?.action === action) {
+    return node;
+  }
+  for (const child of node.children) {
+    const match = findByAction(child, action);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
 // Simulates a real HTML5 drag: dragstart on the source chip (which records
 // the payload on the designer instance, since dataTransfer.getData is
 // unreadable during dragover per spec), then the given event on the target.
@@ -189,6 +203,113 @@ test("changing an aggregation updates the state and the widget once", async () =
 
   assert.equal(state.getState().values[0].aggregation, "average");
   assert.equal(updates.length, 1);
+});
+
+test("a search term filters the available list", () => {
+  const { host } = build();
+  const search = findByAction(host, "search");
+
+  search.value = "eyr";
+  search.dispatch("input", { target: search });
+
+  const names = chips(zone(host, "available")).map(chip => chip.dataset.field);
+  assert.deepEqual(names, ["Quarter"]);
+});
+
+test("search matching is case-insensitive", () => {
+  const { host } = build();
+  const search = findByAction(host, "search");
+
+  search.value = "ÇEYREK";
+  search.dispatch("input", { target: search });
+
+  const names = chips(zone(host, "available")).map(chip => chip.dataset.field);
+  assert.deepEqual(names, ["Quarter"]);
+});
+
+test("search matches against the caption, not the field name", () => {
+  const { host } = build();
+  const search = findByAction(host, "search");
+
+  // "Quarter" is the dataField; the caption is "Çeyrek" and does not contain it.
+  search.value = "Quarter";
+  search.dispatch("input", { target: search });
+
+  const names = chips(zone(host, "available")).map(chip => chip.dataset.field);
+  assert.deepEqual(names, []);
+});
+
+test("an empty search term shows every available field", () => {
+  const { host } = build();
+  const search = findByAction(host, "search");
+
+  search.value = "eyr";
+  search.dispatch("input", { target: search });
+  search.value = "";
+  search.dispatch("input", { target: search });
+
+  const names = chips(zone(host, "available")).map(chip => chip.dataset.field).sort();
+  assert.deepEqual(names, ["Quantity", "Quarter"]);
+});
+
+test("a search term matching nothing renders an empty available list without error", () => {
+  const { host } = build();
+  const search = findByAction(host, "search");
+
+  assert.doesNotThrow(() => {
+    search.value = "does-not-exist-anywhere";
+    search.dispatch("input", { target: search });
+  });
+
+  const names = chips(zone(host, "available")).map(chip => chip.dataset.field);
+  assert.deepEqual(names, []);
+});
+
+test("a search term does not affect the placed zones", () => {
+  const { host } = build();
+  const search = findByAction(host, "search");
+
+  search.value = "does-not-exist-anywhere";
+  search.dispatch("input", { target: search });
+
+  assert.deepEqual(chips(zone(host, "row")).map(chip => chip.dataset.field), ["Region"]);
+  assert.deepEqual(chips(zone(host, "column")).map(chip => chip.dataset.field), ["Year"]);
+  assert.deepEqual(chips(zone(host, "data")).map(chip => chip.dataset.field), ["Amount"]);
+});
+
+test("the search term survives a mutation-triggered re-render", async () => {
+  const { host } = build();
+  let search = findByAction(host, "search");
+
+  search.value = "eyr";
+  search.dispatch("input", { target: search });
+
+  // Trigger a mutation elsewhere, which calls render() and rebuilds the panel.
+  const chip = chips(host).find(entry => entry.dataset.field === "Amount");
+  const select = chip.children.find(child => child.dataset?.action === "aggregation");
+  select.value = "average";
+  select.dispatch("change", { target: select });
+  await Promise.resolve();
+
+  search = findByAction(host, "search");
+  assert.equal(search.value, "eyr");
+  assert.deepEqual(chips(zone(host, "available")).map(c => c.dataset.field), ["Quarter"]);
+});
+
+test("typing in the search box never calls widget.update", () => {
+  const { host, state, updates } = build();
+  const before = state.getState();
+  const search = findByAction(host, "search");
+
+  search.value = "eyr";
+  search.dispatch("input", { target: search });
+  search.value = "eyre";
+  search.dispatch("input", { target: search });
+  search.value = "";
+  search.dispatch("input", { target: search });
+
+  assert.deepEqual(state.getState(), before);
+  assert.equal(updates.length, 0);
 });
 
 test("dispose clears the host", () => {
