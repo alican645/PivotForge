@@ -1,7 +1,8 @@
 (function (root) {
   const PivotForge = root.PivotForge ??= {};
 
-  const AREAS = ["row", "column", "data", "filter"];
+  const AREAS = ["row", "column", "data", "filter", "available"];
+  const ROLES = ["dimension", "measure"];
   const AGGREGATIONS = ["sum", "count", "average", "min", "max"];
   const SHOW_AS = [
     "normal",
@@ -30,6 +31,27 @@
       );
     }
 
+    const inferredRole = area === "data" ? "measure" : area === "available" ? null : "dimension";
+    const role = field.role ?? inferredRole;
+
+    if (role === null) {
+      throw new Error(
+        `Field "${dataField}" in area "available" requires an explicit "role" because there is no area to infer it from.`
+      );
+    }
+
+    if (!ROLES.includes(role)) {
+      throw new Error(
+        `Unknown role "${role}" on field "${dataField}". Expected one of: ${ROLES.join(", ")}.`
+      );
+    }
+
+    if (inferredRole !== null && role !== inferredRole) {
+      throw new Error(
+        `Field "${dataField}" is in area "${area}", so its role cannot be "${role}".`
+      );
+    }
+
     const isData = area === "data";
     if (!isData && field.aggregation !== undefined) {
       throw new Error(
@@ -54,6 +76,7 @@
     return {
       dataField,
       area,
+      role,
       caption: field.caption ?? dataField,
       aggregation,
       showAs,
