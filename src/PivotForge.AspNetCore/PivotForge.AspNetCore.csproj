@@ -20,7 +20,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Add a declarative field-based API: PivotForge.create in the browser and Html.PivotForge().PivotGrid() in Razor.</PackageReleaseNotes>
+    <PackageReleaseNotes>Add a declarative field-based API: PivotForge.create in the browser, Html.PivotForge().PivotGrid() in Razor, and pivot-grid / pivot-field tag helpers.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
