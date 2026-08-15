@@ -51,6 +51,8 @@
       this.request = null;
       this.controller = null;
       this.requestToken = 0;
+      this.filters = [...(this.options.filters ?? [])];
+      this.rowSort = this.options.rowSort ?? null;
 
       // Validate eagerly so configuration mistakes surface at the call site.
       this.fields = PivotForge.PivotRequestBuilder.normalizeFields(this.options.fields ?? []);
@@ -72,6 +74,9 @@
       return new Renderer(this.container, {
         rowFields: rowFields.map(field => field.dataField),
         rowFieldLabels: rowFields.map(field => field.caption),
+        onSortRequested: this.options.allowSorting
+          ? request => { this.sortBy(request); }
+          : null,
         ...(this.options.rendererOptions ?? {})
       });
     }
@@ -97,14 +102,16 @@
         request: this.request,
         result: this.result,
         error: this.error,
-        loading: this.loading
+        loading: this.loading,
+        filters: [...this.filters],
+        rowSort: this.rowSort
       };
     }
 
     buildRequest() {
       return PivotForge.PivotRequestBuilder.buildRequest(this.options.fields, {
-        filters: this.options.filters,
-        rowSort: this.rowSort ?? null
+        filters: this.filters,
+        rowSort: this.rowSort
       });
     }
 
@@ -194,6 +201,37 @@
       if (this.renderer) {
         this.renderer = this.createRenderer();
       }
+      await this.refresh();
+    }
+
+    async sortBy(sort) {
+      if (!this.options.allowSorting) {
+        throw new Error("Cannot sort because allowSorting is disabled.");
+      }
+
+      this.rowSort = sort;
+      await this.refresh();
+    }
+
+    async setFilter(field, values) {
+      if (!this.options.allowFiltering) {
+        throw new Error("Cannot filter because allowFiltering is disabled.");
+      }
+
+      this.filters = this.filters.filter(filter => filter.field !== field);
+      if (Array.isArray(values) && values.length > 0) {
+        this.filters.push({ field, values });
+      }
+
+      await this.refresh();
+    }
+
+    async clearFilters() {
+      if (!this.options.allowFiltering) {
+        throw new Error("Cannot filter because allowFiltering is disabled.");
+      }
+
+      this.filters = [];
       await this.refresh();
     }
 
