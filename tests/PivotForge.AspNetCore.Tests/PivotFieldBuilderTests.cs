@@ -1,0 +1,137 @@
+using PivotForge.AspNetCore.Rendering;
+using PivotForge.Core;
+using Xunit;
+
+namespace PivotForge.AspNetCore.Tests;
+
+public class PivotFieldBuilderTests
+{
+    [Fact]
+    public void BuildProducesCamelCaseKeysMatchingTheJavaScriptModel()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("tutar")
+            .Caption("Tutar")
+            .Area(PivotArea.Data)
+            .Aggregation(PivotAggregation.Sum)
+            .Build();
+
+        Assert.Equal("tutar", field["dataField"]);
+        Assert.Equal("Tutar", field["caption"]);
+        Assert.Equal("data", field["area"]);
+        Assert.Equal("sum", field["aggregation"]);
+    }
+
+    [Fact]
+    public void AreaDefaultsToData()
+    {
+        var field = new PivotFieldBuilder().DataField("tutar").Build();
+
+        Assert.Equal("data", field["area"]);
+    }
+
+    [Fact]
+    public void CaptionDefaultsToTheDataFieldName()
+    {
+        var field = new PivotFieldBuilder().DataField("tutar").Build();
+
+        Assert.Equal("tutar", field["caption"]);
+    }
+
+    [Theory]
+    [InlineData(PivotArea.Row, "row")]
+    [InlineData(PivotArea.Column, "column")]
+    [InlineData(PivotArea.Data, "data")]
+    [InlineData(PivotArea.Filter, "filter")]
+    public void EveryAreaSerializesAsLowerCamelCase(PivotArea area, string expected)
+    {
+        var field = new PivotFieldBuilder().DataField("alan").Area(area).Build();
+
+        Assert.Equal(expected, field["area"]);
+    }
+
+    [Theory]
+    [InlineData(PivotAggregation.Sum, "sum")]
+    [InlineData(PivotAggregation.Count, "count")]
+    [InlineData(PivotAggregation.Average, "average")]
+    [InlineData(PivotAggregation.Min, "min")]
+    [InlineData(PivotAggregation.Max, "max")]
+    public void EveryAggregationSerializesAsLowerCamelCase(PivotAggregation aggregation, string expected)
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("tutar")
+            .Area(PivotArea.Data)
+            .Aggregation(aggregation)
+            .Build();
+
+        Assert.Equal(expected, field["aggregation"]);
+    }
+
+    [Fact]
+    public void ShowAsSerializesAsLowerCamelCase()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("tutar")
+            .Area(PivotArea.Data)
+            .ShowAs(PivotShowAs.PercentOfRowTotal)
+            .Build();
+
+        Assert.Equal("percentOfRowTotal", field["showAs"]);
+    }
+
+    [Fact]
+    public void OptionalMembersAreOmittedWhenUnset()
+    {
+        var field = new PivotFieldBuilder().DataField("urun").Area(PivotArea.Row).Build();
+
+        Assert.False(field.ContainsKey("aggregation"));
+        Assert.False(field.ContainsKey("showAs"));
+        Assert.False(field.ContainsKey("format"));
+        Assert.False(field.ContainsKey("visible"));
+    }
+
+    [Fact]
+    public void VisibleIsEmittedOnlyWhenFalse()
+    {
+        var hidden = new PivotFieldBuilder().DataField("urun").Visible(false).Build();
+        var shown = new PivotFieldBuilder().DataField("urun").Visible(true).Build();
+
+        Assert.Equal(false, hidden["visible"]);
+        Assert.False(shown.ContainsKey("visible"));
+    }
+
+    [Fact]
+    public void BuildWithoutADataFieldThrows()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => new PivotFieldBuilder().Caption("Tutar").Build());
+
+        Assert.Contains("DataField", exception.Message);
+    }
+
+    [Fact]
+    public void CollectionBuilderPreservesDeclarationOrder()
+    {
+        var fields = new PivotFieldCollectionBuilder();
+        fields.Add().DataField("bolge").Area(PivotArea.Row);
+        fields.Add().DataField("urun").Area(PivotArea.Row);
+        fields.Add().DataField("tutar").Area(PivotArea.Data).Aggregation(PivotAggregation.Sum);
+
+        var built = fields.Build();
+
+        Assert.Equal(3, built.Count);
+        Assert.Equal("bolge", built[0]["dataField"]);
+        Assert.Equal("urun", built[1]["dataField"]);
+        Assert.Equal("tutar", built[2]["dataField"]);
+    }
+
+    [Fact]
+    public void FluentMethodsReturnTheSameBuilderInstance()
+    {
+        var builder = new PivotFieldBuilder();
+
+        Assert.Same(builder, builder.DataField("tutar"));
+        Assert.Same(builder, builder.Caption("Tutar"));
+        Assert.Same(builder, builder.Area(PivotArea.Data));
+    }
+}
