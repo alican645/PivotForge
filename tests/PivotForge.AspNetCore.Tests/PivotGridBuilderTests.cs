@@ -90,6 +90,7 @@ public class PivotGridBuilderTests
             .AllowFiltering(true)
             .AllowExcelExport(true)
             .LargeData(true)
+            .AutoLoad(false)
             .PageSize(75)
             .SourceRowCount(250_000)
             .EndpointPrefix("/raporlar/pivot-api"));
@@ -98,6 +99,7 @@ public class PivotGridBuilderTests
         Assert.True(config.GetProperty("allowFiltering").GetBoolean());
         Assert.True(config.GetProperty("allowExcelExport").GetBoolean());
         Assert.True(config.GetProperty("largeData").GetBoolean());
+        Assert.False(config.GetProperty("autoLoad").GetBoolean());
         Assert.Equal(75, config.GetProperty("pageSize").GetInt32());
         Assert.Equal(250_000, config.GetProperty("sourceRowCount").GetInt32());
         Assert.Equal("/raporlar/pivot-api", config.GetProperty("endpointPrefix").GetString());

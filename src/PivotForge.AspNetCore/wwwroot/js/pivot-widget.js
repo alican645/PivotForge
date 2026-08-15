@@ -274,16 +274,29 @@
       });
     }
 
-    async exportToExcel() {
+    async exportToExcel(options = {}) {
       if (!this.options.allowExcelExport) {
         throw new Error("Cannot export because allowExcelExport is disabled.");
+      }
+
+      // The endpoint renders a table document, not a pivot request, so the model
+      // has to come from the renderer that produced the visible table.
+      if (!this.renderer) {
+        throw new Error(
+          "Cannot export because this widget renders through renderImpl and has no renderer to export from."
+        );
+      }
+
+      const document = this.renderer.getExcelExportModel(options);
+      if (!document) {
+        throw new Error("Cannot export because no pivot table has been rendered yet.");
       }
 
       const fetchImpl = this.options.fetchImpl ?? root.fetch?.bind(root);
       const response = await fetchImpl(`${this.endpointPrefix}/excel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(this.buildRequest())
+        body: JSON.stringify(document)
       });
 
       if (!response.ok) {
@@ -291,6 +304,14 @@
       }
 
       return await response.blob();
+    }
+
+    cancel() {
+      // Invalidate the token as well, so a response already in flight cannot render.
+      this.requestToken++;
+      this.controller?.abort();
+      this.controller = null;
+      this.loading = false;
     }
 
     async sortBy(sort) {

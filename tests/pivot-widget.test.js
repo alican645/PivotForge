@@ -254,3 +254,58 @@ test("create dispatches a ready event carrying the widget", () => {
   assert.equal(received[0].detail.widget, widget);
   widget.dispose();
 });
+
+test("cancel aborts the in-flight request and clears the loading flag", async () => {
+  let aborted = false;
+  const { widget } = createWidget({
+    fetchImpl: (url, init) => new Promise(() => {
+      init.signal.addEventListener("abort", () => { aborted = true; });
+    })
+  });
+
+  widget.refresh();
+  assert.equal(widget.getState().loading, true);
+
+  widget.cancel();
+
+  assert.equal(aborted, true);
+  assert.equal(widget.getState().loading, false);
+  assert.equal(widget.controller, null);
+  widget.dispose();
+});
+
+test("exportToExcel posts the rendered document model, not the pivot request", async () => {
+  const exportModel = { title: "Pivot Tablo", rows: [{ cells: [{ text: "Bölge" }] }] };
+  const { widget, calls } = createWidget({
+    allowExcelExport: true,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, body: JSON.parse(init.body) });
+      return { ok: true, status: 200, blob: async () => "xlsx-bytes" };
+    }
+  });
+  const requested = [];
+  widget.renderer = { getExcelExportModel: options => { requested.push(options); return exportModel; } };
+
+  const blob = await widget.exportToExcel({ sheetName: "Pivot Tablo" });
+
+  assert.equal(blob, "xlsx-bytes");
+  assert.equal(calls[0].url, "/pivotforge/excel");
+  assert.deepEqual(calls[0].body, exportModel);
+  assert.deepEqual(requested, [{ sheetName: "Pivot Tablo" }]);
+  widget.dispose();
+});
+
+test("exportToExcel explains itself when nothing has been rendered", async () => {
+  const { widget } = createWidget({ allowExcelExport: true });
+  widget.renderer = { getExcelExportModel: () => null };
+
+  await assert.rejects(() => widget.exportToExcel(), /no pivot table has been rendered/);
+  widget.dispose();
+});
+
+test("exportToExcel explains itself when the widget renders through renderImpl", async () => {
+  const { widget } = createWidget({ allowExcelExport: true });
+
+  await assert.rejects(() => widget.exportToExcel(), /renderImpl/);
+  widget.dispose();
+});

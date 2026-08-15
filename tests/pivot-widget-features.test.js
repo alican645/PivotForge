@@ -67,19 +67,39 @@ test("drillDown is rejected when drill-down is disabled", async () => {
   widget.dispose();
 });
 
-test("exportToExcel posts the current request and returns a blob", async () => {
+test("exportToExcel posts the rendered document model, not the pivot request", async () => {
+  const exportModel = { title: "Pivot Tablo", rows: [{ cells: [{ text: "Ürün" }] }] };
   const { widget, calls } = createWidget(() => ({
     ok: true,
     status: 200,
     blob: async () => ({ size: 2048, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
   }), { allowExcelExport: true });
+  // The endpoint renders a table document, and the test helper's widget uses
+  // renderImpl (no renderer), so a fake renderer stands in for the real one.
+  const requested = [];
+  widget.renderer = { getExcelExportModel: options => { requested.push(options); return exportModel; } };
 
-  await widget.refresh();
-  const blob = await widget.exportToExcel();
+  const blob = await widget.exportToExcel({ sheetName: "Pivot Tablo" });
 
-  assert.equal(calls[1].url, "/pivotforge/excel");
-  assert.deepEqual(calls[1].body.rows, ["urun"]);
+  assert.equal(calls[0].url, "/pivotforge/excel");
+  assert.deepEqual(calls[0].body, exportModel);
+  assert.deepEqual(requested, [{ sheetName: "Pivot Tablo" }]);
   assert.equal(blob.size, 2048);
+  widget.dispose();
+});
+
+test("exportToExcel throws when the widget has no renderer to export from", async () => {
+  const { widget } = createWidget(() => okJson({}), { allowExcelExport: true });
+
+  await assert.rejects(() => widget.exportToExcel(), /renderImpl/);
+  widget.dispose();
+});
+
+test("exportToExcel throws when the renderer has nothing rendered yet", async () => {
+  const { widget } = createWidget(() => okJson({}), { allowExcelExport: true });
+  widget.renderer = { getExcelExportModel: () => null };
+
+  await assert.rejects(() => widget.exportToExcel(), /no pivot table has been rendered/);
   widget.dispose();
 });
 

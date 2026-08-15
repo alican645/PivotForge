@@ -363,6 +363,9 @@
         // The declarative helper created the widget and its renderer; this page only
         // supplies the demo-specific renderer defaults and drives the widget.
         const widget = window.pivotGridWidget;
+        if (!widget?.renderer) {
+            throw new Error("pivotGridWidget is missing its renderer; check that pivot-widget.js loaded before this script.");
+        }
         const renderer = widget.renderer;
         Object.assign(renderer.options, {
             totalText: "Toplam",
@@ -628,7 +631,8 @@
             ensureUsableLayout();
 
             try {
-                syncWidget();
+                syncWidgetRequest();
+                syncRendererOptions();
                 await widget.refresh();
             } catch (error) {
                 // Configuration errors surface synchronously; request failures arrive on the error event.
@@ -637,8 +641,8 @@
         }
 
         // Pushes the drag-and-drop layout onto the declarative widget. The demo layout is
-        // dynamic, so the field list is rebuilt before every run instead of being declared once.
-        function syncWidget() {
+        // dynamic, so the field list is rebuilt before every request instead of being declared once.
+        function syncWidgetRequest() {
             const fieldConfiguration = [
                 ...layout.rows.map(field => ({ dataField: field, caption: fieldLabel(field), area: "row" })),
                 ...layout.columns.map(field => ({ dataField: field, caption: fieldLabel(field), area: "column" })),
@@ -657,9 +661,11 @@
             widget.filters = layout.filters.map(filter => ({ field: filter.field, values: [...filter.values] }));
             widget.rowSort = activeRowSort;
             widget.options.sourceRowCount = viewSettings.largeData ? largeSourceRowCount : @Model.Count;
+        }
 
-            // The widget renders with the renderer's own defaults, so the per-run display
-            // settings (layout mode, subtotals, formats, conditional rules) live there.
+        // The widget renders with the renderer's own defaults, so the per-run display
+        // settings (layout mode, subtotals, formats, conditional rules) live there.
+        function syncRendererOptions() {
             Object.assign(renderer.options, createRendererOptions());
         }
 
@@ -1790,7 +1796,7 @@
             setDrillDownState("Kayıtlar yükleniyor...", false);
 
             try {
-                syncWidget();
+                syncWidgetRequest();
                 const response = await widget.drillDown({
                     rowPath: selection.rowHeader,
                     columnPath: selection.columnHeader,
@@ -2136,41 +2142,19 @@
         }
 
         async function exportExcel() {
-            const model = renderer.getExcelExportModel({
-                title: "Pivot Tablo",
-                sheetName: "Pivot Tablo",
-                filterSummary: createExcelFilterSummary()
-            });
-
-            if (!model) {
-                setStatus("Excel'e aktarılacak tablo bulunamadı", true);
-                return;
-            }
-
             elements.exportExcelButton.disabled = true;
             setStatus("Excel hazırlanıyor", false);
 
             try {
-                const response = await fetch("/pivotforge/excel", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(model)
+                const blob = await widget.exportToExcel({
+                    title: "Pivot Tablo",
+                    sheetName: "Pivot Tablo",
+                    filterSummary: createExcelFilterSummary()
                 });
-
-                if (!response.ok) {
-                    const error = await response.json().catch(() => null);
-                    throw new Error(error?.message ?? "Excel dosyası oluşturulamadı");
-                }
-
-                const blob = await response.blob();
-                const disposition = response.headers.get("Content-Disposition") ?? "";
-                const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-                const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
-                const fileName = encodedName ? decodeURIComponent(encodedName) : plainName ?? `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`;
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.href = url;
-                link.download = fileName;
+                link.download = `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`;
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
