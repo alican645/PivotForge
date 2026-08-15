@@ -181,8 +181,13 @@ test("a server error is surfaced and does not blank existing data", async () => 
 
 test("a superseded request is aborted and its late response ignored", async () => {
   const pending = [];
+  let firstAborted = false;
   const { widget, rendered } = createWidget({
     fetchImpl: (url, init) => new Promise((resolve, reject) => {
+      const index = pending.length;
+      if (index === 0) {
+        init.signal.addEventListener("abort", () => { firstAborted = true; });
+      }
       init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
       pending.push(() => resolve({
         ok: true,
@@ -194,6 +199,8 @@ test("a superseded request is aborted and its late response ignored", async () =
 
   const first = widget.refresh();
   const second = widget.refresh();
+
+  assert.equal(firstAborted, true);
 
   pending[1]();
   await second;
