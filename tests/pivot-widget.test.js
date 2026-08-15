@@ -2,7 +2,48 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-request-builder.js");
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-layout-state.js");
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-field-designer.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-widget.js");
+
+// A DOM stub sufficient for the field designer's render() to run: element
+// creation, class lists, children, and event listeners. Used only by the
+// fieldDesigner integration tests below, which construct a real designer.
+function createDesignerElement(tagName) {
+  return {
+    tagName: tagName.toUpperCase(),
+    children: [],
+    listeners: new Map(),
+    dataset: {},
+    attributes: {},
+    textContent: "",
+    className: "",
+    draggable: false,
+    disabled: false,
+    title: "",
+    value: "",
+    classList: {
+      names: new Set(),
+      add(...names) { names.forEach(name => this.names.add(name)); },
+      remove(...names) { names.forEach(name => this.names.delete(name)); },
+      contains(name) { return this.names.has(name); }
+    },
+    appendChild(child) { this.children.push(child); return child; },
+    replaceChildren(...nodes) { this.children = nodes; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    addEventListener(name, handler) {
+      const handlers = this.listeners.get(name) ?? [];
+      handlers.push(handler);
+      this.listeners.set(name, handlers);
+    },
+    removeEventListener(name, handler) {
+      this.listeners.set(name, (this.listeners.get(name) ?? []).filter(entry => entry !== handler));
+    },
+    dispatch(name, event = {}) {
+      (this.listeners.get(name) ?? []).forEach(handler => handler(event));
+    }
+  };
+}
 
 const PivotForge = globalThis.PivotForge;
 
@@ -360,5 +401,34 @@ test("update reflects new fields in getState", async () => {
   await widget.update({ fields: [{ dataField: "tutar", area: "data" }] });
 
   assert.deepEqual(widget.getState().fields.map(field => field.dataField), ["tutar"]);
+  widget.dispose();
+});
+
+test("create builds a designer when fieldDesigner is supplied", () => {
+  const designerHost = createContainer();
+  const previousDocument = globalThis.document;
+  // The designer's render() needs createElement in addition to the selector
+  // lookup, since it builds real chip/zone elements during construction.
+  globalThis.document = { querySelector: () => designerHost, createElement: createDesignerElement };
+
+  const widget = PivotForge.create(createContainer(), {
+    fields,
+    autoLoad: false,
+    fieldDesigner: "#designerHost",
+    renderImpl: () => {},
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+  });
+
+  assert.notEqual(widget.designer, null);
+  assert.notEqual(widget.layoutState, null);
+
+  widget.dispose();
+  globalThis.document = previousDocument;
+});
+
+test("no designer is built when fieldDesigner is absent", () => {
+  const { widget } = createWidget();
+
+  assert.equal(widget.designer, null);
   widget.dispose();
 });
