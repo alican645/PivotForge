@@ -133,10 +133,12 @@ test("loadPage requests a page from the active session", async () => {
 
 test("an expired session restarts transparently on the next page request", async () => {
   let sessionGone = true;
+  let startCount = 0;
   const { widget, calls } = createWidget(call => {
     if (call.url.endsWith("/large/start")) {
+      startCount += 1;
       return okJson({
-        sessionId: "oturum-2",
+        sessionId: `oturum-${startCount}`,
         page: { offset: 0, pageSize: 40, totalRowCount: 5000, result: { cells: [] } }
       });
     }
@@ -153,6 +155,7 @@ test("an expired session restarts transparently on the next page request", async
   // start, failed page, restart, retried page
   assert.equal(calls.length, 4);
   assert.equal(calls[2].url, "/pivotforge/large/start");
+  assert.equal(calls[3].body.sessionId, "oturum-2");
   assert.equal(page.offset, 40);
   widget.dispose();
 });
@@ -161,5 +164,12 @@ test("loadPage without an active session throws", async () => {
   const { widget } = createWidget(() => okJson({}), { largeData: true });
 
   await assert.rejects(() => widget.loadPage(40), /no active large-data session/);
+  widget.dispose();
+});
+
+test("loadPage is rejected when largeData is disabled", async () => {
+  const { widget } = createWidget(() => okJson({}));
+
+  await assert.rejects(() => widget.loadPage(40), /largeData is disabled/);
   widget.dispose();
 });
