@@ -10,6 +10,7 @@ public sealed class PivotFieldBuilder
     private PivotArea _area = PivotArea.Data;
     private PivotAggregation? _aggregation;
     private PivotShowAs? _showAs;
+    private PivotFieldRole? _role;
     private string? _format;
     private bool _visible = true;
 
@@ -37,6 +38,15 @@ public sealed class PivotFieldBuilder
     public PivotFieldBuilder Area(PivotArea area)
     {
         _area = area;
+        return this;
+    }
+
+    /// <summary>Sets which areas the field may occupy.</summary>
+    /// <param name="role">The field's role.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder Role(PivotFieldRole role)
+    {
+        _role = role;
         return this;
     }
 
@@ -90,6 +100,22 @@ public sealed class PivotFieldBuilder
                 "A pivot field requires DataField to be set before it can be rendered.");
         }
 
+        if (_area == PivotArea.Available && _role is null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" is in the Available area, so Role must be set explicitly; there is no area to infer it from.");
+        }
+
+        if (_role is { } role)
+        {
+            var expected = _area == PivotArea.Data ? PivotFieldRole.Measure : PivotFieldRole.Dimension;
+            if (_area != PivotArea.Available && role != expected)
+            {
+                throw new InvalidOperationException(
+                    $"Field \"{_dataField}\" is in the {_area} area, so its Role cannot be {role}.");
+            }
+        }
+
         // Mirrors the check normalizeField() performs in pivot-request-builder.js, so a
         // configuration mistake surfaces here instead of only failing in the browser.
         if (_area != PivotArea.Data && (_aggregation is not null || _showAs is not null))
@@ -105,6 +131,11 @@ public sealed class PivotFieldBuilder
             ["caption"] = _caption ?? _dataField,
             ["area"] = ToCamelCase(_area.ToString())
         };
+
+        if (_role is { } declaredRole)
+        {
+            field["role"] = ToCamelCase(declaredRole.ToString());
+        }
 
         if (_aggregation is { } aggregation)
         {
