@@ -53,6 +53,8 @@
       this.requestToken = 0;
       this.filters = [...(this.options.filters ?? [])];
       this.rowSort = this.options.rowSort ?? null;
+      this.sessionId = null;
+      this.totalRowCount = 0;
 
       // Validate eagerly so configuration mistakes surface at the call site.
       this.fields = PivotForge.PivotRequestBuilder.normalizeFields(this.options.fields ?? []);
@@ -104,7 +106,9 @@
         error: this.error,
         loading: this.loading,
         filters: [...this.filters],
-        rowSort: this.rowSort
+        rowSort: this.rowSort,
+        sessionId: this.sessionId,
+        totalRowCount: this.totalRowCount
       };
     }
 
@@ -126,7 +130,9 @@
 
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload?.message ?? `Request failed with status ${response.status}.`);
+        const error = new Error(payload?.message ?? `Request failed with status ${response.status}.`);
+        error.status = response.status;
+        throw error;
       }
 
       return payload;
@@ -148,7 +154,9 @@
       this.emit("dataLoading", { request: this.request });
 
       try {
-        const result = await this.post("/pivot", this.request, controller.signal);
+        const result = this.options.largeData
+          ? await this.startLargeSession(controller.signal)
+          : await this.post("/pivot", this.request, controller.signal);
         if (token !== this.requestToken || this.disposed) {
           return;
         }
@@ -202,6 +210,87 @@
         this.renderer = this.createRenderer();
       }
       await this.refresh();
+    }
+
+    async startLargeSession(signal) {
+      const response = await this.post("/large/start", {
+        ...this.request,
+        pageSize: this.options.pageSize,
+        sourceRowCount: this.options.sourceRowCount
+      }, signal);
+
+      this.sessionId = response.sessionId;
+      this.totalRowCount = response.page?.totalRowCount ?? 0;
+      this.currentPage = response.page;
+      return response.page?.result ?? null;
+    }
+
+    async loadPage(offset) {
+      if (!this.options.largeData) {
+        throw new Error("Cannot load a page because largeData is disabled.");
+      }
+
+      if (!this.sessionId) {
+        throw new Error("Cannot load a page because there is no active large-data session.");
+      }
+
+      const body = { sessionId: this.sessionId, offset, pageSize: this.options.pageSize };
+
+      try {
+        return await this.postPage(body);
+      } catch (error) {
+        // An expired session is recoverable: start a new one and retry once.
+        if (error.status !== 410) {
+          throw error;
+        }
+
+        await this.refresh();
+        return await this.postPage({ ...body, sessionId: this.sessionId });
+      }
+    }
+
+    async postPage(body) {
+      const page = await this.post("/large/page", body);
+      this.currentPage = page;
+      this.totalRowCount = page.totalRowCount ?? this.totalRowCount;
+      if (page.result) {
+        this.result = page.result;
+        this.render(page.result);
+      }
+      return page;
+    }
+
+    async drillDown({ rowPath = [], columnPath = [], valueKey = null } = {}) {
+      if (!this.options.allowDrillDown) {
+        throw new Error("Cannot drill down because allowDrillDown is disabled.");
+      }
+
+      return await this.post("/drill-down", {
+        ...this.buildRequest(),
+        rowPath,
+        columnPath,
+        valueKey,
+        sourceRowCount: this.options.sourceRowCount
+      });
+    }
+
+    async exportToExcel() {
+      if (!this.options.allowExcelExport) {
+        throw new Error("Cannot export because allowExcelExport is disabled.");
+      }
+
+      const fetchImpl = this.options.fetchImpl ?? root.fetch?.bind(root);
+      const response = await fetchImpl(`${this.endpointPrefix}/excel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(this.buildRequest())
+      });
+
+      if (!response.ok) {
+        throw new Error(`Excel export failed with status ${response.status}.`);
+      }
+
+      return await response.blob();
     }
 
     async sortBy(sort) {
