@@ -118,6 +118,14 @@
       this.handlers.get(eventName)?.forEach(handler => handler(payload));
     }
 
+    // Shared guard for methods that issue a network request or mutate state,
+    // so disposal is enforced consistently instead of ad hoc per method.
+    assertNotDisposed() {
+      if (this.disposed) {
+        throw new Error("This PivotForge widget has been disposed.");
+      }
+    }
+
     getState() {
       return {
         fields: this.fields,
@@ -159,9 +167,7 @@
     }
 
     async refresh() {
-      if (this.disposed) {
-        throw new Error("This PivotForge widget has been disposed.");
-      }
+      this.assertNotDisposed();
 
       this.controller?.abort();
       const controller = new AbortController();
@@ -246,6 +252,8 @@
     }
 
     async loadPage(offset) {
+      this.assertNotDisposed();
+
       if (!this.options.largeData) {
         throw new Error("Cannot load a page because largeData is disabled.");
       }
@@ -264,7 +272,15 @@
           throw error;
         }
 
+        const staleSessionId = this.sessionId;
         await this.refresh();
+        // refresh() swallows its own failures and turns them into an "error" event
+        // instead of throwing, so a failed restart must be detected explicitly:
+        // the session id will still be the stale one that just triggered the 410.
+        if (this.sessionId === staleSessionId) {
+          throw this.error ?? error;
+        }
+
         return await this.postPage({ ...body, sessionId: this.sessionId });
       }
     }
@@ -281,6 +297,8 @@
     }
 
     async drillDown({ rowPath = [], columnPath = [], valueKey = null } = {}) {
+      this.assertNotDisposed();
+
       if (!this.options.allowDrillDown) {
         throw new Error("Cannot drill down because allowDrillDown is disabled.");
       }
@@ -295,6 +313,8 @@
     }
 
     async exportToExcel(options = {}) {
+      this.assertNotDisposed();
+
       if (!this.options.allowExcelExport) {
         throw new Error("Cannot export because allowExcelExport is disabled.");
       }
@@ -320,7 +340,10 @@
       });
 
       if (!response.ok) {
-        throw new Error(`Excel export failed with status ${response.status}.`);
+        const payload = await response.json().catch(() => null);
+        const error = new Error(payload?.message ?? `Excel export failed with status ${response.status}.`);
+        error.status = response.status;
+        throw error;
       }
 
       const blob = await response.blob();

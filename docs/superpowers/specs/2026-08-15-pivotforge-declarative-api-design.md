@@ -118,8 +118,14 @@ builder implements `IHtmlContent`, so rendering happens when Razor writes it.
 Output is a container `div` carrying the configuration as a JSON payload, plus
 a script element that calls `PivotForge.create`. Configuration travels in a
 `type="application/json"` script block rather than an inline call argument, so
-that a strict Content Security Policy without `unsafe-inline` remains
-workable and captions containing quotes cannot break out of the emitted script.
+that captions containing quotes cannot break out of the emitted script and so
+the JSON payload itself is not subject to script CSP rules (`application/json`
+is not executable). This does **not** make the builder's output CSP-safe end
+to end: `PivotGridBuilder` also emits a second, inline `<script>PivotForge.create(...)</script>`
+block with no nonce or hash support, and a strict Content Security Policy
+without `unsafe-inline` blocks that block. Supporting such a policy would
+require adding nonce/hash support to the inline script; that is not
+implemented by this branch.
 
 `Id` is required; without it the builder throws at render time rather than
 generating a random identifier, because a stable identifier is needed to

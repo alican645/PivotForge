@@ -181,6 +181,35 @@ test("an expired session restarts transparently on the next page request", async
   widget.dispose();
 });
 
+test("loadPage surfaces the underlying error when the session restart itself fails", async () => {
+  let pageCallCount = 0;
+  const { widget, calls } = createWidget(call => {
+    if (call.url.endsWith("/large/start")) {
+      // The very first start (from refresh()) succeeds; the restart triggered by
+      // the expired-session retry fails, so sessionId never changes.
+      if (calls.filter(c => c.url.endsWith("/large/start")).length === 1) {
+        return okJson({
+          sessionId: "oturum-1",
+          page: { offset: 0, pageSize: 40, totalRowCount: 5000, result: { cells: [] } }
+        });
+      }
+      return { ok: false, status: 500, json: async () => ({ message: "Sunucu hatasi." }) };
+    }
+    pageCallCount += 1;
+    return { ok: false, status: 410, json: async () => ({ message: "Oturum süresi doldu." }) };
+  }, { largeData: true });
+
+  await widget.refresh();
+
+  await assert.rejects(() => widget.loadPage(40), /Sunucu hatasi\./);
+
+  // Only the first (expired) page request should have gone out; the retry never
+  // fires because the restart failed and sessionId stayed the same.
+  assert.equal(pageCallCount, 1);
+  assert.equal(widget.getState().sessionId, "oturum-1");
+  widget.dispose();
+});
+
 test("loadPage without an active session throws", async () => {
   const { widget } = createWidget(() => okJson({}), { largeData: true });
 

@@ -77,9 +77,15 @@ public class PivotGridBuilderTests
     [Fact]
     public void TurkishCaptionsSurviveSerializationUnescaped()
     {
-        var fields = ConfigOf(SalesGrid()).GetProperty("fields");
+        // Asserts against the raw rendered HTML rather than a parsed JsonElement:
+        // GetString() would decode "Ürün" back to "Ürün" too, so a parsed
+        // comparison cannot tell the escaped and unescaped forms apart. Only the raw
+        // markup can prove the Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        // configuration in PivotGridBuilder is actually in effect.
+        var html = Render(SalesGrid());
 
-        Assert.Equal("Ürün", fields[0].GetProperty("caption").GetString());
+        Assert.Contains("\"Ürün\"", html);
+        Assert.DoesNotContain("\\u00dc", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

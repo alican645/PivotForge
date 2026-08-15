@@ -31,6 +31,8 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <summary>Configures the grid fields.</summary>
     /// <param name="configure">A callback that adds fields.</param>
     /// <returns>The same builder.</returns>
+    /// <remarks>Fields accumulate across calls: calling this method more than once adds to the
+    /// existing field set rather than replacing it.</remarks>
     public PivotGridBuilder Fields(Action<PivotFieldCollectionBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
@@ -146,6 +148,9 @@ public sealed class PivotGridBuilder : IHtmlContent
         writer.Write(json);
         writer.Write("</script>");
         writer.Write("<script>PivotForge.create(");
+        // _id is written unencoded into this JS string literal. That is safe only because
+        // IsValidElementId (checked above) restricts it to letters, digits, '-', and '_' —
+        // none of which can terminate the string literal or the surrounding <script> block.
         writer.Write($"document.getElementById(\"{_id}\"), ");
         writer.Write($"JSON.parse(document.getElementById(\"{configId}\").textContent));");
         writer.Write("</script>");

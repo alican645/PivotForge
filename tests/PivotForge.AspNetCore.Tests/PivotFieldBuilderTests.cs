@@ -67,16 +67,23 @@ public class PivotFieldBuilderTests
         Assert.Equal(expected, field["aggregation"]);
     }
 
-    [Fact]
-    public void ShowAsSerializesAsLowerCamelCase()
+    [Theory]
+    [InlineData(PivotShowAs.Normal, "normal")]
+    [InlineData(PivotShowAs.PercentOfRowTotal, "percentOfRowTotal")]
+    [InlineData(PivotShowAs.PercentOfColumnTotal, "percentOfColumnTotal")]
+    [InlineData(PivotShowAs.PercentOfGrandTotal, "percentOfGrandTotal")]
+    [InlineData(PivotShowAs.DifferenceFromPrevious, "differenceFromPrevious")]
+    [InlineData(PivotShowAs.PercentDifferenceFromPrevious, "percentDifferenceFromPrevious")]
+    [InlineData(PivotShowAs.RunningTotal, "runningTotal")]
+    public void EveryShowAsSerializesAsLowerCamelCase(PivotShowAs showAs, string expected)
     {
         var field = new PivotFieldBuilder()
             .DataField("tutar")
             .Area(PivotArea.Data)
-            .ShowAs(PivotShowAs.PercentOfRowTotal)
+            .ShowAs(showAs)
             .Build();
 
-        Assert.Equal("percentOfRowTotal", field["showAs"]);
+        Assert.Equal(expected, field["showAs"]);
     }
 
     [Fact]
@@ -98,6 +105,32 @@ public class PivotFieldBuilderTests
 
         Assert.Equal(false, hidden["visible"]);
         Assert.False(shown.ContainsKey("visible"));
+    }
+
+    [Fact]
+    public void SettingAggregationOnANonDataAreaThrows()
+    {
+        var builder = new PivotFieldBuilder()
+            .DataField("urun")
+            .Area(PivotArea.Row)
+            .Aggregation(PivotAggregation.Sum);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("Aggregation", exception.Message);
+    }
+
+    [Fact]
+    public void SettingShowAsOnANonDataAreaThrows()
+    {
+        var builder = new PivotFieldBuilder()
+            .DataField("urun")
+            .Area(PivotArea.Row)
+            .ShowAs(PivotShowAs.PercentOfRowTotal);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("ShowAs", exception.Message);
     }
 
     [Fact]

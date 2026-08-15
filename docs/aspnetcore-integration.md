@@ -214,7 +214,7 @@ Obtained from `Html.PivotForge().PivotGrid()`. All setters return the builder fo
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
 | `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
 | `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, sessionId, totalRowCount }`. |
-| `dispose()` | Aborts any in-flight request, detaches all `on()` handlers, and empties the container. The widget throws if used afterward. |
+| `dispose()` | Aborts any in-flight request, detaches all `on()` handlers, and empties the container. After disposal, any method that would issue a network request or trigger a refresh (`refresh`, `sortBy`, `setFilter`, `clearFilters`, `updateFields`, `drillDown`, `loadPage`, `exportToExcel`) throws; `getState()` remains safe to call for a final snapshot. |
 
 ### Events
 
@@ -240,7 +240,7 @@ In addition, `PivotForge.create` dispatches a plain DOM `CustomEvent` named `piv
 ### Known limitations
 
 - **Large-data paging is not wired to a virtual-scrolling UI.** `loadPage()` exists and is unit-tested, but `PivotWidget` has no page cache, no cache-hit state, and does not pass a `virtualState` to the renderer. Driving an actual virtual-scrolling grid still requires orchestrating `PivotVirtualDataSource` and `PivotTableRenderer` manually — see the MVC demo, which deliberately keeps its own `/large/start` + `/large/page` code for this reason.
-- **No single call changes multiple pieces of state and refreshes once.** Changing fields, filters, and sort together currently means calling `updateFields`, `setFilter`, and `sortBy` in sequence (each triggering its own `refresh()`), or mutating `widget.options.fields` / `widget.filters` / `widget.rowSort` directly before calling `refresh()` once, as the demo does.
+- **No single call changes multiple pieces of state and refreshes once.** Changing fields, filters, and sort together currently means calling `updateFields`, `setFilter`, and `sortBy` in sequence (each triggering its own `refresh()`), or mutating `widget.options.fields`, `widget.fields` (via `PivotForge.PivotRequestBuilder.normalizeFields(...)`, so `getState().fields` and row headers stay in sync), `widget.filters`, and `widget.rowSort` directly before calling `refresh()` once, as the demo's `syncWidgetRequest` does. Skipping the `widget.fields` reassignment leaves `getState().fields` stale and can leave row headers wrong, since the renderer only reads `rowFields`/`rowFieldLabels` at construction or `updateFields`.
 - **Saved views, conditional formatting, and selection/clipboard UI** are not part of the declarative API. They remain lower-level features built on `PivotViewStore`, `PivotTableRenderer`'s `conditionalRules`/`onSelectionChanged`/`onCellCopied` options, and manual request construction — see [Render a Result](#render-a-result) above.
 
 ## Endpoint Contract

@@ -78,13 +78,25 @@ public sealed class PivotFieldBuilder
 
     /// <summary>Builds the browser field configuration.</summary>
     /// <returns>A dictionary matching the JavaScript field model.</returns>
-    /// <exception cref="InvalidOperationException">No data field was supplied.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// No data field was supplied, or <see cref="Aggregation"/>/<see cref="ShowAs"/> was set on a field
+    /// whose <see cref="Area"/> is not <see cref="PivotArea.Data"/>.
+    /// </exception>
     public IDictionary<string, object?> Build()
     {
         if (string.IsNullOrWhiteSpace(_dataField))
         {
             throw new InvalidOperationException(
                 "A pivot field requires DataField to be set before it can be rendered.");
+        }
+
+        // Mirrors the check normalizeField() performs in pivot-request-builder.js, so a
+        // configuration mistake surfaces here instead of only failing in the browser.
+        if (_area != PivotArea.Data && (_aggregation is not null || _showAs is not null))
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets Aggregation or ShowAs, but its Area is \"{_area}\". " +
+                "Aggregation and ShowAs are only valid on fields whose Area is Data.");
         }
 
         var field = new Dictionary<string, object?>(StringComparer.Ordinal)

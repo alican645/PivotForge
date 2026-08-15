@@ -274,28 +274,6 @@ test("cancel aborts the in-flight request and clears the loading flag", async ()
   widget.dispose();
 });
 
-test("exportToExcel posts the rendered document model, not the pivot request", async () => {
-  const exportModel = { title: "Pivot Tablo", rows: [{ cells: [{ text: "Bölge" }] }] };
-  const { widget, calls } = createWidget({
-    allowExcelExport: true,
-    fetchImpl: async (url, init) => {
-      calls.push({ url, body: JSON.parse(init.body) });
-      return { ok: true, status: 200, blob: async () => "xlsx-bytes" };
-    }
-  });
-  const requested = [];
-  widget.renderer = { getExcelExportModel: options => { requested.push(options); return exportModel; } };
-
-  const { blob, fileName } = await widget.exportToExcel({ sheetName: "Pivot Tablo" });
-
-  assert.equal(blob, "xlsx-bytes");
-  assert.equal(fileName, null);
-  assert.equal(calls[0].url, "/pivotforge/excel");
-  assert.deepEqual(calls[0].body, exportModel);
-  assert.deepEqual(requested, [{ sheetName: "Pivot Tablo" }]);
-  widget.dispose();
-});
-
 test("exportToExcel reads the file name from the Content-Disposition header", async () => {
   const exportModel = { title: "Pivot Tablo", rows: [] };
   const { widget } = createWidget({
