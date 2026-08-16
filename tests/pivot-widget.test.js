@@ -724,3 +724,133 @@ test("a consumer-supplied values list survives", async () => {
     widget.dispose();
   });
 });
+
+// The package ships a drill-down endpoint, a widget.drillDown() call and the
+// detail-modal component, but nothing joins them: a declarative page that never
+// writes JS got no detail modal at all. The widget supplies that wiring, while
+// leaving a consumer that brought its own handler untouched.
+function withStubModal(run) {
+  const opened = [];
+  const disposed = [];
+  const previous = PivotForge.PivotDrillDownModal;
+
+  PivotForge.PivotDrillDownModal = class StubModal {
+    constructor(options) { this.options = options; }
+    open(selection) { opened.push(selection); }
+    dispose() { disposed.push(this); }
+  };
+
+  try {
+    return run({ opened, disposed });
+  } finally {
+    PivotForge.PivotDrillDownModal = previous;
+  }
+}
+
+test("double-clicking a cell opens the packaged detail modal", async () => {
+  await withStubModal(async ({ opened }) => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const widget = PivotForge.create(createContainer(), { fields, autoLoad: false });
+
+      const selection = { type: "cell", rowHeader: ["Ege"], valueKey: "tutar_sum" };
+      constructed[0].onCellDoubleClick(selection);
+
+      assert.deepEqual(opened, [selection]);
+      widget.dispose();
+    });
+  });
+});
+
+test("the modal is built once and reused across cells", async () => {
+  await withStubModal(async () => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const widget = PivotForge.create(createContainer(), { fields, autoLoad: false });
+
+      constructed[0].onCellDoubleClick({ type: "cell" });
+      const first = widget.drillDownModal;
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      assert.equal(widget.drillDownModal, first);
+      widget.dispose();
+    });
+  });
+});
+
+test("a consumer's own onCellDoubleClick keeps ownership", async () => {
+  await withStubModal(async ({ opened }) => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const seen = [];
+      const widget = PivotForge.create(createContainer(), {
+        fields,
+        autoLoad: false,
+        rendererOptions: { onCellDoubleClick: selection => seen.push(selection) }
+      });
+
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      assert.equal(seen.length, 1);
+      assert.equal(opened.length, 0);
+      widget.dispose();
+    });
+  });
+});
+
+test("no detail handler is wired when drill-down is disabled", async () => {
+  await withStubModal(async () => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const widget = PivotForge.create(createContainer(), {
+        fields,
+        autoLoad: false,
+        allowDrillDown: false
+      });
+
+      assert.equal(constructed[0].onCellDoubleClick, null);
+      widget.dispose();
+    });
+  });
+});
+
+test("the packaged modal can be declined while drill-down stays available", async () => {
+  await withStubModal(async () => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const widget = PivotForge.create(createContainer(), {
+        fields,
+        autoLoad: false,
+        drillDownModal: false
+      });
+
+      assert.equal(constructed[0].onCellDoubleClick, null);
+      assert.equal(widget.options.allowDrillDown, true);
+      widget.dispose();
+    });
+  });
+});
+
+test("a page that never loaded the modal script still builds a widget", async () => {
+  const previous = PivotForge.PivotDrillDownModal;
+  PivotForge.PivotDrillDownModal = undefined;
+
+  try {
+    await withSpyRenderer(async ({ constructed }) => {
+      const widget = PivotForge.create(createContainer(), { fields, autoLoad: false });
+
+      assert.equal(constructed[0].onCellDoubleClick, null);
+      widget.dispose();
+    });
+  } finally {
+    PivotForge.PivotDrillDownModal = previous;
+  }
+});
+
+test("disposing the widget disposes the modal it built", async () => {
+  await withStubModal(async ({ disposed }) => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const widget = PivotForge.create(createContainer(), { fields, autoLoad: false });
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      widget.dispose();
+
+      assert.equal(disposed.length, 1);
+    });
+  });
+});

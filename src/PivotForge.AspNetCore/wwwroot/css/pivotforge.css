@@ -2098,8 +2098,17 @@ select {
   background: #f8fafc;
 }
 
-.pivot-drill-down-table td:nth-child(4),
-.pivot-drill-down-table td:nth-child(n+6) {
+/* PivotDrillDownModal marks its own numeric columns from the declared value
+   formats, so alignment follows the data rather than the column position. */
+.pivot-drill-down-table td.is-numeric {
+  text-align: right;
+}
+
+/* A hand-built detail table cannot mark its columns, so it keeps the positional
+   fallback. Scoped away from tables that do mark them, where these positions
+   are meaningless and would right-align whatever happened to land there. */
+.pivot-drill-down-table:not(:has(td.is-numeric)) td:nth-child(4),
+.pivot-drill-down-table:not(:has(td.is-numeric)) td:nth-child(n+6) {
   text-align: right;
 }
 

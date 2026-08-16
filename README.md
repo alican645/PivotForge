@@ -89,6 +89,7 @@ Reference the Razor Class Library assets. Load them in `<head>`, not at the end 
 <script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 ```
 
@@ -164,7 +165,7 @@ To capture the created widget instance (for example, to call `sortBy`, `setFilte
 @(Html.PivotForge().PivotGrid().Id("pivotGrid") /* ... */)
 ```
 
-The declarative API covers field configuration, sorting, filtering, drill-down, and Excel export. Saved views, conditional formatting, and selection/clipboard behavior are lower-level features and still use the manual `PivotTableRenderer` API described in the [ASP.NET Core integration guide](docs/aspnetcore-integration.md).
+The declarative API covers field configuration, sorting, filtering, value formats, drill-down (including a packaged detail modal, opened by double-clicking a cell), and Excel export. Saved views, conditional formatting, and selection/clipboard behavior are lower-level features and still use the manual `PivotTableRenderer` API described in the [ASP.NET Core integration guide](docs/aspnetcore-integration.md).
 
 ### Field Designer
 

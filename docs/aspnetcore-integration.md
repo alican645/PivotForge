@@ -97,6 +97,7 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 ```
 
@@ -111,6 +112,7 @@ The scripts add these members to `window.PivotForge`:
 - `PivotFieldDesigner`
 - `PivotViewStore`
 - `PivotDrillDownData`
+- `PivotDrillDownModal`
 - `PivotVirtualDataSource`
 
 ## Render a Result
@@ -243,6 +245,8 @@ emit identical markup.
 | `fetchImpl` | `null` | Override for `fetch`, mainly for tests. |
 | `renderImpl` | `null` | Replaces the built-in `PivotTableRenderer` entirely; when set, the widget has no renderer and `exportToExcel` cannot be used. |
 | `fieldDesigner` | `null` | A CSS selector (or element) for a [field designer](#field-designer) host. When set, `PivotWidget` builds a `PivotLayoutState` from `fields` and a `PivotFieldDesigner` bound to it, exposed as `widget.layoutState` and `widget.designer`. Requires `pivot-layout-state.js` and `pivot-field-designer.js` to be loaded before `pivot-widget.js` runs; omitting either throws. |
+| `drillDownModal` | `true` | Wires cell activation to the packaged `PivotDrillDownModal`. Set to `false` to keep `drillDown()` available while supplying your own detail UI. Ignored when `allowDrillDown` is `false`, and silently inert when `pivot-drill-down-modal.js` was not loaded. |
+| `drillDownModalOptions` | `null` | Passed to the `PivotDrillDownModal` constructor: `columns`, `labels`, `host`. |
 
 `create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
 
@@ -362,6 +366,57 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
 - **No sort panel.** Sorting is still driven through the widget's `sortBy`, outside the designer.
 - **Saved views are not wired up automatically.** `PivotViewStore` and the designer's state are both serializable, so a consumer can persist and restore designer layouts, but connecting the two is the consumer's responsibility — see the MVC demo for one approach.
 - **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.
+
+### Detail modal
+
+Double-clicking a data cell (or choosing **Detayı aç** from its context menu)
+opens the source records behind that cell. `PivotWidget` wires this up on its
+own: load `pivot-drill-down.js` and `pivot-drill-down-modal.js`, leave
+`AllowDrillDown` at its default, and a declarative page gets a working detail
+view without writing any JavaScript.
+
+The modal is built on first use, reused afterwards, and disposed with the
+widget. It provides a global search box, a per-column value filter, a CSV
+export of whatever is currently visible, and a notice when the server truncated
+the result at `DrillDownRecordLimit`.
+
+**Columns come from the declared fields.** Every field in the grid's catalog
+becomes a detail column, in declaration order, using its `caption` as the header
+and its [value format](#value-formats) to render numbers — so the detail table
+matches the pivot above it. Field names are matched against the record keys
+case-insensitively, because the field is declared `Amount` while ASP.NET Core's
+default JSON policy serializes the property as `amount`. A column is
+right-aligned when its declared format is numeric or its values are numbers.
+
+Two escape hatches:
+
+- If the detail records share no key with the catalog, every record key becomes
+  a column, labelled with the raw key.
+- `drillDownModalOptions.columns` replaces the derived list entirely, taking
+  `{ key, label, format?, numeric? }` entries where `format` is a function.
+
+```javascript
+PivotForge.create("#pivotGrid", {
+  fields,
+  drillDownModalOptions: {
+    columns: [
+      { key: "salesPerson", label: "Temsilci" },
+      { key: "amount", label: "Tutar", numeric: true,
+        format: value => value.toLocaleString("tr-TR") }
+    ],
+    labels: { title: "Source Records", close: "Close" }
+  }
+});
+```
+
+A consumer that supplies its own `rendererOptions.onCellDoubleClick` keeps it:
+the widget declares its handler before merging `rendererOptions`, so bringing
+your own detail UI overrides the packaged one rather than fighting it. Setting
+`drillDownModal: false` does the same without needing a handler.
+
+Labels default to Turkish and are overridable through
+`drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
+`summary`, and `columnFilter` are substituted positionally.
 
 ### Known limitations
 
