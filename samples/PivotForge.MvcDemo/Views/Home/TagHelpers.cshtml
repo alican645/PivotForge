@@ -49,6 +49,14 @@
                             allow-drill-down="true"
                             allow-excel-export="true"
                             source-row-count="@Model.Count"
+                            selection-mode="Single"
+                            layout-mode="Tabular"
+                            context-menu="true"
+                            subtotals="true"
+                            show-grand-total="true"
+                            repeat-row-labels="true"
+                            min-column-width="96"
+                            total-text="Genel Toplam"
                             field-designer="#designerHost">
                     <pivot-field field="Region" caption="Bölge" area="Row" />
                     <pivot-field field="Category" caption="Kategori" area="Row" />
@@ -73,6 +81,14 @@
             allow-drill-down="true"
             allow-excel-export="true"
             source-row-count="@@Model.Count"
+            selection-mode="Single"
+            layout-mode="Tabular"
+            context-menu="true"
+            subtotals="true"
+            show-grand-total="true"
+            repeat-row-labels="true"
+            min-column-width="96"
+            total-text="Genel Toplam"
             field-designer="#designerHost"&gt;
     &lt;pivot-field field="Region"      caption="Bölge"            area="Row" /&gt;
     &lt;pivot-field field="Category"    caption="Kategori"         area="Row" /&gt;

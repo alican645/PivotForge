@@ -47,6 +47,14 @@
                     .AllowDrillDown(true)
                     .AllowExcelExport(true)
                     .SourceRowCount(Model.Count)
+                    .SelectionMode(PivotSelectionMode.Single)
+                    .LayoutMode(PivotGridLayoutMode.Tabular)
+                    .ContextMenu(true)
+                    .Subtotals(true)
+                    .ShowGrandTotal(true)
+                    .RepeatRowLabels(true)
+                    .MinColumnWidth(96)
+                    .TotalText("Genel Toplam")
                     .FieldDesigner("#designerHost")
                     .Fields(fields =>
                     {
@@ -80,6 +88,14 @@
     .AllowDrillDown(true)
     .AllowExcelExport(true)
     .SourceRowCount(Model.Count)
+    .SelectionMode(PivotSelectionMode.Single)
+    .LayoutMode(PivotGridLayoutMode.Tabular)
+    .ContextMenu(true)
+    .Subtotals(true)
+    .ShowGrandTotal(true)
+    .RepeatRowLabels(true)
+    .MinColumnWidth(96)
+    .TotalText("Genel Toplam")
     .FieldDesigner("#designerHost")
     .Fields(fields =&gt;
     {

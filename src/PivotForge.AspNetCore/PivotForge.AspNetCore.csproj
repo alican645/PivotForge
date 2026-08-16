@@ -10,7 +10,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <PackageId>PivotForge.AspNetCore</PackageId>
-    <Version>0.4.0-preview.5</Version>
+    <Version>0.4.0-preview.6</Version>
     <Authors>Alican</Authors>
     <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge for ASP.NET Core</Title>
@@ -20,7 +20,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>The field designer's settings modal now covers naming, position, aggregation, show-as, number format and removal, with the current option marked on each choice. PivotLayoutState gains setCaption/declaredCaption for display captions and setShowAs for show-as calculations.</PackageReleaseNotes>
+    <PackageReleaseNotes>Ten renderer presentation options become declarable from Razor: selection-mode, layout-mode, context-menu, subtotals, show-grand-total, repeat-row-labels, min-column-width, max-column-width, empty-text and total-text, with matching PivotGridBuilder methods. Previously these needed hand-written JavaScript.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

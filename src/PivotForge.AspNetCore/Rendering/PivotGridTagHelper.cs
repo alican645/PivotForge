@@ -61,6 +61,52 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("field-designer")]
     public string? FieldDesigner { get; set; }
 
+    /// <summary>Gets or sets how a click on a cell selects.</summary>
+    /// <remarks>
+    /// Non-nullable so Razor accepts the unqualified member name (<c>selection-mode="None"</c>).
+    /// Whether the author wrote it is recovered from <see cref="TagHelperContext.AllAttributes"/>,
+    /// because the CLR default is indistinguishable from a written <c>Single</c>.
+    /// </remarks>
+    [HtmlAttributeName("selection-mode")]
+    public PivotSelectionMode SelectionMode { get; set; }
+
+    /// <summary>Gets or sets how row headers are arranged.</summary>
+    /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
+    [HtmlAttributeName("layout-mode")]
+    public PivotGridLayoutMode LayoutMode { get; set; }
+
+    /// <summary>Gets or sets whether the cell context menu is available.</summary>
+    [HtmlAttributeName("context-menu")]
+    public bool? ContextMenu { get; set; }
+
+    /// <summary>Gets or sets whether subtotal rows are shown.</summary>
+    [HtmlAttributeName("subtotals")]
+    public bool? Subtotals { get; set; }
+
+    /// <summary>Gets or sets whether the grand total is shown.</summary>
+    [HtmlAttributeName("show-grand-total")]
+    public bool? ShowGrandTotal { get; set; }
+
+    /// <summary>Gets or sets whether a row label repeats on every row it spans.</summary>
+    [HtmlAttributeName("repeat-row-labels")]
+    public bool? RepeatRowLabels { get; set; }
+
+    /// <summary>Gets or sets the narrowest a column may be, in pixels.</summary>
+    [HtmlAttributeName("min-column-width")]
+    public int? MinColumnWidth { get; set; }
+
+    /// <summary>Gets or sets the widest a column may be, in pixels.</summary>
+    [HtmlAttributeName("max-column-width")]
+    public int? MaxColumnWidth { get; set; }
+
+    /// <summary>Gets or sets the text shown in a cell that has no value.</summary>
+    [HtmlAttributeName("empty-text")]
+    public string? EmptyText { get; set; }
+
+    /// <summary>Gets or sets the caption used for total rows and columns.</summary>
+    [HtmlAttributeName("total-text")]
+    public string? TotalText { get; set; }
+
     /// <summary>Collects the declared fields and writes the grid markup.</summary>
     /// <param name="context">The tag helper context.</param>
     /// <param name="output">The output that receives the grid markup.</param>
@@ -70,6 +116,10 @@ public sealed class PivotGridTagHelper : TagHelper
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(output);
+
+        var written = new HashSet<string>(
+            context.AllAttributes.Select(attribute => attribute.Name),
+            StringComparer.OrdinalIgnoreCase);
 
         var declaredFields = new List<PivotFieldTagHelper>();
         context.Items[PivotFieldTagHelper.FieldsKey] = declaredFields;
@@ -127,6 +177,56 @@ public sealed class PivotGridTagHelper : TagHelper
         if (SourceRowCount is { } sourceRowCount)
         {
             builder.SourceRowCount(sourceRowCount);
+        }
+
+        if (written.Contains("selection-mode"))
+        {
+            builder.SelectionMode(SelectionMode);
+        }
+
+        if (written.Contains("layout-mode"))
+        {
+            builder.LayoutMode(LayoutMode);
+        }
+
+        if (ContextMenu is { } contextMenu)
+        {
+            builder.ContextMenu(contextMenu);
+        }
+
+        if (Subtotals is { } subtotals)
+        {
+            builder.Subtotals(subtotals);
+        }
+
+        if (ShowGrandTotal is { } showGrandTotal)
+        {
+            builder.ShowGrandTotal(showGrandTotal);
+        }
+
+        if (RepeatRowLabels is { } repeatRowLabels)
+        {
+            builder.RepeatRowLabels(repeatRowLabels);
+        }
+
+        if (MinColumnWidth is { } minColumnWidth)
+        {
+            builder.MinColumnWidth(minColumnWidth);
+        }
+
+        if (MaxColumnWidth is { } maxColumnWidth)
+        {
+            builder.MaxColumnWidth(maxColumnWidth);
+        }
+
+        if (EmptyText is { } emptyText)
+        {
+            builder.EmptyText(emptyText);
+        }
+
+        if (TotalText is { } totalText)
+        {
+            builder.TotalText(totalText);
         }
 
         if (CssClass is not null)

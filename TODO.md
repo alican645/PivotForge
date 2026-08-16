@@ -1,7 +1,7 @@
 # PivotForge — DevExpress Denklik Yol Haritası
 
 DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge'un
-`0.4.0-preview.5` sürümündeki durumu karşılaştırıldı. Kaynaklar dosyanın sonunda.
+`0.4.0-preview.6` sürümündeki durumu karşılaştırıldı. Kaynaklar dosyanın sonunda.
 
 **Kapsam dışı (talep üzerine):** OLAP / SSAS, sunucu tarafı toplama (server mode),
 uzaktan gruplama, milyon satır ölçeğinde sanal kaydırma.
@@ -26,19 +26,20 @@ Bugün tag helper 12 nitelik açıyor; hepsi davranış anahtarı. Renderer'ın 
 ~28 seçeneğin **hiçbir sunum seçeneği** bildirilemiyor. Bu bölüm yeni özellik değil —
 **zaten çalışan kodun önüne bildirim koymak.** En düşük maliyetli, en yüksek getirili iş.
 
-### 0.1 Sunum nitelikleri
+### 0.1 Sunum nitelikleri — ✅ `0.4.0-preview.6` ile tamamlandı
 
-Hepsi `rendererOptions`'a akar; mekanizma mevcut, yalnızca bildirimi yok.
+Hepsi `rendererOptions`'a akar. Bildirilmeyen seçenek payload'a hiç yazılmaz,
+böylece renderer kendi varsayılanını korur.
 
-- [ ] `selection-mode="None|Cell|Row"` → `selectionMode`
-- [ ] `context-menu="true|false"` → `contextMenu`
-- [ ] `subtotals="true|false"` → `subtotals`
-- [ ] `show-grand-total="true|false"` → `showGrandTotal`
-- [ ] `layout-mode="Tabular|Compact"` → `layoutMode`
-- [ ] `repeat-row-labels="true|false"` → `repeatRowLabels`
-- [ ] `min-column-width` / `max-column-width` → `minColumnWidth` / `maxColumnWidth`
-- [ ] `empty-text` / `total-text` → `emptyText` / `totalText`
-- [ ] Aynı seçenekler `PivotGridBuilder`'a fluent metot olarak
+- [x] `selection-mode="Single|None"` → `selectionMode` — renderer yalnızca bu ikisini tanıyor
+- [x] `context-menu="true|false"` → `contextMenu`
+- [x] `subtotals="true|false"` → `subtotals`
+- [x] `show-grand-total="true|false"` → `showGrandTotal`
+- [x] `layout-mode="Tabular|Compact"` → `layoutMode`
+- [x] `repeat-row-labels="true|false"` → `repeatRowLabels`
+- [x] `min-column-width` / `max-column-width` → `minColumnWidth` / `maxColumnWidth`
+- [x] `empty-text` / `total-text` → `emptyText` / `totalText`
+- [x] Aynı seçenekler `PivotGridBuilder`'a fluent metot olarak
 
 ### 0.2 Olay bildirimi
 
@@ -146,7 +147,7 @@ JS fonksiyonuyla çözülebilir. Tasarım kararı gerektirir.
 
 | Özellik | Durum |
 |---|---|
-| Tabular / Compact düzen | ⚠️ motorda var, bildirimi yok |
+| Tabular / Compact düzen | ✅ `layout-mode` |
 | Satır başlığı ağaç düzeni (`rowHeaderLayout: tree`) | ❌ |
 | `showTotalsPrior` — toplamları önde göster | ❌ |
 | `showBorders` | ❌ |
@@ -156,7 +157,6 @@ JS fonksiyonuyla çözülebilir. Tasarım kararı gerektirir.
 | `rtlEnabled` | ❌ |
 | Yükleme göstergesi (`loadPanel`) | ⚠️ `dataLoading` olayı var, hazır gösterge yok |
 
-- [ ] `layout-mode` ve `repeat-row-labels` nitelikleri (Bölüm 0.1)
 - [ ] Ağaç düzeni satır başlıkları
 - [ ] `show-totals-prior`
 - [ ] Paketlenmiş yükleme göstergesi

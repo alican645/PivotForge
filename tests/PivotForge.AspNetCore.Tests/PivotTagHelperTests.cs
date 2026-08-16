@@ -96,9 +96,20 @@ public class PivotTagHelperTests
     }
 
     /// <summary>Runs the grid tag helper with the supplied child field declarations.</summary>
-    private static async Task<string> RenderAsync(PivotGridTagHelper grid, params FieldSpec[] fields)
+    private static Task<string> RenderAsync(PivotGridTagHelper grid, params FieldSpec[] fields) =>
+        RenderAsync(grid, [], fields);
+
+    /// <param name="writtenAttributes">
+    /// The attribute names the view author wrote on the pivot-grid element. Only these
+    /// reach context.AllAttributes, which is how the grid tells a written enum member
+    /// from the CLR default.
+    /// </param>
+    private static async Task<string> RenderAsync(
+        PivotGridTagHelper grid, string[] writtenAttributes, params FieldSpec[] fields)
     {
-        var context = new TagHelperContext([], new Dictionary<object, object>(), "grid");
+        var gridAttributes = new TagHelperAttributeList(
+            writtenAttributes.Select(name => new TagHelperAttribute(name)));
+        var context = new TagHelperContext(gridAttributes, new Dictionary<object, object>(), "grid");
         var output = new TagHelperOutput(
             "pivot-grid",
             [],
@@ -415,5 +426,148 @@ public class PivotTagHelperTests
         var format = ConfigOf(html).GetProperty("fields")[0].GetProperty("format");
 
         Assert.Equal("number", format.GetProperty("type").GetString());
+    }
+
+    // --- Presentation options -------------------------------------------------
+    //
+    // These reach the browser renderer rather than the widget, so they travel in a
+    // nested "rendererOptions" object. The widget merges that over its own defaults.
+
+    [Fact]
+    public async Task OmitsRendererOptionsEntirelyWhenNoPresentationOptionIsDeclared()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.TryGetProperty("rendererOptions", out _));
+    }
+
+    [Fact]
+    public async Task WritesDeclaredPresentationOptionsUnderRendererOptions()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                Subtotals = false,
+                ShowGrandTotal = false,
+                ContextMenu = false,
+                RepeatRowLabels = true,
+                MinColumnWidth = 90,
+                MaxColumnWidth = 300,
+                EmptyText = "",
+                TotalText = "Genel"
+            },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var renderer = config.GetProperty("rendererOptions");
+        Assert.False(renderer.GetProperty("subtotals").GetBoolean());
+        Assert.False(renderer.GetProperty("showGrandTotal").GetBoolean());
+        Assert.False(renderer.GetProperty("contextMenu").GetBoolean());
+        Assert.True(renderer.GetProperty("repeatRowLabels").GetBoolean());
+        Assert.Equal(90, renderer.GetProperty("minColumnWidth").GetInt32());
+        Assert.Equal(300, renderer.GetProperty("maxColumnWidth").GetInt32());
+        Assert.Equal("", renderer.GetProperty("emptyText").GetString());
+        Assert.Equal("Genel", renderer.GetProperty("totalText").GetString());
+    }
+
+    [Fact]
+    public async Task LeavesUndeclaredPresentationOptionsOutOfRendererOptions()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", Subtotals = false },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var renderer = config.GetProperty("rendererOptions");
+        Assert.False(renderer.TryGetProperty("showGrandTotal", out _));
+        Assert.False(renderer.TryGetProperty("layoutMode", out _));
+    }
+
+    [Theory]
+    [InlineData(PivotSelectionMode.Single, "single")]
+    [InlineData(PivotSelectionMode.None, "none")]
+    public async Task WritesSelectionModeWhenTheAttributeIsWritten(
+        PivotSelectionMode mode, string expected)
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", SelectionMode = mode },
+            ["selection-mode"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(expected, config.GetProperty("rendererOptions").GetProperty("selectionMode").GetString());
+    }
+
+    [Fact]
+    public async Task OmitsSelectionModeWhenTheAttributeIsNotWritten()
+    {
+        // Single is the CLR default, so an unwritten attribute must not be mistaken
+        // for a deliberate "single" -- the renderer's own default has to win.
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", Subtotals = false },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.GetProperty("rendererOptions").TryGetProperty("selectionMode", out _));
+    }
+
+    [Theory]
+    [InlineData(PivotGridLayoutMode.Tabular, "tabular")]
+    [InlineData(PivotGridLayoutMode.Compact, "compact")]
+    public async Task WritesLayoutModeWhenTheAttributeIsWritten(
+        PivotGridLayoutMode mode, string expected)
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", LayoutMode = mode },
+            ["layout-mode"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(expected, config.GetProperty("rendererOptions").GetProperty("layoutMode").GetString());
+    }
+
+    [Fact]
+    public async Task PresentationOptionsMatchTheEquivalentBuilderConfiguration()
+    {
+        var fromTagHelper = await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                SelectionMode = PivotSelectionMode.None,
+                LayoutMode = PivotGridLayoutMode.Compact,
+                Subtotals = false,
+                MinColumnWidth = 90
+            },
+            ["selection-mode", "layout-mode"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum));
+
+        var fromBuilder = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid")
+            .SelectionMode(PivotSelectionMode.None)
+            .LayoutMode(PivotGridLayoutMode.Compact)
+            .Subtotals(false)
+            .MinColumnWidth(90)
+            .Fields(fields => fields.Add()
+                .DataField("Amount").Area(PivotArea.Data).Caption("Tutar")
+                .Aggregation(PivotAggregation.Sum)));
+
+        Assert.Equal(fromBuilder, fromTagHelper);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void RefusesAColumnWidthThatIsNotPositive(int width)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new PivotGridBuilder().MinColumnWidth(width));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new PivotGridBuilder().MaxColumnWidth(width));
+    }
+
+    [Fact]
+    public void RefusesABlankTotalTextButAcceptsAnEmptyPlaceholder()
+    {
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().TotalText("  "));
+        // An empty placeholder is meaningful: it renders nothing in an empty cell.
+        new PivotGridBuilder().EmptyText("");
     }
 }

@@ -15,6 +15,11 @@ public sealed class PivotGridBuilder : IHtmlContent
     };
 
     private readonly Dictionary<string, object?> _options = new(StringComparer.Ordinal);
+
+    // Presentation settings are forwarded to the browser renderer rather than the
+    // widget, so they are collected separately and emitted under "rendererOptions".
+    // Kept out of _options because the widget would otherwise treat them as its own.
+    private readonly Dictionary<string, object?> _rendererOptions = new(StringComparer.Ordinal);
     private readonly PivotFieldCollectionBuilder _fields = new();
     private string? _id;
     private string? _cssClass;
@@ -99,9 +104,87 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder FieldDesigner(string selector) => Set("fieldDesigner", selector);
 
+    /// <summary>Sets how a click on a cell selects.</summary>
+    /// <param name="mode">The selection mode.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder SelectionMode(PivotSelectionMode mode) =>
+        SetRenderer("selectionMode", mode == PivotSelectionMode.None ? "none" : "single");
+
+    /// <summary>Enables or disables the cell context menu.</summary>
+    /// <param name="enabled">True to show the context menu.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ContextMenu(bool enabled) => SetRenderer("contextMenu", enabled);
+
+    /// <summary>Shows or hides subtotal rows.</summary>
+    /// <param name="show">True to show subtotals.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder Subtotals(bool show) => SetRenderer("subtotals", show);
+
+    /// <summary>Shows or hides the grand total.</summary>
+    /// <param name="show">True to show the grand total.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ShowGrandTotal(bool show) => SetRenderer("showGrandTotal", show);
+
+    /// <summary>Sets how row headers are arranged.</summary>
+    /// <param name="mode">The layout mode.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder LayoutMode(PivotGridLayoutMode mode) =>
+        SetRenderer("layoutMode", mode == PivotGridLayoutMode.Compact ? "compact" : "tabular");
+
+    /// <summary>Repeats a row label on every row it spans instead of only the first.</summary>
+    /// <param name="repeat">True to repeat row labels.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder RepeatRowLabels(bool repeat) => SetRenderer("repeatRowLabels", repeat);
+
+    /// <summary>Sets the narrowest a column may be rendered or resized to, in pixels.</summary>
+    /// <param name="width">The minimum width. Must be greater than zero.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not greater than zero.</exception>
+    public PivotGridBuilder MinColumnWidth(int width)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(width, 0);
+        return SetRenderer("minColumnWidth", width);
+    }
+
+    /// <summary>Sets the widest a column may be rendered or resized to, in pixels.</summary>
+    /// <param name="width">The maximum width. Must be greater than zero.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not greater than zero.</exception>
+    public PivotGridBuilder MaxColumnWidth(int width)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(width, 0);
+        return SetRenderer("maxColumnWidth", width);
+    }
+
+    /// <summary>Sets the text shown in a cell that has no value.</summary>
+    /// <param name="text">The placeholder text. May be empty to render nothing.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The text is null.</exception>
+    public PivotGridBuilder EmptyText(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return SetRenderer("emptyText", text);
+    }
+
+    /// <summary>Sets the caption used for total rows and columns.</summary>
+    /// <param name="text">The total caption.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The text is null or blank.</exception>
+    public PivotGridBuilder TotalText(string text)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        return SetRenderer("totalText", text);
+    }
+
     private PivotGridBuilder Set(string key, object? value)
     {
         _options[key] = value;
+        return this;
+    }
+
+    private PivotGridBuilder SetRenderer(string key, object? value)
+    {
+        _rendererOptions[key] = value;
         return this;
     }
 
@@ -138,6 +221,13 @@ public sealed class PivotGridBuilder : IHtmlContent
         {
             ["fields"] = fields
         };
+
+        // Omitted entirely when nothing was declared, so the widget keeps passing
+        // its own renderer defaults through untouched.
+        if (_rendererOptions.Count > 0)
+        {
+            payload["rendererOptions"] = new Dictionary<string, object?>(_rendererOptions, StringComparer.Ordinal);
+        }
 
         var json = JsonSerializer.Serialize(payload, SerializerOptions)
             // Prevent any string value from terminating the surrounding script block.

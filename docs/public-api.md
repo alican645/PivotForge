@@ -1,6 +1,6 @@
 # Public API Surface
 
-This document records the supported public surface for `0.4.0-preview.5`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
+This document records the supported public surface for `0.4.0-preview.6`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
 
 ## PivotForge.Core
 
@@ -37,6 +37,8 @@ This document records the supported public surface for `0.4.0-preview.5`. Public
 - Cache contract: `IPivotForgeResultCache`, `PivotForgeResultCache`, `PivotForgeCacheEntry`.
 
 ### Declarative rendering
+
+`PivotSelectionMode` and `PivotGridLayoutMode` describe the renderer presentation options the grid can declare.
 
 - `PivotForge.AspNetCore.Rendering.PivotForgeHtmlHelperExtensions`: exposes `Html.PivotForge()` on `IHtmlHelper`.
 - `PivotForge.AspNetCore.Rendering.PivotForgeFactory`: creates component builders; `PivotGrid()` returns a `PivotGridBuilder`.

@@ -10,7 +10,7 @@ Interactive pivot tables forged for .NET.
 
 PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel export, saved views, selection, conditional formatting, and large-data workflows.
 
-> The current preview is `0.4.0-preview.5`.
+> The current preview is `0.4.0-preview.6`.
 
 ## Packages
 
@@ -26,8 +26,8 @@ Both packages can be consumed by .NET 8, .NET 9, and .NET 10 applications.
 After the preview is published to NuGet:
 
 ```bash
-dotnet add package PivotForge.Core --version 0.4.0-preview.5
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.5
+dotnet add package PivotForge.Core --version 0.4.0-preview.6
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.6
 ```
 
 Installing `PivotForge.AspNetCore` brings `PivotForge.Core` transitively.

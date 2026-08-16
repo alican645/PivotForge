@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.5
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.6
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -217,6 +217,35 @@ The same grid can be declared as markup. Register the tag helpers once, in
 write is omitted from the configuration, so the browser default applies —
 writing `allow-sorting="false"` disables sorting, but omitting it leaves
 sorting on.
+
+#### Presentation options
+
+These configure the browser renderer rather than the widget, and travel to it in a
+nested `rendererOptions` object. Anything left undeclared is omitted entirely, so
+the renderer keeps its own default.
+
+| Attribute | Builder | Default | Purpose |
+| --- | --- | --- | --- |
+| `selection-mode` | `SelectionMode(PivotSelectionMode)` | `Single` | `Single` selects the clicked cell; `None` disables selection. |
+| `layout-mode` | `LayoutMode(PivotGridLayoutMode)` | `Tabular` | `Tabular` gives each row field its own column; `Compact` indents them into one. |
+| `context-menu` | `ContextMenu(bool)` | `true` | The right-click cell menu. |
+| `subtotals` | `Subtotals(bool)` | `true` | Subtotal rows. |
+| `show-grand-total` | `ShowGrandTotal(bool)` | `true` | The grand total row. |
+| `repeat-row-labels` | `RepeatRowLabels(bool)` | `false` | Repeats a row label on every row it spans instead of only the first. |
+| `min-column-width` | `MinColumnWidth(int)` | `72` | Narrowest a column may be rendered or resized to, in pixels. Must be positive. |
+| `max-column-width` | `MaxColumnWidth(int)` | `420` | Widest a column may be, in pixels. Must be positive. |
+| `empty-text` | `EmptyText(string)` | `-` | Shown in a cell with no value. May be empty to render nothing. |
+| `total-text` | `TotalText(string)` | `Toplam` | Caption for total rows and columns. Must not be blank. |
+
+`selection-mode` and `layout-mode` are non-nullable enums so Razor accepts the
+unqualified member name; whether the attribute was written is recovered from
+`TagHelperContext.AllAttributes`, so an unwritten attribute is not mistaken for a
+deliberate `Single`/`Tabular`.
+
+Anything not listed here still needs `rendererOptions` through
+`PivotForge.create`, or the `pivotforge:ready` event — see
+[Known limitations](#known-limitations).
+
 
 `<pivot-field>` attributes are `field` (the source column, required),
 `caption`, `area`, `role`, `aggregation`, `show-as`, `format`, and `visible`.
