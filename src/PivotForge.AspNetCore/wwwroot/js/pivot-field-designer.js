@@ -12,6 +12,10 @@
     remove: "Kaldır",
     search: "Alan ara...",
     format: "Biçim",
+    settings: "Değer ayarları",
+    aggregation: "Özet",
+    formatDecimals: "Ondalık basamak",
+    close: "Kapat",
     formatGrouping: "Binlik ayracı",
     formatTypes: {
       number: "Sayı",
@@ -63,9 +67,11 @@
       // Filters the available-field list only; never touched by mutations, and
       // must survive the re-renders they trigger, so it lives on the instance.
       this.searchTerm = "";
-      // Which data field's format panel is expanded. Held on the instance so it
-      // survives the re-render every edit triggers.
-      this.openFormatFor = null;
+      // Which data field the settings modal is showing, or null. The modal
+      // lives outside the host, so it survives the re-render every edit
+      // triggers and does not need to be rebuilt by render().
+      this.settingsFor = null;
+      this.settings = null;
       this.render();
     }
 
@@ -77,7 +83,6 @@
       chip.className = "pivot-chip";
       chip.dataset.field = name;
       chip.draggable = true;
-      chip.textContent = field.caption;
       chip.addEventListener("dragstart", event => {
         this.draggedField = name;
         chip.classList.add("is-dragging");
@@ -89,49 +94,14 @@
         this.clearDropMarks();
       });
 
-      if (area === "data") {
-        const select = document.createElement("select");
-        select.className = "pivot-chip__aggregation";
-        select.dataset.action = "aggregation";
-        const current = this.state.getState().values.find(value => value.field === name);
-
-        AGGREGATIONS.forEach(aggregation => {
-          const option = document.createElement("option");
-          option.value = aggregation;
-          option.textContent = this.labels.aggregations[aggregation];
-          select.appendChild(option);
-        });
-
-        select.value = current?.aggregation ?? "sum";
-        select.addEventListener("change", event => {
-          this.apply(() => this.state.setAggregation(name, event.target.value));
-        });
-        chip.appendChild(select);
-
-        const toggle = document.createElement("button");
-        toggle.className = "pivot-chip__format-toggle";
-        toggle.dataset.action = "format-toggle";
-        toggle.textContent = "\u22ef";
-        toggle.setAttribute("aria-label", `${field.caption} \u2014 ${this.labels.format}`);
-        toggle.addEventListener("click", () => {
-          this.openFormatFor = this.openFormatFor === name ? null : name;
-          // A panel opening changes nothing the server cares about, so this
-          // re-renders directly instead of going through apply().
-          this.render();
-        });
-        chip.appendChild(toggle);
-
-        if (this.openFormatFor === name) {
-          chip.appendChild(this.createFormatPanel(name));
-        }
-      }
-
+      // Controls come first so they line up down the left edge of a zone,
+      // independent of how long each caption is.
       if (area !== "available") {
         const remove = document.createElement("button");
         remove.className = "pivot-chip__remove";
         remove.dataset.action = "remove";
-        remove.textContent = "×";
-        remove.setAttribute("aria-label", `${field.caption} — ${this.labels.remove}`);
+        remove.textContent = "\u00d7";
+        remove.setAttribute("aria-label", `${field.caption} \u2014 ${this.labels.remove}`);
 
         const isLastValue = area === "data" && this.state.getState().values.length === 1;
         if (isLastValue) {
@@ -143,6 +113,24 @@
 
         chip.appendChild(remove);
       }
+
+      // Aggregation and format used to sit inside the chip, which made a placed
+      // value chip several times the height of a plain one and left the zone
+      // ragged. They live in a modal now; the chip only offers the way in.
+      if (area === "data") {
+        const settings = document.createElement("button");
+        settings.className = "pivot-chip__settings";
+        settings.dataset.action = "settings";
+        settings.textContent = "\u22ef";
+        settings.setAttribute("aria-label", `${field.caption} \u2014 ${this.labels.settings}`);
+        settings.addEventListener("click", () => this.openSettings(name));
+        chip.appendChild(settings);
+      }
+
+      const label = document.createElement("span");
+      label.className = "pivot-chip__label";
+      label.textContent = field.caption;
+      chip.appendChild(label);
 
       return chip;
     }
@@ -161,12 +149,62 @@
       this.apply(() => this.state.setFormat(name, { ...stored, [member]: value }));
     }
 
-    createFormatPanel(name) {
-      const document = root.document;
-      const format = this.effectiveFormat(name);
+    // Value settings live in a modal rather than inside the chip: a chip that
+    // expands to hold three controls dwarfs its neighbours and makes a zone's
+    // drop geometry jump around mid-drag.
+    buildSettings() {
+      if (this.settings) {
+        return this.settings;
+      }
 
-      const panel = document.createElement("div");
-      panel.className = "pivot-chip__format";
+      const document = root.document;
+      const overlay = document.createElement("div");
+      overlay.className = "pivot-modal pivot-value-settings";
+      overlay.setAttribute("aria-hidden", "true");
+
+      const dialog = document.createElement("div");
+      dialog.className = "pivot-modal__dialog pivot-value-settings__dialog";
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-modal", "true");
+
+      const head = document.createElement("div");
+      head.className = "pivot-panel-head";
+      const title = document.createElement("h2");
+      const close = document.createElement("button");
+      close.className = "pivot-button";
+      close.dataset.action = "settings-close";
+      close.setAttribute("type", "button");
+      close.textContent = this.labels.close;
+      close.addEventListener("click", () => this.closeSettings());
+      head.appendChild(title);
+      head.appendChild(close);
+
+      const body = document.createElement("div");
+      body.className = "pivot-value-settings__body";
+
+      const row = (labelText, control) => {
+        const wrap = document.createElement("label");
+        wrap.className = "pivot-value-settings__row";
+        const caption = document.createElement("span");
+        caption.textContent = labelText;
+        wrap.appendChild(caption);
+        wrap.appendChild(control);
+        body.appendChild(wrap);
+        return control;
+      };
+
+      const aggregation = document.createElement("select");
+      aggregation.dataset.action = "aggregation";
+      AGGREGATIONS.forEach(entry => {
+        const option = document.createElement("option");
+        option.value = entry;
+        option.textContent = this.labels.aggregations[entry];
+        aggregation.appendChild(option);
+      });
+      aggregation.addEventListener("change", event => {
+        this.apply(() => this.state.setAggregation(this.settingsFor, event.target.value));
+      });
+      row(this.labels.aggregation, aggregation);
 
       const type = document.createElement("select");
       type.dataset.action = "format-type";
@@ -176,11 +214,10 @@
         option.textContent = this.labels.formatTypes[entry];
         type.appendChild(option);
       });
-      type.value = format.type;
       type.addEventListener("change", event => {
-        this.setFormatMember(name, "type", event.target.value);
+        this.setFormatMember(this.settingsFor, "type", event.target.value);
       });
-      panel.appendChild(type);
+      row(this.labels.format, type);
 
       const decimals = document.createElement("select");
       decimals.dataset.action = "format-decimals";
@@ -190,24 +227,67 @@
         option.textContent = String(entry);
         decimals.appendChild(option);
       });
-      decimals.value = String(format.decimals);
       decimals.addEventListener("change", event => {
         // The select reports a string; setFormat only accepts an integer.
-        this.setFormatMember(name, "decimals", Number(event.target.value));
+        this.setFormatMember(this.settingsFor, "decimals", Number(event.target.value));
       });
-      panel.appendChild(decimals);
+      row(this.labels.formatDecimals, decimals);
 
       const grouping = document.createElement("input");
       grouping.dataset.action = "format-grouping";
       grouping.setAttribute("type", "checkbox");
-      grouping.checked = format.useGrouping;
-      grouping.setAttribute("aria-label", this.labels.formatGrouping);
       grouping.addEventListener("change", event => {
-        this.setFormatMember(name, "useGrouping", event.target.checked);
+        this.setFormatMember(this.settingsFor, "useGrouping", event.target.checked);
       });
-      panel.appendChild(grouping);
+      row(this.labels.formatGrouping, grouping);
 
-      return panel;
+      dialog.appendChild(head);
+      dialog.appendChild(body);
+      overlay.appendChild(dialog);
+
+      // Only the overlay itself counts as a backdrop click, so a click that
+      // lands on a control inside the dialog does not close it.
+      overlay.addEventListener("click", event => {
+        if (event.target === overlay) {
+          this.closeSettings();
+        }
+      });
+
+      this.settingsKeydown = event => {
+        if (event.key === "Escape" && this.settingsFor) {
+          this.closeSettings();
+        }
+      };
+      root.document.addEventListener("keydown", this.settingsKeydown);
+
+      (root.document.body ?? this.host).appendChild(overlay);
+      this.settings = { overlay, title, aggregation, type, decimals, grouping };
+      return this.settings;
+    }
+
+    openSettings(name) {
+      const settings = this.buildSettings();
+      this.settingsFor = name;
+
+      const value = this.state.getState().values.find(entry => entry.field === name);
+      const format = this.effectiveFormat(name);
+
+      settings.title.textContent =
+        `${this.state.field(name).caption} \u2014 ${this.labels.settings}`;
+      settings.aggregation.value = value?.aggregation ?? "sum";
+      settings.type.value = format.type;
+      settings.decimals.value = String(format.decimals);
+      settings.grouping.checked = format.useGrouping;
+      settings.overlay.classList.add("is-open");
+      settings.overlay.setAttribute("aria-hidden", "false");
+    }
+
+    closeSettings() {
+      this.settingsFor = null;
+      if (this.settings) {
+        this.settings.overlay.classList.remove("is-open");
+        this.settings.overlay.setAttribute("aria-hidden", "true");
+      }
     }
 
     createZone(area) {
@@ -283,6 +363,17 @@
       return zone;
     }
 
+    // Whether dragging `name` back to the available list would be accepted.
+    // Mirrors what the × button allows, so the two gestures cannot disagree.
+    canReturn(name) {
+      const area = this.state.areaOf(name);
+      if (area === "available") {
+        return false;
+      }
+
+      return !(area === "data" && this.state.getState().values.length === 1);
+    }
+
     namesIn(area) {
       const state = this.state.getState();
       switch (area) {
@@ -304,6 +395,47 @@
       head.className = "pivot-section__head";
       head.textContent = this.labels.available;
       section.appendChild(head);
+
+      // Removing a field was only possible through its × button: a chip could be
+      // dragged out of the available list but never back into it, so the gesture
+      // worked in one direction only. Dropping here unplaces the field.
+      this.zoneElements.push(section);
+
+      section.addEventListener("dragover", event => {
+        const name = this.draggedField;
+        if (!name) {
+          return;
+        }
+
+        this.clearDropMarks();
+
+        if (!this.canReturn(name)) {
+          section.classList.add("is-drop-refused");
+          if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = "none";
+          }
+          return;
+        }
+
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = "move";
+        }
+        section.classList.add("is-empty-drop-target");
+      });
+
+      section.addEventListener("drop", event => {
+        const name = this.draggedField ?? event.dataTransfer?.getData?.("text/plain");
+        this.draggedField = null;
+        this.clearDropMarks();
+
+        if (!name || !this.canReturn(name)) {
+          return;
+        }
+
+        event.preventDefault();
+        this.apply(() => this.state.remove(name));
+      });
 
       const searchWrap = document.createElement("div");
       searchWrap.className = "pivot-search";
@@ -418,6 +550,15 @@
       }
 
       this.disposed = true;
+      this.closeSettings();
+
+      if (this.settingsKeydown) {
+        root.document.removeEventListener("keydown", this.settingsKeydown);
+        this.settingsKeydown = null;
+      }
+
+      this.settings?.overlay.remove?.();
+      this.settings = null;
       this.host.replaceChildren();
     }
   }

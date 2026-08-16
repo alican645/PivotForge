@@ -60,7 +60,24 @@ function createElement(tagName) {
   };
 }
 
-globalThis.document = { createElement };
+const documentBody = createElement("body");
+const documentListeners = new Map();
+globalThis.document = {
+  createElement,
+  body: documentBody,
+  addEventListener(name, handler) {
+    const handlers = documentListeners.get(name) ?? [];
+    handlers.push(handler);
+    documentListeners.set(name, handlers);
+  },
+  removeEventListener(name, handler) {
+    documentListeners.set(
+      name, (documentListeners.get(name) ?? []).filter(entry => entry !== handler));
+  },
+  dispatch(name, event = {}) {
+    [...(documentListeners.get(name) ?? [])].forEach(handler => handler(event));
+  }
+};
 
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-request-builder.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-layout-state.js");
@@ -162,8 +179,9 @@ test("renders a chip for every catalog field", () => {
 test("a chip carries the field caption, not its name", () => {
   const { host } = build();
   const chip = chips(host).find(entry => entry.dataset.field === "Region");
+  const label = Array.from(chip.children).find(child => child.className === "pivot-chip__label");
 
-  assert.equal(chip.textContent.includes("Bölge"), true);
+  assert.equal(label.textContent, "Bölge");
 });
 
 test("dropping a dimension into the rows zone updates the state and the widget once", async () => {
@@ -272,11 +290,12 @@ test("the remove control on the last data field is disabled and explains why", (
 
 test("changing an aggregation updates the state and the widget once", async () => {
   const { host, state, updates } = build();
-  const chip = chips(host).find(entry => entry.dataset.field === "Amount");
-  const select = Array.from(chip.children).find(child => child.dataset?.action === "aggregation");
 
-  select.value = "average";
-  select.dispatch("change", { target: select });
+  findByAction(chips(host).find(entry => entry.dataset.field === "Amount"), "settings")
+    .dispatch("click", {});
+  const panel = documentBody._children.findLast(
+    node => node.className?.includes("pivot-value-settings"));
+  findByAction(panel, "aggregation").dispatch("change", { target: { value: "average" } });
   await Promise.resolve();
 
   assert.equal(state.getState().values[0].aggregation, "average");
@@ -363,10 +382,11 @@ test("the search term survives a mutation-triggered re-render", async () => {
   search.dispatch("input", { target: search });
 
   // Trigger a mutation elsewhere, which calls render() and rebuilds the panel.
-  const chip = chips(host).find(entry => entry.dataset.field === "Amount");
-  const select = Array.from(chip.children).find(child => child.dataset?.action === "aggregation");
-  select.value = "average";
-  select.dispatch("change", { target: select });
+  findByAction(chips(host).find(entry => entry.dataset.field === "Amount"), "settings")
+    .dispatch("click", {});
+  const panel = documentBody._children.findLast(
+    node => node.className?.includes("pivot-value-settings"));
+  findByAction(panel, "aggregation").dispatch("change", { target: { value: "average" } });
   await Promise.resolve();
 
   search = findByAction(host, "search");
@@ -642,39 +662,76 @@ function buildWithFormat() {
 
 const dataChip = host => chips(host).find(chip => chip.dataset.field === "Amount");
 
-test("only data chips offer the format toggle", () => {
+// Value settings moved out of the chip into a modal, so the controls are found
+// on the overlay rather than inside the chip that opened it.
+function settingsPanel() {
+  return documentBody._children.findLast(node => node.className?.includes("pivot-value-settings"));
+}
+
+function openSettings(host) {
+  findByAction(dataChip(host), "settings").dispatch("click", {});
+  return settingsPanel();
+}
+
+const control = action => findByAction(settingsPanel(), action);
+
+test("only data chips offer the settings button", () => {
   const { host } = buildWithFormat();
 
-  assert.notEqual(findByAction(dataChip(host), "format-toggle"), null);
+  assert.notEqual(findByAction(dataChip(host), "settings"), null);
   assert.equal(
-    findByAction(chips(host).find(chip => chip.dataset.field === "Region"), "format-toggle"),
+    findByAction(chips(host).find(chip => chip.dataset.field === "Region"), "settings"),
     null);
 });
 
-test("the format panel stays closed until the toggle is used", () => {
+test("the chip holds no inline aggregation or format controls", () => {
   const { host } = buildWithFormat();
+  const chip = dataChip(host);
 
-  assert.equal(findByAction(dataChip(host), "format-type"), null);
+  assert.equal(findByAction(chip, "aggregation"), null);
+  assert.equal(findByAction(chip, "format-type"), null);
 });
 
-test("the toggle opens the panel, seeded with the current format", () => {
+test("the settings modal is not built until it is first opened", () => {
+  // The stub body is shared across tests, so this counts what this designer
+  // added rather than asserting the body is empty.
+  const before = documentBody._children.length;
+
+  buildWithFormat();
+
+  assert.equal(documentBody._children.length, before);
+});
+
+test("opening seeds the modal with the current aggregation and format", () => {
   const { host } = buildWithFormat();
 
-  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  const panel = openSettings(host);
 
-  const chip = dataChip(host);
-  assert.equal(findByAction(chip, "format-type").value, "currency");
-  assert.equal(findByAction(chip, "format-decimals").value, "0");
-  assert.equal(findByAction(chip, "format-grouping").checked, true);
+  assert.equal(panel.classList.contains("is-open"), true);
+  assert.equal(control("aggregation").value, "sum");
+  assert.equal(control("format-type").value, "currency");
+  assert.equal(control("format-decimals").value, "0");
+  assert.equal(control("format-grouping").checked, true);
+});
+
+test("changing the aggregation writes it to the state and refreshes once", async () => {
+  const { host, state, updates } = buildWithFormat();
+  openSettings(host);
+  updates.length = 0;
+
+  control("aggregation").dispatch("change", { target: { value: "average" } });
+  await Promise.resolve();
+
+  assert.equal(state.getState().values[0].aggregation, "average");
+  assert.equal(updates.length, 1);
 });
 
 test("changing the type writes it to the state and refreshes once", async () => {
   const { host, state, updates } = buildWithFormat();
-  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  openSettings(host);
   updates.length = 0;
 
-  findByAction(dataChip(host), "format-type")
-    .dispatch("change", { target: { value: "percent" } });
+  control("format-type").dispatch("change", { target: { value: "percent" } });
   await Promise.resolve();
 
   assert.equal(state.getState().values[0].format.type, "percent");
@@ -683,10 +740,9 @@ test("changing the type writes it to the state and refreshes once", async () => 
 
 test("changing the decimals writes a number, not the raw string", async () => {
   const { host, state } = buildWithFormat();
-  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  openSettings(host);
 
-  findByAction(dataChip(host), "format-decimals")
-    .dispatch("change", { target: { value: "3" } });
+  control("format-decimals").dispatch("change", { target: { value: "3" } });
   await Promise.resolve();
 
   assert.equal(state.getState().values[0].format.decimals, 3);
@@ -694,10 +750,9 @@ test("changing the decimals writes a number, not the raw string", async () => {
 
 test("toggling grouping writes a boolean", async () => {
   const { host, state } = buildWithFormat();
-  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  openSettings(host);
 
-  findByAction(dataChip(host), "format-grouping")
-    .dispatch("change", { target: { checked: false } });
+  control("format-grouping").dispatch("change", { target: { checked: false } });
   await Promise.resolve();
 
   assert.equal(state.getState().values[0].format.useGrouping, false);
@@ -705,10 +760,9 @@ test("toggling grouping writes a boolean", async () => {
 
 test("editing one member leaves the others intact", async () => {
   const { host, state } = buildWithFormat();
-  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  openSettings(host);
 
-  findByAction(dataChip(host), "format-decimals")
-    .dispatch("change", { target: { value: "2" } });
+  control("format-decimals").dispatch("change", { target: { value: "2" } });
   await Promise.resolve();
 
   assert.deepEqual(state.getState().values[0].format, {
@@ -716,39 +770,50 @@ test("editing one member leaves the others intact", async () => {
   });
 });
 
-test("the panel stays open across the re-render an edit causes", async () => {
+test("the modal survives the re-render an edit causes", async () => {
   const { host } = buildWithFormat();
-  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  openSettings(host);
 
-  findByAction(dataChip(host), "format-decimals")
-    .dispatch("change", { target: { value: "1" } });
+  control("format-decimals").dispatch("change", { target: { value: "1" } });
   await Promise.resolve();
 
-  assert.notEqual(findByAction(dataChip(host), "format-decimals"), null);
+  assert.equal(settingsPanel().classList.contains("is-open"), true);
 });
 
-test("the toggle closes an open panel", () => {
+test("the close button closes the modal", () => {
   const { host } = buildWithFormat();
+  const panel = openSettings(host);
 
-  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
-  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  findByAction(panel, "settings-close").dispatch("click", {});
 
-  assert.equal(findByAction(dataChip(host), "format-type"), null);
+  assert.equal(panel.classList.contains("is-open"), false);
 });
 
-test("a value with no declared format opens the panel on the renderer's defaults", () => {
-  const updates = [];
-  const state = new PivotForge.PivotLayoutState(catalog);
-  const host = createElement("div");
-  const designer = new PivotForge.PivotFieldDesigner(host, {
-    state,
-    widget: { update: async payload => { updates.push(payload); } }
-  });
+test("Escape closes the modal", () => {
+  const { host } = buildWithFormat();
+  const panel = openSettings(host);
 
-  const chip = chips(host).find(entry => entry.dataset.field === "Amount");
-  findByAction(chip, "format-toggle").dispatch("click", {});
+  globalThis.document.dispatch("keydown", { key: "Escape" });
 
-  assert.equal(findByAction(dataChip(host) ?? chip, "format-type").value, "number");
-  assert.equal(findByAction(chips(host).find(e => e.dataset.field === "Amount"), "format-decimals").value, "2");
-  void designer;
+  assert.equal(panel.classList.contains("is-open"), false);
+});
+
+test("a click on the backdrop closes, a click inside the dialog does not", () => {
+  const { host } = buildWithFormat();
+  const panel = openSettings(host);
+
+  panel.dispatch("click", { target: panel._children[0] });
+  assert.equal(panel.classList.contains("is-open"), true);
+
+  panel.dispatch("click", { target: panel });
+  assert.equal(panel.classList.contains("is-open"), false);
+});
+
+test("a value with no declared format opens on the renderer's defaults", () => {
+  const { host } = build();
+
+  openSettings(host);
+
+  assert.equal(control("format-type").value, "number");
+  assert.equal(control("format-decimals").value, "2");
 });

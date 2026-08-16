@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.3
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.4
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -366,9 +366,10 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
   be stated explicitly for a field declared `area="Available"`. Dragging a field
   where its role forbids marks the zone as refused and shows the platform's
   no-drop cursor; the drop is rejected.
+- **A placed field can be dragged back to the Fields list to remove it**, which does the same thing as its × button and obeys the same rule: the last remaining Values field cannot be removed either way.
 - **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
 - **No filter value picker.** A field can be dragged into the Filters zone, but there is no UI to choose which values to filter to. A filter with no selected values filters nothing — the same as an unset filter elsewhere in PivotForge — so the Filters zone alone does not yet do anything useful; a consumer must still add value selection.
-- **No show-as menu.** The designer edits aggregation and format; changing `showAs` still requires calling `updateFields`/`update` directly.
+- **No show-as menu.** The designer edits aggregation and format through a per-value settings modal, opened with the `⋯` button on a Values chip; changing `showAs` still requires calling `updateFields`/`update` directly.
 - **No sort panel.** Sorting is still driven through the widget's `sortBy`, outside the designer.
 - **Saved views are not wired up automatically.** `PivotViewStore` and the designer's state are both serializable, so a consumer can persist and restore designer layouts, but connecting the two is the consumer's responsibility — see the MVC demo for one approach.
 - **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.

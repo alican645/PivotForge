@@ -112,3 +112,63 @@ test("zone highlights do not survive the drag that caused them", async ({ page }
   await expect(page.locator(".pivot-zone.is-drop-refused")).toHaveCount(0);
   await expect(page.locator(".pivot-zone.is-empty-drop-target")).toHaveCount(0);
 });
+
+test("the remove control is the first thing in every placed chip", async ({ page }) => {
+  const order = await page.locator(chipIn("row", "Region")).evaluate(
+    chip => Array.from(chip.children).map(child => child.className));
+
+  expect(order[0]).toBe("pivot-chip__remove");
+});
+
+test("a value chip leads with remove, then settings, then the caption", async ({ page }) => {
+  const order = await page.locator(chipIn("data", "Amount")).evaluate(
+    chip => Array.from(chip.children).map(child => child.className));
+
+  expect(order).toEqual(["pivot-chip__remove", "pivot-chip__settings", "pivot-chip__label"]);
+});
+
+test("value settings open in a modal, not inside the chip", async ({ page }) => {
+  await expect(page.locator(".pivot-value-settings")).toHaveCount(0);
+
+  await page.locator(`${chipIn("data", "Amount")} [data-action="settings"]`).click();
+
+  await expect(page.locator(".pivot-value-settings.is-open")).toHaveCount(1);
+  await expect(page.locator(`${chipIn("data", "Amount")} select`)).toHaveCount(0);
+  await expect(
+    page.locator('.pivot-value-settings [data-action="aggregation"]')).toHaveValue("sum");
+});
+
+test("a setting changed in the modal reaches the pivot", async ({ page }) => {
+  await page.locator(`${chipIn("data", "Amount")} [data-action="settings"]`).click();
+  await page.selectOption('.pivot-value-settings [data-action="aggregation"]', "average");
+
+  // The designer re-renders on every edit; the modal must survive it.
+  await expect(page.locator(".pivot-value-settings.is-open")).toHaveCount(1);
+  await expect(
+    page.locator('.pivot-value-settings [data-action="aggregation"]')).toHaveValue("average");
+  expect(page.errors).toEqual([]);
+});
+
+test("a placed field can be dragged back to the available list", async ({ page }) => {
+  await expect(page.locator(chipIn("row", "Category"))).toHaveCount(1);
+
+  await page.dragAndDrop(chipIn("row", "Category"), ".pivot-field-list-panel");
+
+  await expect(page.locator(chipIn("row", "Category"))).toHaveCount(0);
+  await expect(page.locator(availableChip("Category"))).toHaveCount(1);
+  expect(page.errors).toEqual([]);
+});
+
+test("the last value field cannot be dragged out of Values", async ({ page }) => {
+  const source = page.locator(chipIn("data", "Amount"));
+  const target = page.locator(".pivot-field-list-panel");
+
+  await source.hover();
+  await page.mouse.down();
+  await target.hover();
+  await target.hover();
+  await expect(target).toHaveClass(/is-drop-refused/);
+  await page.mouse.up();
+
+  await expect(page.locator(chipIn("data", "Amount"))).toHaveCount(1);
+});
