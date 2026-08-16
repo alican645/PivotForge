@@ -5,7 +5,7 @@ PivotForge.AspNetCore adds reusable browser assets and minimal API endpoints to 
 ## Installation
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.4
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.5
 ```
 
 ## Register services

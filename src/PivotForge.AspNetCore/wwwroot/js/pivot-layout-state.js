@@ -51,6 +51,10 @@
       const normalized = PivotForge.PivotRequestBuilder.normalizeFields(catalog ?? []);
 
       this.catalog = new Map(normalized.map(field => [field.dataField, field]));
+      // A caption the user typed, overriding the catalog's. Kept apart from the
+      // catalog so resetting is just forgetting the override, and so the
+      // declared caption is always recoverable.
+      this.captions = new Map();
       this.handlers = new Map();
       this.layout = layout ? this.adoptLayout(layout) : this.layoutFromCatalog(normalized);
 
@@ -151,7 +155,34 @@
       if (!found) {
         throw new Error(`Field "${name}" is not in the catalog.`);
       }
-      return found;
+
+      const caption = this.captions.get(name);
+      // Every caption consumer — the chips, toFields(), the renderer's value
+      // labels, the detail modal's headers — reads through here, so an override
+      // applied once shows up everywhere without any of them knowing about it.
+      return caption === undefined ? found : { ...found, caption };
+    }
+
+    // The caption as declared, ignoring any override. What "reset" restores and
+    // what the rename box shows as its placeholder.
+    declaredCaption(name) {
+      this.field(name);
+      return this.catalog.get(name).caption;
+    }
+
+    // Sets or clears a display caption. A blank or catalog-matching value clears
+    // the override rather than storing a duplicate of the declared caption.
+    setCaption(name, caption) {
+      this.field(name);
+      const trimmed = typeof caption === "string" ? caption.trim() : "";
+
+      if (!trimmed || trimmed === this.declaredCaption(name)) {
+        this.captions.delete(name);
+      } else {
+        this.captions.set(name, trimmed);
+      }
+
+      this.emitChange();
     }
 
     areaOf(name) {
@@ -307,6 +338,23 @@
       this.emitChange();
     }
 
+    setShowAs(name, showAs) {
+      const value = this.layout.values.find(entry => entry.field === name);
+      if (!value) {
+        throw new Error(`Field "${name}" is not in the data area.`);
+      }
+
+      const { SHOW_AS } = PivotForge.PivotRequestBuilder;
+      if (!SHOW_AS.includes(showAs)) {
+        throw new Error(
+          `Unknown showAs "${showAs}". Expected one of: ${SHOW_AS.join(", ")}.`
+        );
+      }
+
+      value.showAs = showAs;
+      this.emitChange();
+    }
+
     getState() {
       const placed = new Set([
         ...this.layout.rows,
@@ -320,7 +368,10 @@
         columns: [...this.layout.columns],
         values: this.layout.values.map(value => ({ ...value })),
         filters: this.layout.filters.map(filter => ({ ...filter, values: [...filter.values] })),
-        available: [...this.catalog.keys()].filter(name => !placed.has(name))
+        available: [...this.catalog.keys()].filter(name => !placed.has(name)),
+        // Exposed so a consumer can persist renamed captions alongside a saved
+        // view. adoptLayout does not restore them yet.
+        captions: Object.fromEntries(this.captions)
       };
     }
 

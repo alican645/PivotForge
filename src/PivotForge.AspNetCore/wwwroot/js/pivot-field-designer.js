@@ -12,10 +12,28 @@
     remove: "Kaldır",
     search: "Alan ara...",
     format: "Biçim",
-    settings: "Değer ayarları",
-    aggregation: "Özet",
+    settings: "Alan ayarları",
+    aggregation: "Değer ayarları",
+    showAs: "Değerleri farklı göster",
+    formatting: "Biçimlendirme",
     formatDecimals: "Ondalık basamak",
+    fieldName: "Alan adı",
+    rename: "Adı değiştir",
+    resetName: "Sıfırla",
+    position: "Konum",
+    moveUp: "Yukarı taşı",
+    moveDown: "Aşağı taşı",
+    removeField: "Alanı kaldır",
     close: "Kapat",
+    showAsLabels: {
+      normal: "Normal",
+      percentOfRowTotal: "Satır toplamının %'si",
+      percentOfColumnTotal: "Sütun toplamının %'si",
+      percentOfGrandTotal: "Genel toplamın %'si",
+      differenceFromPrevious: "Öncekinden fark",
+      percentDifferenceFromPrevious: "Öncekinden % fark",
+      runningTotal: "Kümülatif toplam"
+    },
     formatGrouping: "Binlik ayracı",
     formatTypes: {
       number: "Sayı",
@@ -33,6 +51,15 @@
   };
 
   const ZONES = ["filter", "column", "row", "data"];
+  const SHOW_AS = [
+    "normal",
+    "percentOfRowTotal",
+    "percentOfColumnTotal",
+    "percentOfGrandTotal",
+    "differenceFromPrevious",
+    "percentDifferenceFromPrevious",
+    "runningTotal"
+  ];
   const FORMAT_TYPES = ["number", "currency", "percent"];
   const DECIMAL_CHOICES = [0, 1, 2, 3, 4, 5, 6];
   // What the renderer applies when a member is absent, so the panel opens
@@ -117,7 +144,7 @@
       // Aggregation and format used to sit inside the chip, which made a placed
       // value chip several times the height of a plain one and left the zone
       // ragged. They live in a modal now; the chip only offers the way in.
-      if (area === "data") {
+      if (area !== "available") {
         const settings = document.createElement("button");
         settings.className = "pivot-chip__settings";
         settings.dataset.action = "settings";
@@ -149,9 +176,10 @@
       this.apply(() => this.state.setFormat(name, { ...stored, [member]: value }));
     }
 
-    // Value settings live in a modal rather than inside the chip: a chip that
-    // expands to hold three controls dwarfs its neighbours and makes a zone's
-    // drop geometry jump around mid-drag.
+    // Field settings live in a modal rather than inside the chip: a chip that
+    // expands to hold its controls dwarfs its neighbours and makes a zone's
+    // drop geometry jump around mid-drag. The sections are rebuilt per open,
+    // because which of them apply depends on the field's area.
     buildSettings() {
       if (this.settings) {
         return this.settings;
@@ -182,65 +210,6 @@
       const body = document.createElement("div");
       body.className = "pivot-value-settings__body";
 
-      const row = (labelText, control) => {
-        const wrap = document.createElement("label");
-        wrap.className = "pivot-value-settings__row";
-        const caption = document.createElement("span");
-        caption.textContent = labelText;
-        wrap.appendChild(caption);
-        wrap.appendChild(control);
-        body.appendChild(wrap);
-        return control;
-      };
-
-      const aggregation = document.createElement("select");
-      aggregation.dataset.action = "aggregation";
-      AGGREGATIONS.forEach(entry => {
-        const option = document.createElement("option");
-        option.value = entry;
-        option.textContent = this.labels.aggregations[entry];
-        aggregation.appendChild(option);
-      });
-      aggregation.addEventListener("change", event => {
-        this.apply(() => this.state.setAggregation(this.settingsFor, event.target.value));
-      });
-      row(this.labels.aggregation, aggregation);
-
-      const type = document.createElement("select");
-      type.dataset.action = "format-type";
-      FORMAT_TYPES.forEach(entry => {
-        const option = document.createElement("option");
-        option.value = entry;
-        option.textContent = this.labels.formatTypes[entry];
-        type.appendChild(option);
-      });
-      type.addEventListener("change", event => {
-        this.setFormatMember(this.settingsFor, "type", event.target.value);
-      });
-      row(this.labels.format, type);
-
-      const decimals = document.createElement("select");
-      decimals.dataset.action = "format-decimals";
-      DECIMAL_CHOICES.forEach(entry => {
-        const option = document.createElement("option");
-        option.value = String(entry);
-        option.textContent = String(entry);
-        decimals.appendChild(option);
-      });
-      decimals.addEventListener("change", event => {
-        // The select reports a string; setFormat only accepts an integer.
-        this.setFormatMember(this.settingsFor, "decimals", Number(event.target.value));
-      });
-      row(this.labels.formatDecimals, decimals);
-
-      const grouping = document.createElement("input");
-      grouping.dataset.action = "format-grouping";
-      grouping.setAttribute("type", "checkbox");
-      grouping.addEventListener("change", event => {
-        this.setFormatMember(this.settingsFor, "useGrouping", event.target.checked);
-      });
-      row(this.labels.formatGrouping, grouping);
-
       dialog.appendChild(head);
       dialog.appendChild(body);
       overlay.appendChild(dialog);
@@ -261,23 +230,205 @@
       root.document.addEventListener("keydown", this.settingsKeydown);
 
       (root.document.body ?? this.host).appendChild(overlay);
-      this.settings = { overlay, title, aggregation, type, decimals, grouping };
+      this.settings = { overlay, title, body };
       return this.settings;
     }
 
-    openSettings(name) {
-      const settings = this.buildSettings();
-      this.settingsFor = name;
+    // A titled block in the modal.
+    settingsSection(titleText) {
+      const document = root.document;
+      const section = document.createElement("div");
+      section.className = "pivot-value-settings__section";
 
+      const heading = document.createElement("span");
+      heading.className = "pivot-value-settings__title";
+      heading.textContent = titleText;
+      section.appendChild(heading);
+
+      return section;
+    }
+
+    // A row of choice buttons where exactly one is current. The old hand-built
+    // menu used buttons rather than a select so the whole set of options is
+    // visible at once and the active one is legible without opening anything.
+    settingsChoices(parent, action, entries, current, onPick) {
+      const document = root.document;
+      const grid = document.createElement("div");
+      grid.className = "pivot-value-settings__grid";
+
+      entries.forEach(({ value, label }) => {
+        const button = document.createElement("button");
+        button.className = "pivot-value-settings__choice";
+        button.setAttribute("type", "button");
+        button.dataset.action = action;
+        button.dataset.value = String(value);
+        button.dataset.selected = String(value === current);
+        button.textContent = label;
+        button.addEventListener("click", () => onPick(value));
+        grid.appendChild(button);
+      });
+
+      parent.appendChild(grid);
+      return grid;
+    }
+
+    renderSettings(name) {
+      const document = root.document;
+      const settings = this.buildSettings();
+      const area = this.state.areaOf(name);
       const value = this.state.getState().values.find(entry => entry.field === name);
       const format = this.effectiveFormat(name);
 
       settings.title.textContent =
-        `${this.state.field(name).caption} \u2014 ${this.labels.settings}`;
-      settings.aggregation.value = value?.aggregation ?? "sum";
-      settings.type.value = format.type;
-      settings.decimals.value = String(format.decimals);
-      settings.grouping.checked = format.useGrouping;
+        `${this.state.field(name).caption} — ${this.labels.settings}`;
+      settings.body.replaceChildren();
+
+      // --- Field name -----------------------------------------------------
+      const naming = this.settingsSection(this.labels.fieldName);
+      const input = document.createElement("input");
+      input.className = "pivot-value-settings__input";
+      input.dataset.action = "caption";
+      input.setAttribute("type", "text");
+      input.value = this.state.field(name).caption;
+      input.setAttribute("placeholder", this.state.declaredCaption(name));
+      naming.appendChild(input);
+
+      const namingRow = document.createElement("div");
+      namingRow.className = "pivot-value-settings__row";
+
+      const rename = document.createElement("button");
+      rename.className = "pivot-value-settings__choice";
+      rename.setAttribute("type", "button");
+      rename.dataset.action = "rename";
+      rename.textContent = this.labels.rename;
+      rename.addEventListener("click", () => {
+        this.apply(() => this.state.setCaption(name, input.value));
+      });
+
+      const reset = document.createElement("button");
+      reset.className = "pivot-value-settings__choice";
+      reset.setAttribute("type", "button");
+      reset.dataset.action = "reset-caption";
+      reset.textContent = this.labels.resetName;
+      reset.addEventListener("click", () => {
+        this.apply(() => this.state.setCaption(name, ""));
+      });
+
+      namingRow.appendChild(rename);
+      namingRow.appendChild(reset);
+      naming.appendChild(namingRow);
+      settings.body.appendChild(naming);
+
+      // --- Position -------------------------------------------------------
+      const names = this.namesIn(area);
+      const index = names.indexOf(name);
+      const position = this.settingsSection(this.labels.position);
+      const positionRow = document.createElement("div");
+      positionRow.className = "pivot-value-settings__row";
+
+      const step = (action, label, target, enabled) => {
+        const button = document.createElement("button");
+        button.className = "pivot-value-settings__choice";
+        button.setAttribute("type", "button");
+        button.dataset.action = action;
+        button.textContent = label;
+        button.disabled = !enabled;
+        if (enabled) {
+          button.addEventListener("click", () => {
+            this.apply(() => this.state.move(name, area, target));
+          });
+        }
+        positionRow.appendChild(button);
+      };
+
+      // move() takes an index against the zone as it looks now, so moving down
+      // one slot means targeting index + 2: the field's own entry is still in
+      // the list and is compensated for on the way in.
+      step("move-up", this.labels.moveUp, index - 1, index > 0);
+      step("move-down", this.labels.moveDown, index + 2, index < names.length - 1);
+      position.appendChild(positionRow);
+      settings.body.appendChild(position);
+
+      if (area === "data") {
+        // --- Aggregation --------------------------------------------------
+        const aggregation = this.settingsSection(this.labels.aggregation);
+        this.settingsChoices(
+          aggregation,
+          "aggregation",
+          AGGREGATIONS.map(entry => ({ value: entry, label: this.labels.aggregations[entry] })),
+          value?.aggregation ?? "sum",
+          picked => this.apply(() => this.state.setAggregation(name, picked)));
+        settings.body.appendChild(aggregation);
+
+        // --- Show as ------------------------------------------------------
+        const showAs = this.settingsSection(this.labels.showAs);
+        // These labels are sentences rather than words, so they stack one per
+        // row instead of sharing the grid the shorter choices use.
+        this.settingsChoices(
+          showAs,
+          "show-as",
+          SHOW_AS.map(entry => ({ value: entry, label: this.labels.showAsLabels[entry] })),
+          value?.showAs ?? "normal",
+          picked => this.apply(() => this.state.setShowAs(name, picked))
+        ).classList.add("is-stacked");
+        settings.body.appendChild(showAs);
+
+        // --- Formatting ---------------------------------------------------
+        const formatting = this.settingsSection(this.labels.formatting);
+
+        const grouping = document.createElement("button");
+        grouping.className = "pivot-value-settings__choice";
+        grouping.setAttribute("type", "button");
+        grouping.dataset.action = "format-grouping";
+        grouping.dataset.selected = String(format.useGrouping);
+        grouping.textContent =
+          `${this.labels.formatGrouping}${format.useGrouping ? " ✓" : ""}`;
+        grouping.addEventListener("click", () => {
+          this.setFormatMember(name, "useGrouping", !format.useGrouping);
+        });
+        formatting.appendChild(grouping);
+
+        this.settingsChoices(
+          formatting,
+          "format-type",
+          FORMAT_TYPES.map(entry => ({ value: entry, label: this.labels.formatTypes[entry] })),
+          format.type,
+          picked => this.setFormatMember(name, "type", picked));
+
+        this.settingsChoices(
+          formatting,
+          "format-decimals",
+          DECIMAL_CHOICES.map(entry => ({ value: entry, label: String(entry) })),
+          format.decimals,
+          picked => this.setFormatMember(name, "decimals", picked));
+
+        settings.body.appendChild(formatting);
+      }
+
+      // --- Remove ---------------------------------------------------------
+      const remove = document.createElement("button");
+      remove.className = "pivot-value-settings__choice is-danger";
+      remove.setAttribute("type", "button");
+      remove.dataset.action = "remove";
+      remove.textContent = this.labels.removeField;
+
+      if (this.canReturn(name)) {
+        remove.addEventListener("click", () => {
+          this.closeSettings();
+          this.apply(() => this.state.remove(name));
+        });
+      } else {
+        remove.disabled = true;
+        remove.title = this.labels.lastValue;
+      }
+
+      settings.body.appendChild(remove);
+      return settings;
+    }
+
+    openSettings(name) {
+      this.settingsFor = name;
+      const settings = this.renderSettings(name);
       settings.overlay.classList.add("is-open");
       settings.overlay.setAttribute("aria-hidden", "false");
     }
@@ -535,6 +686,18 @@
       ZONES.forEach(area => grid.appendChild(this.createZone(area)));
 
       this.host.replaceChildren(this.createAvailable(), grid);
+
+      // Every edit re-renders; the modal lives outside the host and so must be
+      // refreshed by hand, or its selected states would show the value from
+      // before the edit. A field that left the layout has nothing left to
+      // configure, so its modal closes instead.
+      if (this.settingsFor) {
+        if (this.state.areaOf(this.settingsFor) === "available") {
+          this.closeSettings();
+        } else {
+          this.renderSettings(this.settingsFor);
+        }
+      }
     }
 
     async apply(mutation) {

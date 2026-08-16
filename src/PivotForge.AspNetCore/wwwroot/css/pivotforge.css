@@ -2191,24 +2191,87 @@ select {
 }
 
 .pivot-value-settings__dialog {
-  width: min(360px, calc(100vw - 32px));
+  width: min(420px, calc(100vw - 32px));
 }
 
 .pivot-value-settings__body {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   padding: 14px;
+  overflow: auto;
 }
 
-.pivot-value-settings__row {
+.pivot-value-settings__section {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--pt-border);
+}
+
+.pivot-value-settings__title {
+  color: var(--pt-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pivot-value-settings__input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--pt-border);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+}
+
+.pivot-value-settings__row,
+.pivot-value-settings__grid {
   display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.8125rem;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.pivot-value-settings__row select {
-  flex: 0 0 55%;
-  font-size: 0.8125rem;
+/* Sentence-length options read better one per row than wrapped in a grid. */
+.pivot-value-settings__grid.is-stacked {
+  flex-direction: column;
+}
+
+.pivot-value-settings__choice {
+  flex: 0 1 auto;
+  padding: 4px 10px;
+  border: 1px solid var(--pt-border);
+  border-radius: 4px;
+  background: var(--pt-panel);
+  color: var(--pt-text);
+  cursor: pointer;
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+.pivot-value-settings__choice:hover:not(:disabled) {
+  border-color: var(--pt-accent);
+}
+
+/* The current option, so the whole set stays readable at a glance -- the point
+   of using buttons here rather than a select. */
+.pivot-value-settings__choice[data-selected="true"] {
+  border-color: var(--pt-accent);
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--pt-accent);
+  font-weight: 600;
+}
+
+.pivot-value-settings__choice:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pivot-value-settings__choice.is-danger {
+  border-color: rgba(180, 35, 24, 0.4);
+  color: var(--pt-danger);
+}
+
+.pivot-value-settings__choice.is-danger:hover:not(:disabled) {
+  border-color: var(--pt-danger);
+  background: rgba(180, 35, 24, 0.06);
 }

@@ -127,26 +127,77 @@ test("a value chip leads with remove, then settings, then the caption", async ({
   expect(order).toEqual(["pivot-chip__remove", "pivot-chip__settings", "pivot-chip__label"]);
 });
 
-test("value settings open in a modal, not inside the chip", async ({ page }) => {
+test("field settings open in a modal, not inside the chip", async ({ page }) => {
   await expect(page.locator(".pivot-value-settings")).toHaveCount(0);
 
   await page.locator(`${chipIn("data", "Amount")} [data-action="settings"]`).click();
 
   await expect(page.locator(".pivot-value-settings.is-open")).toHaveCount(1);
   await expect(page.locator(`${chipIn("data", "Amount")} select`)).toHaveCount(0);
-  await expect(
-    page.locator('.pivot-value-settings [data-action="aggregation"]')).toHaveValue("sum");
+  await expect(page.locator(
+    '.pivot-value-settings [data-action="aggregation"][data-selected="true"]'))
+    .toHaveAttribute("data-value", "sum");
 });
 
-test("a setting changed in the modal reaches the pivot", async ({ page }) => {
+test("the modal carries every section the old chip menu had", async ({ page }) => {
   await page.locator(`${chipIn("data", "Amount")} [data-action="settings"]`).click();
-  await page.selectOption('.pivot-value-settings [data-action="aggregation"]', "average");
 
-  // The designer re-renders on every edit; the modal must survive it.
+  for (const action of ["caption", "rename", "reset-caption", "move-up", "move-down",
+    "aggregation", "show-as", "format-grouping", "format-type", "format-decimals", "remove"]) {
+    await expect(page.locator(`.pivot-value-settings [data-action="${action}"]`).first())
+      .toBeVisible();
+  }
+});
+
+test("a non-value chip shows naming and position but no value sections", async ({ page }) => {
+  await page.locator(`${chipIn("row", "Region")} [data-action="settings"]`).click();
+
+  await expect(page.locator('.pivot-value-settings [data-action="caption"]')).toBeVisible();
+  await expect(page.locator('.pivot-value-settings [data-action="aggregation"]')).toHaveCount(0);
+  await expect(page.locator('.pivot-value-settings [data-action="show-as"]')).toHaveCount(0);
+});
+
+test("picking an option re-marks the selection and reaches the pivot", async ({ page }) => {
+  await page.locator(`${chipIn("data", "Amount")} [data-action="settings"]`).click();
+
+  await page.locator('.pivot-value-settings [data-action="aggregation"][data-value="average"]')
+    .click();
+
   await expect(page.locator(".pivot-value-settings.is-open")).toHaveCount(1);
-  await expect(
-    page.locator('.pivot-value-settings [data-action="aggregation"]')).toHaveValue("average");
+  await expect(page.locator(
+    '.pivot-value-settings [data-action="aggregation"][data-selected="true"]'))
+    .toHaveAttribute("data-value", "average");
   expect(page.errors).toEqual([]);
+});
+
+test("renaming a field changes its chip caption", async ({ page }) => {
+  await page.locator(`${chipIn("row", "Region")} [data-action="settings"]`).click();
+  await page.fill('.pivot-value-settings [data-action="caption"]', "Satış Bölgesi");
+  await page.locator('.pivot-value-settings [data-action="rename"]').click();
+
+  await expect(page.locator(`${chipIn("row", "Region")} .pivot-chip__label`))
+    .toHaveText("Satış Bölgesi");
+
+  await page.locator('.pivot-value-settings [data-action="reset-caption"]').click();
+  await expect(page.locator(`${chipIn("row", "Region")} .pivot-chip__label`))
+    .toHaveText("Bölge");
+});
+
+test("move down from the modal reorders the zone", async ({ page }) => {
+  await page.locator(`${chipIn("row", "Region")} [data-action="settings"]`).click();
+  await page.locator('.pivot-value-settings [data-action="move-down"]').click();
+
+  const order = await page.locator(`${zoneBody("row")} .pivot-chip`).evaluateAll(
+    nodes => nodes.map(node => node.dataset.field));
+  expect(order).toEqual(["Category", "Region"]);
+});
+
+test("removing from the modal unplaces the field and closes the modal", async ({ page }) => {
+  await page.locator(`${chipIn("row", "Category")} [data-action="settings"]`).click();
+  await page.locator('.pivot-value-settings [data-action="remove"]').click();
+
+  await expect(page.locator(chipIn("row", "Category"))).toHaveCount(0);
+  await expect(page.locator(".pivot-value-settings.is-open")).toHaveCount(0);
 });
 
 test("a placed field can be dragged back to the available list", async ({ page }) => {

@@ -295,7 +295,8 @@ test("changing an aggregation updates the state and the widget once", async () =
     .dispatch("click", {});
   const panel = documentBody._children.findLast(
     node => node.className?.includes("pivot-value-settings"));
-  findByAction(panel, "aggregation").dispatch("change", { target: { value: "average" } });
+  const button = allByAction(panel, "aggregation").find(entry => entry.dataset.value === "average");
+  button.dispatch("click", {});
   await Promise.resolve();
 
   assert.equal(state.getState().values[0].aggregation, "average");
@@ -386,7 +387,9 @@ test("the search term survives a mutation-triggered re-render", async () => {
     .dispatch("click", {});
   const panel = documentBody._children.findLast(
     node => node.className?.includes("pivot-value-settings"));
-  findByAction(panel, "aggregation").dispatch("change", { target: { value: "average" } });
+  allByAction(panel, "aggregation")
+    .find(entry => entry.dataset.value === "average")
+    .dispatch("click", {});
   await Promise.resolve();
 
   search = findByAction(host, "search");
@@ -636,14 +639,17 @@ test("a target the role rule refuses is not marked", () => {
   assert.deepEqual(markedChips(body), []);
 });
 
-// --- Value format panel --------------------------------------------------
+// --- Field settings modal ------------------------------------------------
 //
-// Data chips carry a "⋯" toggle that opens an inline panel (not a floating
-// popup, which would need positioning and outside-click handling) holding the
-// format controls.
+// Every placed chip carries a "⋯" button opening a modal with the field's name,
+// its position in the zone, and — for a Values chip — aggregation, showAs and
+// number format. Two rows and one available field, so position and area-
+// dependent sections are both exercisable.
 
 const formatCatalog = [
   { dataField: "Region", caption: "Bölge", area: "row" },
+  { dataField: "Category", caption: "Kategori", area: "row" },
+  { dataField: "Quarter", caption: "Çeyrek", area: "available", role: "dimension" },
   {
     dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum",
     format: { type: "currency", decimals: 0, useGrouping: true, currency: "TRY" }
@@ -662,25 +668,42 @@ function buildWithFormat() {
 
 const dataChip = host => chips(host).find(chip => chip.dataset.field === "Amount");
 
-// Value settings moved out of the chip into a modal, so the controls are found
-// on the overlay rather than inside the chip that opened it.
+// Field settings moved out of the chip into a modal whose options are buttons
+// rather than selects, so a choice is picked by clicking the button carrying
+// its value and the current one is marked with data-selected.
 function settingsPanel() {
   return documentBody._children.findLast(node => node.className?.includes("pivot-value-settings"));
 }
 
-function openSettings(host) {
-  findByAction(dataChip(host), "settings").dispatch("click", {});
+function allByAction(node, action, found = []) {
+  if (node.dataset?.action === action) {
+    found.push(node);
+  }
+  Array.from(node.children).forEach(child => allByAction(child, action, found));
+  return found;
+}
+
+function openSettings(host, field = "Amount") {
+  findByAction(chips(host).find(chip => chip.dataset.field === field), "settings")
+    .dispatch("click", {});
   return settingsPanel();
 }
 
-const control = action => findByAction(settingsPanel(), action);
+const choice = (action, value) =>
+  allByAction(settingsPanel(), action).find(button => button.dataset.value === String(value));
 
-test("only data chips offer the settings button", () => {
+const selected = action =>
+  allByAction(settingsPanel(), action).find(button => button.dataset.selected === "true");
+
+test("every placed chip offers the settings button, available ones do not", () => {
   const { host } = buildWithFormat();
 
   assert.notEqual(findByAction(dataChip(host), "settings"), null);
-  assert.equal(
+  assert.notEqual(
     findByAction(chips(host).find(chip => chip.dataset.field === "Region"), "settings"),
+    null);
+  assert.equal(
+    findByAction(chips(zone(host, "available"))[0], "settings"),
     null);
 });
 
@@ -702,16 +725,78 @@ test("the settings modal is not built until it is first opened", () => {
   assert.equal(documentBody._children.length, before);
 });
 
-test("opening seeds the modal with the current aggregation and format", () => {
+test("opening marks the current aggregation, showAs and format", () => {
   const { host } = buildWithFormat();
 
-  const panel = openSettings(host);
+  openSettings(host);
 
-  assert.equal(panel.classList.contains("is-open"), true);
-  assert.equal(control("aggregation").value, "sum");
-  assert.equal(control("format-type").value, "currency");
-  assert.equal(control("format-decimals").value, "0");
-  assert.equal(control("format-grouping").checked, true);
+  assert.equal(selected("aggregation").dataset.value, "sum");
+  assert.equal(selected("show-as").dataset.value, "normal");
+  assert.equal(selected("format-type").dataset.value, "currency");
+  assert.equal(selected("format-decimals").dataset.value, "0");
+});
+
+test("the rename box is seeded with the caption and the declared one as placeholder", () => {
+  const { host, state } = buildWithFormat();
+  state.setCaption("Amount", "Ciro");
+
+  openSettings(host);
+
+  assert.equal(findByAction(settingsPanel(), "caption").value, "Ciro");
+  assert.equal(findByAction(settingsPanel(), "caption").attributes.placeholder, "Tutar");
+});
+
+test("renaming writes the caption and refreshes once", async () => {
+  const { host, state, updates } = buildWithFormat();
+  openSettings(host);
+  updates.length = 0;
+
+  findByAction(settingsPanel(), "caption").value = "Ciro";
+  findByAction(settingsPanel(), "rename").dispatch("click", {});
+  await Promise.resolve();
+
+  assert.equal(state.field("Amount").caption, "Ciro");
+  assert.equal(updates.length, 1);
+});
+
+test("resetting the name restores the declared caption", async () => {
+  const { host, state } = buildWithFormat();
+  state.setCaption("Amount", "Ciro");
+  openSettings(host);
+
+  findByAction(settingsPanel(), "reset-caption").dispatch("click", {});
+  await Promise.resolve();
+
+  assert.equal(state.field("Amount").caption, "Tutar");
+});
+
+test("move up is disabled for the first chip in its zone", () => {
+  const { host } = buildWithFormat();
+
+  openSettings(host, "Region");
+
+  assert.equal(findByAction(settingsPanel(), "move-up").disabled, true);
+  assert.equal(findByAction(settingsPanel(), "move-down").disabled, false);
+});
+
+test("move down reorders the zone", async () => {
+  const { host, state } = buildWithFormat();
+  openSettings(host, "Region");
+
+  findByAction(settingsPanel(), "move-down").dispatch("click", {});
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Category", "Region"]);
+});
+
+test("move up reorders the zone", async () => {
+  const { host, state } = buildWithFormat();
+  openSettings(host, "Category");
+
+  findByAction(settingsPanel(), "move-up").dispatch("click", {});
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Category", "Region"]);
 });
 
 test("changing the aggregation writes it to the state and refreshes once", async () => {
@@ -719,11 +804,21 @@ test("changing the aggregation writes it to the state and refreshes once", async
   openSettings(host);
   updates.length = 0;
 
-  control("aggregation").dispatch("change", { target: { value: "average" } });
+  choice("aggregation", "average").dispatch("click", {});
   await Promise.resolve();
 
   assert.equal(state.getState().values[0].aggregation, "average");
   assert.equal(updates.length, 1);
+});
+
+test("changing showAs writes it to the state", async () => {
+  const { host, state } = buildWithFormat();
+  openSettings(host);
+
+  choice("show-as", "percentOfRowTotal").dispatch("click", {});
+  await Promise.resolve();
+
+  assert.equal(state.getState().values[0].showAs, "percentOfRowTotal");
 });
 
 test("changing the type writes it to the state and refreshes once", async () => {
@@ -731,7 +826,7 @@ test("changing the type writes it to the state and refreshes once", async () => 
   openSettings(host);
   updates.length = 0;
 
-  control("format-type").dispatch("change", { target: { value: "percent" } });
+  choice("format-type", "percent").dispatch("click", {});
   await Promise.resolve();
 
   assert.equal(state.getState().values[0].format.type, "percent");
@@ -742,27 +837,31 @@ test("changing the decimals writes a number, not the raw string", async () => {
   const { host, state } = buildWithFormat();
   openSettings(host);
 
-  control("format-decimals").dispatch("change", { target: { value: "3" } });
+  choice("format-decimals", 3).dispatch("click", {});
   await Promise.resolve();
 
   assert.equal(state.getState().values[0].format.decimals, 3);
+  assert.equal(typeof state.getState().values[0].format.decimals, "number");
 });
 
-test("toggling grouping writes a boolean", async () => {
+test("the grouping button toggles rather than always setting the same value", async () => {
   const { host, state } = buildWithFormat();
   openSettings(host);
 
-  control("format-grouping").dispatch("change", { target: { checked: false } });
+  findByAction(settingsPanel(), "format-grouping").dispatch("click", {});
   await Promise.resolve();
-
   assert.equal(state.getState().values[0].format.useGrouping, false);
+
+  findByAction(settingsPanel(), "format-grouping").dispatch("click", {});
+  await Promise.resolve();
+  assert.equal(state.getState().values[0].format.useGrouping, true);
 });
 
 test("editing one member leaves the others intact", async () => {
   const { host, state } = buildWithFormat();
   openSettings(host);
 
-  control("format-decimals").dispatch("change", { target: { value: "2" } });
+  choice("format-decimals", 2).dispatch("click", {});
   await Promise.resolve();
 
   assert.deepEqual(state.getState().values[0].format, {
@@ -770,14 +869,45 @@ test("editing one member leaves the others intact", async () => {
   });
 });
 
-test("the modal survives the re-render an edit causes", async () => {
+test("the modal re-marks the new selection after an edit", async () => {
   const { host } = buildWithFormat();
   openSettings(host);
 
-  control("format-decimals").dispatch("change", { target: { value: "1" } });
+  choice("aggregation", "average").dispatch("click", {});
   await Promise.resolve();
 
   assert.equal(settingsPanel().classList.contains("is-open"), true);
+  assert.equal(selected("aggregation").dataset.value, "average");
+});
+
+test("removing from the modal unplaces the field and closes the modal", async () => {
+  const { host, state } = buildWithFormat();
+  const panel = openSettings(host, "Region");
+
+  findByAction(panel, "remove").dispatch("click", {});
+  await Promise.resolve();
+
+  assert.equal(state.getState().rows.includes("Region"), false);
+  assert.equal(panel.classList.contains("is-open"), false);
+});
+
+test("the last value field cannot be removed from the modal either", () => {
+  const { host } = buildWithFormat();
+
+  openSettings(host);
+
+  assert.equal(findByAction(settingsPanel(), "remove").disabled, true);
+});
+
+test("a non-data chip offers no aggregation or format sections", () => {
+  const { host } = buildWithFormat();
+
+  openSettings(host, "Region");
+
+  assert.equal(allByAction(settingsPanel(), "aggregation").length, 0);
+  assert.equal(allByAction(settingsPanel(), "show-as").length, 0);
+  assert.equal(allByAction(settingsPanel(), "format-type").length, 0);
+  assert.notEqual(findByAction(settingsPanel(), "caption"), null);
 });
 
 test("the close button closes the modal", () => {
@@ -814,6 +944,21 @@ test("a value with no declared format opens on the renderer's defaults", () => {
 
   openSettings(host);
 
-  assert.equal(control("format-type").value, "number");
-  assert.equal(control("format-decimals").value, "2");
+  assert.equal(selected("format-type").dataset.value, "number");
+  assert.equal(selected("format-decimals").dataset.value, "2");
+});
+
+test("a field unplaced while its modal is open closes the modal", () => {
+  // The remove button inside the modal closes it itself. This covers the other
+  // route out of the layout — the × on the chip, or a drag back to the field
+  // list — where nothing has told the modal its subject is gone.
+  const { host, state, designer } = buildWithFormat();
+  const panel = openSettings(host, "Region");
+  assert.equal(panel.classList.contains("is-open"), true);
+
+  // The × button's path: mutate, then re-render, with nobody telling the modal.
+  state.remove("Region");
+  designer.render();
+
+  assert.equal(panel.classList.contains("is-open"), false);
 });

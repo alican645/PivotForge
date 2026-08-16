@@ -625,3 +625,86 @@ test("adoptLayout keeps a stored format", () => {
 
   assert.deepEqual(state.getState().values[0].format, { type: "percent", decimals: 1 });
 });
+
+test("a caption override reaches every consumer of field()", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  state.setCaption("Region", "Satış Bölgesi");
+
+  assert.equal(state.field("Region").caption, "Satış Bölgesi");
+  assert.equal(
+    state.toFields().find(field => field.dataField === "Region").caption,
+    "Satış Bölgesi");
+});
+
+test("the declared caption stays recoverable behind an override", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+  state.setCaption("Region", "Satış Bölgesi");
+
+  assert.equal(state.declaredCaption("Region"), "Bölge");
+});
+
+test("clearing a caption restores the declared one", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+  state.setCaption("Region", "Satış Bölgesi");
+
+  state.setCaption("Region", "");
+
+  assert.equal(state.field("Region").caption, "Bölge");
+  assert.deepEqual(state.getState().captions, {});
+});
+
+test("a caption equal to the declared one is not stored as an override", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  state.setCaption("Region", "Bölge");
+
+  assert.deepEqual(state.getState().captions, {});
+});
+
+test("a caption is trimmed before it is stored", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  state.setCaption("Region", "  Satış Bölgesi  ");
+
+  assert.equal(state.field("Region").caption, "Satış Bölgesi");
+});
+
+test("setting a caption emits a change", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+  let changes = 0;
+  state.on("change", () => { changes++; });
+
+  state.setCaption("Region", "Satış Bölgesi");
+
+  assert.equal(changes, 1);
+});
+
+test("an unknown field cannot be renamed", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  assert.throws(() => state.setCaption("Nope", "x"), /catalog/);
+});
+
+test("showAs is written to the value entry and carried into the fields", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  state.setShowAs("Amount", "percentOfRowTotal");
+
+  assert.equal(state.getState().values[0].showAs, "percentOfRowTotal");
+  assert.equal(
+    state.toFields().find(field => field.dataField === "Amount").showAs,
+    "percentOfRowTotal");
+});
+
+test("an unknown showAs is refused rather than coerced", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  assert.throws(() => state.setShowAs("Amount", "nonsense"), /Unknown showAs/);
+});
+
+test("showAs cannot be set on a field outside the data area", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  assert.throws(() => state.setShowAs("Region", "normal"), /not in the data area/);
+});
