@@ -6,13 +6,27 @@ require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-layout-state.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-field-designer.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-widget.js");
 
+// Real DOM `children` is an HTMLCollection: length, indexed access and iteration,
+// but no Array.prototype methods. The stub mirrors that contract so production
+// code cannot lean on array methods that do not exist in a browser.
+function asChildren(items) {
+  const collection = {
+    length: items.length,
+    item: index => items[index] ?? null,
+    [Symbol.iterator]: () => items[Symbol.iterator]()
+  };
+  items.forEach((item, index) => { collection[index] = item; });
+  return collection;
+}
+
 // A DOM stub sufficient for the field designer's render() to run: element
 // creation, class lists, children, and event listeners. Used only by the
 // fieldDesigner integration tests below, which construct a real designer.
 function createDesignerElement(tagName) {
   return {
     tagName: tagName.toUpperCase(),
-    children: [],
+    _children: [],
+    get children() { return asChildren(this._children); },
     listeners: new Map(),
     dataset: {},
     attributes: {},
@@ -28,8 +42,8 @@ function createDesignerElement(tagName) {
       remove(...names) { names.forEach(name => this.names.delete(name)); },
       contains(name) { return this.names.has(name); }
     },
-    appendChild(child) { this.children.push(child); return child; },
-    replaceChildren(...nodes) { this.children = nodes; },
+    appendChild(child) { this._children.push(child); return child; },
+    replaceChildren(...nodes) { this._children = nodes; },
     setAttribute(name, value) { this.attributes[name] = value; },
     addEventListener(name, handler) {
       const handlers = this.listeners.get(name) ?? [];
@@ -68,7 +82,8 @@ function createContainer() {
   return {
     className: "",
     textContent: "",
-    children: [],
+    _children: [],
+    get children() { return asChildren(this._children); },
     classList: {
       names: new Set(),
       add(name) { this.names.add(name); },
@@ -76,8 +91,8 @@ function createContainer() {
       toggle(name, on) { on ? this.names.add(name) : this.names.delete(name); },
       contains(name) { return this.names.has(name); }
     },
-    replaceChildren(...nodes) { this.children = nodes; },
-    appendChild(node) { this.children.push(node); return node; }
+    replaceChildren(...nodes) { this._children = nodes; },
+    appendChild(node) { this._children.push(node); return node; }
   };
 }
 

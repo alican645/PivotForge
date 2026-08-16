@@ -11,12 +11,26 @@ const fields = [
   { caption: "Tutar", dataField: "tutar", area: "data", aggregation: "sum" }
 ];
 
+// Real DOM `children` is an HTMLCollection: length, indexed access and iteration,
+// but no Array.prototype methods. The stub mirrors that contract so production
+// code cannot lean on array methods that do not exist in a browser.
+function asChildren(items) {
+  const collection = {
+    length: items.length,
+    item: index => items[index] ?? null,
+    [Symbol.iterator]: () => items[Symbol.iterator]()
+  };
+  items.forEach((item, index) => { collection[index] = item; });
+  return collection;
+}
+
 function createContainer() {
   return {
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-    replaceChildren() { this.children = []; },
-    appendChild(node) { (this.children ??= []).push(node); return node; },
-    children: []
+    replaceChildren() { this._children = []; },
+    appendChild(node) { (this._children ??= []).push(node); return node; },
+    _children: [],
+    get children() { return asChildren(this._children); }
   };
 }
 

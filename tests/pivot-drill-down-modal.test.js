@@ -1,12 +1,28 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+// Real DOM `children` is an HTMLCollection: length and indexed access only, with
+// no Array.prototype methods on it. The stub mirrors that contract exactly, so
+// production code cannot lean on array methods that do not exist in a browser.
+function asChildren(items) {
+  const collection = {
+    length: items.length,
+    item: index => items[index] ?? null,
+    // A real HTMLCollection is iterable, so Array.from and spread work on it —
+    // it just has no Array.prototype methods of its own.
+    [Symbol.iterator]: () => items[Symbol.iterator]()
+  };
+  items.forEach((item, index) => { collection[index] = item; });
+  return collection;
+}
+
 // A DOM stub sufficient for the modal: element creation, class lists, children,
 // attributes and event listeners. The modal must not need more than this.
 function createElement(tagName) {
   return {
     tagName: tagName.toUpperCase(),
-    children: [],
+    _children: [],
+    get children() { return asChildren(this._children); },
     listeners: new Map(),
     dataset: {},
     attributes: {},
@@ -25,8 +41,8 @@ function createElement(tagName) {
       contains(name) { return this.names.has(name); },
       toggle(name, on) { on ? this.names.add(name) : this.names.delete(name); }
     },
-    appendChild(child) { this.children.push(child); return child; },
-    replaceChildren(...nodes) { this.children = nodes; },
+    appendChild(child) { this._children.push(child); return child; },
+    replaceChildren(...nodes) { this._children = nodes; },
     remove() { this.removed = true; },
     setAttribute(name, value) { this.attributes[name] = value; },
     click() { this.clicked++; },
@@ -123,7 +139,7 @@ function find(node, predicate, found = []) {
   if (predicate(node)) {
     found.push(node);
   }
-  node.children.forEach(child => find(child, predicate, found));
+  Array.from(node.children).forEach(child => find(child, predicate, found));
   return found;
 }
 
@@ -132,7 +148,7 @@ const byTag = (node, name) => find(node, entry => entry.tagName === name.toUpper
 
 function rowsOf(host) {
   const tbody = byTag(host, "tbody")[0];
-  return tbody.children.map(row => row.children.map(cell => cell.textContent));
+  return Array.from(tbody.children).map(row => Array.from(row.children).map(cell => cell.textContent));
 }
 
 test("the modal builds nothing until it is first opened", () => {
@@ -147,7 +163,7 @@ test("opening renders one row per record, with declared captions as headers", as
   await modal.open(selection);
 
   const headerRow = byTag(host, "thead")[0].children[0];
-  assert.deepEqual(headerRow.children.map(cell => cell.textContent),
+  assert.deepEqual(Array.from(headerRow.children).map(cell => cell.textContent),
     ["Bölge", "Kategori", "Tutar", "Miktar"]);
   assert.equal(rowsOf(host).length, 3);
 });
@@ -182,7 +198,7 @@ test("a record shape sharing no key with the catalog falls back to raw keys", as
   await modal.open(selection);
 
   const headerRow = byTag(host, "thead")[0].children[0];
-  assert.deepEqual(headerRow.children.map(cell => cell.textContent),
+  assert.deepEqual(Array.from(headerRow.children).map(cell => cell.textContent),
     ["region", "category", "amount", "quantity"]);
 });
 
@@ -194,7 +210,7 @@ test("an explicit column list overrides the catalog", async () => {
   await modal.open(selection);
 
   const headerRow = byTag(host, "thead")[0].children[0];
-  assert.deepEqual(headerRow.children.map(cell => cell.textContent), ["Yalnızca kategori"]);
+  assert.deepEqual(Array.from(headerRow.children).map(cell => cell.textContent), ["Yalnızca kategori"]);
 });
 
 test("numeric columns are marked so they can be right-aligned", async () => {

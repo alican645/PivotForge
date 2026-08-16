@@ -1,12 +1,28 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+// Real DOM `children` is an HTMLCollection: length and indexed access only, with
+// no Array.prototype methods on it. The stub mirrors that contract exactly, so
+// production code cannot lean on array methods that do not exist in a browser.
+function asChildren(items) {
+  const collection = {
+    length: items.length,
+    item: index => items[index] ?? null,
+    // A real HTMLCollection is iterable, so Array.from and spread work on it —
+    // it just has no Array.prototype methods of its own.
+    [Symbol.iterator]: () => items[Symbol.iterator]()
+  };
+  items.forEach((item, index) => { collection[index] = item; });
+  return collection;
+}
+
 // A DOM stub sufficient for the designer: element creation, class lists,
 // children, and event listeners. The designer must not need more than this.
 function createElement(tagName) {
   return {
     tagName: tagName.toUpperCase(),
-    children: [],
+    _children: [],
+    get children() { return asChildren(this._children); },
     listeners: new Map(),
     dataset: {},
     attributes: {},
@@ -27,8 +43,8 @@ function createElement(tagName) {
     // assign `rect` to lay chips out; anything unplaced reports a zero box.
     rect: null,
     getBoundingClientRect() { return this.rect ?? { top: 0, bottom: 0, height: 0 }; },
-    appendChild(child) { this.children.push(child); return child; },
-    replaceChildren(...nodes) { this.children = nodes; },
+    appendChild(child) { this._children.push(child); return child; },
+    replaceChildren(...nodes) { this._children = nodes; },
     setAttribute(name, value) { this.attributes[name] = value; },
     addEventListener(name, handler) {
       const handlers = this.listeners.get(name) ?? [];
@@ -75,7 +91,7 @@ function chips(node, found = []) {
   if (node.dataset?.field) {
     found.push(node);
   }
-  node.children.forEach(child => chips(child, found));
+  Array.from(node.children).forEach(child => chips(child, found));
   return found;
 }
 
@@ -248,7 +264,7 @@ test("dragover accepts a valid target", () => {
 test("the remove control on the last data field is disabled and explains why", () => {
   const { host } = build();
   const chip = chips(host).find(entry => entry.dataset.field === "Amount");
-  const remove = chip.children.find(child => child.dataset?.action === "remove");
+  const remove = Array.from(chip.children).find(child => child.dataset?.action === "remove");
 
   assert.equal(remove.disabled, true);
   assert.equal(remove.title.length > 0, true);
@@ -257,7 +273,7 @@ test("the remove control on the last data field is disabled and explains why", (
 test("changing an aggregation updates the state and the widget once", async () => {
   const { host, state, updates } = build();
   const chip = chips(host).find(entry => entry.dataset.field === "Amount");
-  const select = chip.children.find(child => child.dataset?.action === "aggregation");
+  const select = Array.from(chip.children).find(child => child.dataset?.action === "aggregation");
 
   select.value = "average";
   select.dispatch("change", { target: select });
@@ -348,7 +364,7 @@ test("the search term survives a mutation-triggered re-render", async () => {
 
   // Trigger a mutation elsewhere, which calls render() and rebuilds the panel.
   const chip = chips(host).find(entry => entry.dataset.field === "Amount");
-  const select = chip.children.find(child => child.dataset?.action === "aggregation");
+  const select = Array.from(chip.children).find(child => child.dataset?.action === "aggregation");
   select.value = "average";
   select.dispatch("change", { target: select });
   await Promise.resolve();
@@ -413,13 +429,13 @@ test("a designer without a state throws", () => {
 const CHIP_HEIGHT = 20;
 
 function zoneBody(host, area) {
-  return zone(host, area).children.find(child => child.className === "pivot-zone__body");
+  return Array.from(zone(host, area).children).find(child => child.className === "pivot-zone__body");
 }
 
 // Gives every chip in `area` a box, stacked top to bottom in render order.
 function layOutZone(host, area) {
   const body = zoneBody(host, area);
-  body.children.forEach((chip, index) => {
+  Array.from(body.children).forEach((chip, index) => {
     chip.rect = {
       top: index * CHIP_HEIGHT,
       bottom: (index + 1) * CHIP_HEIGHT,
@@ -446,7 +462,7 @@ function buildWithThreeRows() {
 }
 
 function markedChips(body) {
-  return body.children
+  return Array.from(body.children)
     .filter(chip =>
       chip.classList.contains("is-drop-before") || chip.classList.contains("is-drop-after"))
     .map(chip => ({

@@ -330,7 +330,9 @@
         return body.children.length;
       }
 
-      const found = body.children.findIndex(chip => {
+      // `children` is an HTMLCollection, which has length and indexed access but
+      // none of Array.prototype — so it has to be copied before findIndex.
+      const found = Array.from(body.children).findIndex(chip => {
         const rect = chip.getBoundingClientRect();
         return clientY < rect.top + (rect.height / 2);
       });
@@ -357,7 +359,8 @@
 
     clearDropMarks() {
       (this.zoneBodies ?? []).forEach(body => {
-        body.children.forEach(chip => {
+        // Same HTMLCollection constraint as dropIndex: copy before iterating.
+        Array.from(body.children).forEach(chip => {
           chip.classList.remove("is-drop-before", "is-drop-after");
         });
       });
