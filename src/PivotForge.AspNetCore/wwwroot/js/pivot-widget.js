@@ -122,8 +122,27 @@
         // Declared before the spread so a consumer driving sorting through
         // rendererOptions keeps ownership until this widget actually sorts.
         sortState: this.rowSort,
+        // Left unset, the renderer auto-detects a single value key from the
+        // payload, labels it with that raw key and applies no format — so
+        // captions are lost and a second data field disappears.
+        values: this.valueDefinitions(),
         ...(this.options.rendererOptions ?? {})
       });
+    }
+
+    // Describes the data-area fields for the renderer, in declaration order.
+    // The key must match how the server keys its cells and totals, which is
+    // exactly what PivotRequestBuilder.valueKey produces.
+    valueDefinitions() {
+      return this.fields
+        .filter(field => field.visible && field.area === "data")
+        .map(field => ({
+          key: PivotForge.PivotRequestBuilder.valueKey(field),
+          label: field.caption,
+          aggregation: field.aggregation,
+          showAs: field.showAs,
+          format: field.format
+        }));
     }
 
     // The renderer is built once and reused across refreshes, so a sort applied

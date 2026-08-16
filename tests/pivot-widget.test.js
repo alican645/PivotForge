@@ -601,3 +601,126 @@ test("the active sort survives the renderer rebuild that update({ fields }) perf
     widget.dispose();
   });
 });
+
+// --- Value definitions ---------------------------------------------------
+//
+// Without a `values` list the renderer falls back to auto-detecting a single
+// key from the payload, labelling it with that raw key ("tutar_sum") and
+// applying no format. The widget already knows the captions, aggregations and
+// formats, so it must hand them over.
+
+test("each data field reaches the renderer as a value definition", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.deepEqual(renders.at(-1).values, [
+      { key: "tutar_sum", label: "Tutar", aggregation: "sum", showAs: "normal", format: null }
+    ]);
+
+    widget.dispose();
+  });
+});
+
+test("a second data field is not dropped, as the renderer's own fallback would drop it", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const widget = PivotForge.create(createContainer(), {
+      fields: [
+        { caption: "Ürün", dataField: "urun", area: "row" },
+        { caption: "Tutar", dataField: "tutar", area: "data", aggregation: "sum" },
+        { caption: "Adet", dataField: "adet", area: "data", aggregation: "average" }
+      ],
+      autoLoad: false,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.deepEqual(renders.at(-1).values.map(value => value.key), ["tutar_sum", "adet_average"]);
+    assert.deepEqual(renders.at(-1).values.map(value => value.label), ["Tutar", "Adet"]);
+
+    widget.dispose();
+  });
+});
+
+test("a declared format travels to the renderer", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const format = { type: "currency", decimals: 0, useGrouping: true, currency: "TRY" };
+    const widget = PivotForge.create(createContainer(), {
+      fields: [
+        { caption: "Ürün", dataField: "urun", area: "row" },
+        { caption: "Tutar", dataField: "tutar", area: "data", aggregation: "sum", format }
+      ],
+      autoLoad: false,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.deepEqual(renders.at(-1).values[0].format, format);
+
+    widget.dispose();
+  });
+});
+
+test("only data fields become value definitions", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.equal(renders.at(-1).values.length, 1);
+
+    widget.dispose();
+  });
+});
+
+test("changing the fields rebuilds the value definitions", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.update({
+      fields: [
+        { caption: "Ürün", dataField: "urun", area: "row" },
+        { caption: "Adet", dataField: "adet", area: "data", aggregation: "max" }
+      ]
+    });
+
+    assert.deepEqual(renders.at(-1).values.map(value => value.key), ["adet_max"]);
+
+    widget.dispose();
+  });
+});
+
+// The MVC demo builds richer value definitions of its own (display labels,
+// show-as suffixes, per-value formats) and passes them through rendererOptions.
+test("a consumer-supplied values list survives", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const consumerValues = [{ key: "tutar_sum", label: "Ciro (₺)", format: { type: "currency" } }];
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      rendererOptions: { values: consumerValues },
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.deepEqual(renders.at(-1).values, consumerValues);
+
+    widget.dispose();
+  });
+});
