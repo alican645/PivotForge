@@ -1,0 +1,94 @@
+@model IReadOnlyList<SalesRecord>
+@{
+    ViewData["Title"] = "TagHelper örneği";
+}
+
+<main class="pivot-shell">
+    <header class="pivot-topbar">
+        <div class="pivot-brand">
+            <strong>TagHelper ile pivot tablo</strong>
+            <span>@Model.Count kayıt · <code>&lt;pivot-grid&gt;</code> ve <code>&lt;pivot-field&gt;</code> etiketleri</span>
+        </div>
+        <nav class="pivot-actions">
+            <a class="pivot-button" asp-controller="Home" asp-action="Index">Tam demo</a>
+            <a class="pivot-button primary" asp-controller="Home" asp-action="HtmlHelper">HTML Helper sürümü</a>
+        </nav>
+    </header>
+
+    <section class="pivot-content">
+        <div class="pivot-card">
+            <div class="pivot-panel-head">
+                <h2>Nasıl çalışıyor?</h2>
+            </div>
+            <p>
+                Bu sayfa tek satır elle yazılmış JavaScript içermiyor. Etiketler hem kapsayıcı
+                işaretlemeyi hem de onu ayağa kaldıran <code>PivotForge.create</code> çağrısını
+                üretiyor; veri <code>Program.cs</code> içinde
+                <code>AddPivotForge&lt;SalesRecord&gt;</code> ile kaydedilen sağlayıcıdan geliyor.
+            </p>
+            <p>
+                <a asp-controller="Home" asp-action="HtmlHelper">HTML Helper sürümü</a> birebir aynı
+                tabloyu üretir — tek fark bildirimin işaretleme mi yoksa C# mi olduğudur.
+                Etiketleri kullanmak için görünümde
+                <code>@@addTagHelper *, PivotForge.AspNetCore</code> satırı gerekir; bu demoda
+                <code>Views/_ViewImports.cshtml</code> içinde tanımlı.
+            </p>
+        </div>
+
+        <div class="pivot-workspace">
+            <aside class="pivot-sidebar" aria-label="PivotTable alanları">
+                @* The packaged designer owns this element and replaces its children,
+                   so nothing else may live inside it. *@
+                <div id="designerHost" aria-label="Pivot alan tasarımcısı"></div>
+            </aside>
+
+            <div class="pivot-card">
+                <pivot-grid id="pivotGrid"
+                            allow-sorting="true"
+                            allow-filtering="true"
+                            allow-drill-down="true"
+                            allow-excel-export="true"
+                            source-row-count="@Model.Count"
+                            field-designer="#designerHost">
+                    <pivot-field field="Region" caption="Bölge" area="Row" />
+                    <pivot-field field="Category" caption="Kategori" area="Row" />
+                    <pivot-field field="Year" caption="Yıl" area="Column" />
+                    <pivot-field field="Amount" caption="Tutar" area="Data" aggregation="Sum" />
+                    <pivot-field field="SalesPerson" caption="Satış Temsilcisi" area="Available" role="Dimension" />
+                    <pivot-field field="Quarter" caption="Çeyrek" area="Available" role="Dimension" />
+                    <pivot-field field="Quantity" caption="Miktar" area="Available" role="Measure" />
+                    <pivot-field field="Discount" caption="İskonto" area="Available" role="Measure" />
+                </pivot-grid>
+            </div>
+        </div>
+
+        <div class="pivot-card">
+            <div class="pivot-panel-head">
+                <h2>Kaynağı</h2>
+            </div>
+            <pre><code>&lt;pivot-grid id="pivotGrid"
+            allow-sorting="true"
+            allow-filtering="true"
+            allow-drill-down="true"
+            allow-excel-export="true"
+            source-row-count="@@Model.Count"
+            field-designer="#designerHost"&gt;
+    &lt;pivot-field field="Region"      caption="Bölge"            area="Row" /&gt;
+    &lt;pivot-field field="Category"    caption="Kategori"         area="Row" /&gt;
+    &lt;pivot-field field="Year"        caption="Yıl"              area="Column" /&gt;
+    &lt;pivot-field field="Amount"      caption="Tutar"            area="Data" aggregation="Sum" /&gt;
+    &lt;pivot-field field="SalesPerson" caption="Satış Temsilcisi" area="Available" role="Dimension" /&gt;
+    &lt;pivot-field field="Quarter"     caption="Çeyrek"           area="Available" role="Dimension" /&gt;
+    &lt;pivot-field field="Quantity"    caption="Miktar"           area="Available" role="Measure" /&gt;
+    &lt;pivot-field field="Discount"    caption="İskonto"          area="Available" role="Measure" /&gt;
+&lt;/pivot-grid&gt;</code></pre>
+            <p>
+                <code>area</code>, <code>aggregation</code> ve <code>role</code> nitelikleri enum'a
+                bağlanır; <code>area="Roww"</code> gibi bir yazım hatası tarayıcıda değil, Razor
+                derlemesinde hata verir. <code>area="Available"</code> olan alanlar tabloya
+                yerleştirilmez ama tasarımcıda sürüklenmeye hazır bekler; bu yüzden
+                <code>role</code> zorunludur.
+            </p>
+        </div>
+    </section>
+</main>
