@@ -166,7 +166,7 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | `caption` | the `dataField` value | Display label. |
 | `role` | inferred from `area` | One of `dimension`, `measure`. **Required** when `area` is `available`, because there is no placement to infer it from. Elsewhere it is inferred (`data` → `measure`, everything else → `dimension`); an explicit `role` that contradicts its `area` — e.g., `measure` outside `data` — is a validation error. See [role rules](#field-designer). |
 | `aggregation` | `"sum"` (only on `data` fields) | One of `sum`, `count`, `average`, `min`, `max`. Setting `aggregation` on a non-`data` field is a validation error. |
-| `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`. |
+| `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`. Setting `showAs` on a non-`data` field is a validation error. |
 | `format` | `null` | A format identifier understood by the browser renderer. |
 | `visible` | `true` | `false` configures a field without including it in the rendered request. |
 
@@ -322,7 +322,7 @@ Pure state — no DOM access. Constructed with `new PivotLayoutState(catalog, la
 | `getState()` | Returns `{ rows, columns, values, filters, available }` — `available` is every catalog field not currently placed. |
 | `toFields()` | Converts the current layout into the field-array shape `PivotForge.create`/`updateFields` accept. |
 | `toRequestState()` | Returns `{ fields, filters }` shaped for `widget.update(...)` — `filters` is pre-filtered to entries that actually have selected values. |
-| `on("change", handler)` | Subscribes to layout mutations; fires once per successful `move`/`remove`/`reorder`/`setAggregation` call, with the current `getState()` as the payload. Returns an unsubscribe function. |
+| `on("change", handler)` | Subscribes to layout mutations; fires once per successful `move`/`remove`/`reorder`/`setAggregation` call, with the current `getState()` as the payload. Returns an unsubscribe function. `remove()` on a field already in `available` is a no-op — it does not fire `change`, because it did not actually move or remove anything. |
 
 The catalog is fixed at construction — it is every field the grid declared, regardless of area — so removing a placed field always returns it to `available`, and it can be dragged back in later.
 
@@ -343,11 +343,13 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
 
 #### Limitations
 
-- **Desktop only.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices. It does not work on tablets or phones in this version.
+- **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
+- **No in-zone reordering by dragging.** `drop` always calls `move()` without an index, and `canDrop()` refuses a drop into a field's current area, so dropping always appends to the end of a zone; there is no way to drag a placed field to a specific position within its own zone, and row/column order determines the pivot's grouping hierarchy. `PivotLayoutState.reorder(area, fromIndex, toIndex)` exists and is fully supported, but it is programmatic only — a consumer must call it directly (e.g., from custom drag handles) to offer in-zone reordering through the UI.
 - **No filter value picker.** A field can be dragged into the Filters zone, but there is no UI to choose which values to filter to. A filter with no selected values filters nothing — the same as an unset filter elsewhere in PivotForge — so the Filters zone alone does not yet do anything useful; a consumer must still add value selection.
 - **No show-as menu or per-value format UI.** `PivotLayoutState` exposes `setAggregation` only; changing `showAs` or `format` still requires calling `updateFields`/`update` directly.
 - **No sort panel.** Sorting is still driven through the widget's `sortBy`, outside the designer.
 - **Saved views are not wired up automatically.** `PivotViewStore` and the designer's state are both serializable, so a consumer can persist and restore designer layouts, but connecting the two is the consumer's responsibility — see the MVC demo for one approach.
+- **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.
 
 ### Known limitations
 

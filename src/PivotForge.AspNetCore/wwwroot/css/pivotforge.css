@@ -1035,6 +1035,16 @@ select {
   background: var(--pt-accent-strong);
 }
 
+.pivot-field-list-panel {
+  display: grid;
+  gap: 0;
+  margin-bottom: 8px;
+  border: 1px solid var(--pt-border);
+  border-radius: 3px;
+  background: var(--pt-panel);
+  overflow: visible;
+}
+
 .pivot-layout-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

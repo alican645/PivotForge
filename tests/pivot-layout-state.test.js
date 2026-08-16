@@ -131,6 +131,71 @@ test("reorder moves a field within its area", () => {
   assert.deepEqual(state.getState().rows, ["Category", "Region"]);
 });
 
+test("reorder moves a field to a middle index, distinguishable from an append", () => {
+  const state = create();
+  state.move("Quarter", "row"); // rows: ["Region", "Category", "Quarter"]
+
+  state.reorder("row", 0, 1);
+
+  // An append (ignoring toIndex) would give ["Category", "Quarter", "Region"].
+  assert.deepEqual(state.getState().rows, ["Category", "Region", "Quarter"]);
+});
+
+// Object-array areas (values, filters) go through the same reorder() path as the
+// plain-name areas (rows, columns), but hold {field, ...} objects instead of bare
+// names — worth covering separately since a slice/splice mistake could behave
+// differently against objects.
+const reorderCatalog = [
+  { dataField: "A", caption: "A", area: "data", aggregation: "sum" },
+  { dataField: "B", caption: "B", area: "data", aggregation: "sum" },
+  { dataField: "C", caption: "C", area: "data", aggregation: "sum" },
+  { dataField: "X", caption: "X", area: "filter" },
+  { dataField: "Y", caption: "Y", area: "filter" },
+  { dataField: "Z", caption: "Z", area: "filter" }
+];
+
+test("reorder moves a value entry to a middle index", () => {
+  const state = new PivotForge.PivotLayoutState(reorderCatalog);
+
+  state.reorder("data", 0, 1);
+
+  assert.deepEqual(state.getState().values.map(value => value.field), ["B", "A", "C"]);
+});
+
+test("reorder moves a filter entry to a middle index", () => {
+  const state = new PivotForge.PivotLayoutState(reorderCatalog);
+
+  state.reorder("filter", 0, 1);
+
+  assert.deepEqual(state.getState().filters.map(filter => filter.field), ["Y", "X", "Z"]);
+});
+
+test("reorder rejects a fromIndex outside the area's bounds, including negative", () => {
+  const state = create();
+
+  assert.throws(() => state.reorder("row", -1, 0), /index -1 in area "row"/);
+  assert.throws(() => state.reorder("row", 5, 0), /index 5 in area "row"/);
+});
+
+test("reorder rejects a toIndex outside the area's bounds, including negative", () => {
+  const state = create();
+
+  assert.throws(() => state.reorder("row", 0, -1), /area "row"/);
+  assert.throws(() => state.reorder("row", 0, 5), /area "row"/);
+});
+
+test("an out-of-bounds reorder leaves the state untouched and emits no change", () => {
+  const state = create();
+  const before = state.getState();
+  let changes = 0;
+  state.on("change", () => changes++);
+
+  assert.throws(() => state.reorder("row", -1, 0));
+
+  assert.deepEqual(state.getState(), before);
+  assert.equal(changes, 0);
+});
+
 test("setAggregation changes a data field", () => {
   const state = create();
 
@@ -156,6 +221,25 @@ test("getState returns a copy that cannot mutate the state", () => {
   assert.deepEqual(state.getState().rows, ["Region", "Category"]);
 });
 
+test("getState returns value entries that cannot mutate the state", () => {
+  const state = create();
+  const snapshot = state.getState();
+
+  snapshot.values[0].aggregation = "count";
+
+  assert.equal(state.getState().values[0].aggregation, "sum");
+});
+
+test("getState returns filter entries that cannot mutate the state", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  const snapshot = state.getState();
+
+  snapshot.filters[0].values.push("Q1");
+
+  assert.deepEqual(state.getState().filters[0].values, []);
+});
+
 test("toFields produces a list buildRequest accepts", () => {
   const state = create();
   state.move("Quarter", "filter");
@@ -173,6 +257,23 @@ test("toRequestState carries fields and filters but never rowSort", () => {
   assert.equal(Array.isArray(requestState.fields), true);
   assert.deepEqual(requestState.filters, []);
   assert.equal("rowSort" in requestState, false);
+});
+
+test("toRequestState keeps a filter with selected values but drops one with none", () => {
+  // docs/aspnetcore-integration.md documents filters as pre-filtered to entries
+  // that actually have a selection; construct one of each kind via adoptLayout,
+  // since PivotLayoutState has no interactive way to populate filter values.
+  const state = new PivotForge.PivotLayoutState(catalog, {
+    rows: [],
+    columns: [],
+    values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+    filters: [
+      { field: "Quarter", values: ["Q1"] },
+      { field: "Region", values: [] }
+    ]
+  });
+
+  assert.deepEqual(state.toRequestState().filters, [{ field: "Quarter", values: ["Q1"] }]);
 });
 
 test("each mutation emits exactly one change event", () => {
@@ -242,4 +343,94 @@ test("a catalog without a data field throws", () => {
     () => new PivotForge.PivotLayoutState([{ dataField: "Region", area: "row" }]),
     /at least one field in the data area/
   );
+});
+
+test("an explicit layout with an unknown aggregation is rejected at construction, not later", () => {
+  assert.throws(
+    () => new PivotForge.PivotLayoutState(catalog, {
+      rows: [],
+      columns: [],
+      values: [{ field: "Amount", aggregation: "median", showAs: "normal" }],
+      filters: []
+    }),
+    /unknown aggregation "median"/
+  );
+});
+
+test("an explicit layout with an unknown showAs is rejected at construction", () => {
+  assert.throws(
+    () => new PivotForge.PivotLayoutState(catalog, {
+      rows: [],
+      columns: [],
+      values: [{ field: "Amount", aggregation: "sum", showAs: "medianOfPrevious" }],
+      filters: []
+    }),
+    /unknown showAs "medianOfPrevious"/
+  );
+});
+
+test("an explicit layout seating a measure outside the data area is rejected", () => {
+  assert.throws(
+    () => new PivotForge.PivotLayoutState(catalog, {
+      rows: ["Quantity"],
+      columns: [],
+      values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+      filters: []
+    }),
+    /Layout field "Quantity" cannot be placed in area "row"/
+  );
+});
+
+test("an explicit layout seating a dimension in the data area is rejected", () => {
+  assert.throws(
+    () => new PivotForge.PivotLayoutState(catalog, {
+      rows: [],
+      columns: [],
+      values: [{ field: "Quarter", aggregation: "sum", showAs: "normal" }],
+      filters: []
+    }),
+    /Layout field "Quarter" cannot be placed in area "data"/
+  );
+});
+
+test("an invisible declared field stays out of the initial layout", () => {
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Region", caption: "Bölge", area: "row" },
+    { dataField: "Hidden", caption: "Gizli", area: "row", visible: false },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.deepEqual(state.getState().rows, ["Region"]);
+  assert.equal(state.getState().available.includes("Hidden"), true);
+});
+
+test("toFields carries visible, so a hidden field stays out of the request even after it is dragged into a zone", () => {
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Region", caption: "Bölge", area: "row" },
+    { dataField: "Hidden", caption: "Gizli", area: "row", visible: false },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+  ]);
+
+  // "Hidden" starts available (previous test); place it, simulating a user
+  // dragging it into the row zone from the designer's available list.
+  state.move("Hidden", "row");
+
+  const request = PivotForge.PivotRequestBuilder.buildRequest(state.toFields());
+
+  assert.deepEqual(request.rows, ["Region"]);
+});
+
+test("toFields round-trips through buildRequest unaffected by an invisible field, after a mutation elsewhere", () => {
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Region", caption: "Bölge", area: "row" },
+    { dataField: "Hidden", caption: "Gizli", area: "row", visible: false },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" },
+    { dataField: "Category", caption: "Kategori", area: "available", role: "dimension" }
+  ]);
+
+  state.move("Category", "row");
+
+  const request = PivotForge.PivotRequestBuilder.buildRequest(state.toFields());
+
+  assert.deepEqual(request.rows, ["Region", "Category"]);
 });

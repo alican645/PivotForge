@@ -167,6 +167,63 @@ test("dropping a measure into the rows zone changes nothing", async () => {
   assert.equal(updates.length, 0);
 });
 
+test("dragend clears the tracked dragged field", () => {
+  const { host, designer } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+  const dataTransfer = { data: {}, setData(type, value) { this.data[type] = value; }, getData(type) { return this.data[type] ?? ""; } };
+
+  source.dispatch("dragstart", { dataTransfer });
+  assert.equal(designer.draggedField, "Quarter");
+
+  source.dispatch("dragend", {});
+  assert.equal(designer.draggedField, null);
+});
+
+test("drop uses the tracked dragged field, not whatever the event's dataTransfer reports", async () => {
+  const { host, state, updates } = build();
+
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+  const startDataTransfer = { data: {}, setData(type, value) { this.data[type] = value; }, getData(type) { return this.data[type] ?? ""; } };
+  source.dispatch("dragstart", { dataTransfer: startDataTransfer });
+
+  // The drop event's own dataTransfer names a field that is already in the
+  // target area ("Region" is already a row), so if drop ignored the tracked
+  // draggedField ("Quarter") and used only this payload, canDrop would refuse
+  // it and nothing would happen.
+  const mismatchedDataTransfer = { getData: () => "Region" };
+  let prevented = false;
+  zone(host, "row").dispatch("drop", {
+    preventDefault() { prevented = true; },
+    dataTransfer: mismatchedDataTransfer
+  });
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Region", "Quarter"]);
+  assert.equal(updates.length, 1);
+  assert.equal(prevented, true);
+});
+
+test("apply mutates the state before it calls widget.update", async () => {
+  let rowsWhenUpdateWasCalled = null;
+  const state = new PivotForge.PivotLayoutState(catalog);
+  const widget = {
+    update: async () => {
+      // async functions run synchronously up to the first await, so this
+      // captures the state at the exact moment apply() invokes update() —
+      // before apply() itself awaits anything.
+      rowsWhenUpdateWasCalled = state.getState().rows;
+    }
+  };
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget });
+
+  const target = zone(host, "row");
+  dragFieldTo(host, "Quarter", target, "drop");
+  await Promise.resolve();
+
+  assert.deepEqual(rowsWhenUpdateWasCalled, ["Region", "Quarter"]);
+});
+
 test("dragover refuses an invalid target", () => {
   const { host } = build();
 

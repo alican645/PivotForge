@@ -59,6 +59,12 @@
       );
     }
 
+    if (!isData && field.showAs !== undefined) {
+      throw new Error(
+        `"showAs" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+
     const aggregation = isData ? field.aggregation ?? "sum" : null;
     if (isData && !AGGREGATIONS.includes(aggregation)) {
       throw new Error(
@@ -119,7 +125,7 @@
     };
   }
 
-  PivotForge.PivotRequestBuilder = { normalizeFields, buildRequest, valueKey };
+  PivotForge.PivotRequestBuilder = { normalizeFields, buildRequest, valueKey, AGGREGATIONS, SHOW_AS };
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = PivotForge.PivotRequestBuilder;

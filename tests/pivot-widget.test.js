@@ -404,6 +404,43 @@ test("update reflects new fields in getState", async () => {
   widget.dispose();
 });
 
+test("update rebuilds the renderer when the widget owns one, instead of renderImpl", async () => {
+  // Every other test in this file supplies renderImpl, so this.renderer is
+  // always null there and the rebuild branch inside update() never runs.
+  // Exercise it directly with a widget that builds its own renderer.
+  let rendererBuildCount = 0;
+  let lastRenderedResult = null;
+  class FakeRenderer {
+    constructor() {
+      rendererBuildCount++;
+    }
+    render(result) {
+      lastRenderedResult = result;
+    }
+  }
+  const previousRenderer = PivotForge.PivotTableRenderer;
+  PivotForge.PivotTableRenderer = FakeRenderer;
+
+  try {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    assert.equal(rendererBuildCount, 1);
+
+    await widget.update({ fields: [{ dataField: "tutar", area: "data" }] });
+
+    assert.equal(rendererBuildCount, 2);
+    assert.notEqual(lastRenderedResult, null);
+
+    widget.dispose();
+  } finally {
+    PivotForge.PivotTableRenderer = previousRenderer;
+  }
+});
+
 test("create builds a designer when fieldDesigner is supplied", () => {
   const designerHost = createContainer();
   const previousDocument = globalThis.document;
