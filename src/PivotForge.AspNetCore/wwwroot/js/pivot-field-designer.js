@@ -13,6 +13,9 @@
     search: "Alan ara...",
     format: "Biçim",
     settings: "Alan ayarları",
+    filterValues: "Filtre değerleri",
+    // {0} is replaced with the number of selected values.
+    filterCount: "({0})",
     aggregation: "Değer ayarları",
     showAs: "Değerleri farklı göster",
     formatting: "Biçimlendirme",
@@ -66,6 +69,12 @@
   // showing what the user is actually looking at rather than empty controls.
   const RENDERER_DEFAULTS = { type: "number", decimals: 2, useGrouping: true };
 
+  function format(template, ...values) {
+    return values.reduce(
+      (text, value, index) => text.replaceAll(`{${index}}`, String(value)),
+      String(template));
+  }
+
   class PivotFieldDesigner {
     constructor(host, options = {}) {
       const element = typeof host === "string" ? root.document?.querySelector(host) : host;
@@ -99,6 +108,9 @@
       // triggers and does not need to be rebuilt by render().
       this.settingsFor = null;
       this.settings = null;
+      // Built on first use, so a designer whose filter zone is never opened
+      // never creates the picker's overlay. A host may supply its own.
+      this.filterPicker = options.filterPicker ?? null;
       this.render();
     }
 
@@ -154,12 +166,58 @@
         chip.appendChild(settings);
       }
 
+      // Only a filter field has values to pick, and the picker needs the widget
+      // to fetch them — a designer wired to a widget without fieldValues() is
+      // an older host, so the control is left off rather than offered broken.
+      if (area === "filter" && this.canPickFilterValues()) {
+        const funnel = document.createElement("button");
+        funnel.className = "pivot-chip__filter";
+        funnel.dataset.action = "filter";
+        funnel.textContent = "▼";
+        funnel.setAttribute("aria-label", `${field.caption} — ${this.labels.filterValues}`);
+        funnel.addEventListener("click", () => this.openFilterPicker(name));
+        chip.appendChild(funnel);
+      }
+
       const label = document.createElement("span");
       label.className = "pivot-chip__label";
       label.textContent = field.caption;
       chip.appendChild(label);
 
+      // A filter whose zone shows only the field name gives no clue that it is
+      // restricting anything, so an active one carries its selection count.
+      const selectedCount = area === "filter" ? this.filterValuesOf(name).length : 0;
+      if (selectedCount > 0) {
+        const count = document.createElement("span");
+        count.className = "pivot-chip__filter-count";
+        count.textContent = format(this.labels.filterCount, selectedCount);
+        chip.appendChild(count);
+      }
+
       return chip;
+    }
+
+    canPickFilterValues() {
+      return typeof this.widget.fieldValues === "function" &&
+        (this.filterPicker !== null || typeof PivotForge.PivotFilterPicker === "function");
+    }
+
+    filterValuesOf(name) {
+      return this.state.getState().filters.find(entry => entry.field === name)?.values ?? [];
+    }
+
+    openFilterPicker(name) {
+      this.filterPicker ??= new PivotForge.PivotFilterPicker({
+        widget: this.widget,
+        labels: this.labels.filterPicker
+      });
+
+      return this.filterPicker.open({
+        field: name,
+        caption: this.state.field(name).caption,
+        selected: this.filterValuesOf(name),
+        onApply: values => this.apply(() => this.state.setFilterValues(name, values))
+      });
     }
 
     // The current format as the user sees it: what was set, over what the
@@ -722,6 +780,8 @@
 
       this.settings?.overlay.remove?.();
       this.settings = null;
+      this.filterPicker?.dispose();
+      this.filterPicker = null;
       this.host.replaceChildren();
     }
   }

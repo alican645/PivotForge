@@ -17,6 +17,18 @@ internal sealed class PivotForgeDataExecutor<TRecord>(IPivotForgeDataProvider<TR
             cancellationToken);
     }
 
+    public async ValueTask<IReadOnlyList<string?>> DistinctValuesAsync(
+        string field,
+        int? sourceRowCount,
+        CancellationToken cancellationToken)
+    {
+        var records = await GetRecordsAsync(sourceRowCount, cancellationToken);
+
+        return await Task.Run(
+            () => new PivotEngine().DistinctValues(records, field),
+            cancellationToken);
+    }
+
     public async ValueTask<IReadOnlyList<object?>> DrillDownAsync(
         PivotRequest request,
         IReadOnlyList<string?> rowPath,

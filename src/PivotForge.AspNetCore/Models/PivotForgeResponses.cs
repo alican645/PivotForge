@@ -26,6 +26,19 @@ public sealed record PivotForgeDrillDownResponse(
     int Limit,
     string? ValueKey);
 
+/// <summary>Returns the distinct values a filter on one field can accept.</summary>
+/// <param name="Field">The source field the values belong to.</param>
+/// <param name="Values">The visible distinct values, in value order.</param>
+/// <param name="TotalCount">The total number of distinct values before truncation.</param>
+/// <param name="Truncated">Whether values were omitted because of the configured limit.</param>
+/// <param name="Limit">The configured response value limit.</param>
+public sealed record PivotForgeFieldValuesResponse(
+    string Field,
+    IReadOnlyList<string?> Values,
+    int TotalCount,
+    bool Truncated,
+    int Limit);
+
 /// <summary>Returns a client-safe endpoint error.</summary>
 /// <param name="Message">The error message.</param>
 public sealed record PivotForgeErrorResponse(string Message);

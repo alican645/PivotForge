@@ -87,6 +87,7 @@ Reference the Razor Class Library assets. Load them in `<head>`, not at the end 
 <script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-layout-state.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-filter-picker.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>

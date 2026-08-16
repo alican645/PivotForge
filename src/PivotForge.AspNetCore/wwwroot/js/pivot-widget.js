@@ -523,6 +523,22 @@
       });
     }
 
+    // The distinct values a filter on this field can accept. Deliberately not
+    // narrowed by the filters already applied: a picker that hid the values the
+    // user just excluded could never bring them back.
+    async fieldValues(field) {
+      this.assertNotDisposed();
+
+      if (!this.options.allowFiltering) {
+        throw new Error("Cannot list field values because allowFiltering is disabled.");
+      }
+
+      return await this.post("/field-values", {
+        field,
+        sourceRowCount: this.options.sourceRowCount
+      });
+    }
+
     async exportToExcel(options = {}) {
       this.assertNotDisposed();
 

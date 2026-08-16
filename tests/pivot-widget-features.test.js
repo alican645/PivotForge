@@ -81,6 +81,29 @@ test("drillDown is rejected when drill-down is disabled", async () => {
   widget.dispose();
 });
 
+test("fieldValues asks the endpoint for one field and nothing else", async () => {
+  const { widget, calls } = createWidget(() =>
+    okJson({ field: "urun", values: ["Lokum"], totalCount: 1, truncated: false, limit: 1000 }));
+
+  const response = await widget.fieldValues("urun");
+
+  assert.equal(calls[0].url, "/pivotforge/field-values");
+  assert.equal(calls[0].body.field, "urun");
+  // The picker lists every value the field holds, so the pivot layout and the
+  // filters already applied are deliberately absent from the request.
+  assert.equal(calls[0].body.rows, undefined);
+  assert.equal(calls[0].body.filters, undefined);
+  assert.deepEqual(response.values, ["Lokum"]);
+  widget.dispose();
+});
+
+test("fieldValues is rejected when filtering is disabled", async () => {
+  const { widget } = createWidget(() => okJson({}), { allowFiltering: false });
+
+  await assert.rejects(() => widget.fieldValues("urun"), /allowFiltering is disabled/);
+  widget.dispose();
+});
+
 test("exportToExcel posts the rendered document model, not the pivot request", async () => {
   const exportModel = { title: "Pivot Tablo", rows: [{ cells: [{ text: "Ürün" }] }] };
   const { widget, calls } = createWidget(() => ({

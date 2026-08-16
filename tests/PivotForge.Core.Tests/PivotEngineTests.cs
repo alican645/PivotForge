@@ -428,6 +428,133 @@ public sealed class PivotEngineTests
     }
 
     [Fact]
+    public void DistinctValues_ReturnsEachValueOnceInValueOrder()
+    {
+        var orders = CreateDrillDownOrders();
+
+        var regions = new PivotEngine().DistinctValues(orders, "Region");
+        var years = new PivotEngine().DistinctValues(orders, "Year");
+
+        Assert.Equal(["East", "West"], regions);
+        Assert.Equal(["2025", "2026"], years);
+    }
+
+    [Fact]
+    public void DistinctValues_OrdersNumbersByValueRatherThanText()
+    {
+        var orders = new[]
+        {
+            new Order("East", 2, "A", 1m),
+            new Order("East", 10, "A", 1m),
+            new Order("East", 1, "A", 1m)
+        };
+
+        var years = new PivotEngine().DistinctValues(orders, "Year");
+
+        Assert.Equal(["1", "2", "10"], years);
+    }
+
+    // A null source value converts to the empty string on the filter path too,
+    // so blank is offered as the value that actually selects those records.
+    [Fact]
+    public void DistinctValues_OffersBlankForNullsAndThatBlankFilters()
+    {
+        var orders = new[]
+        {
+            new Order("East", 2026, "A", 100m),
+            new Order("East", 2026, "A", null)
+        };
+        var engine = new PivotEngine();
+
+        Assert.Equal(["", "100"], engine.DistinctValues(orders, "Amount"));
+
+        var blanks = engine.DrillDown(
+            orders,
+            new PivotRequest
+            {
+                Rows = ["Region"],
+                Columns = ["Year"],
+                Values = [PivotValueDefinition.Count("Amount")],
+                Filters = [new PivotFilter("Amount", [""])]
+            },
+            [],
+            []);
+
+        Assert.Equal([null], blanks.Select(record => record.Amount));
+    }
+
+    // A picker is only useful if choosing what it shows actually filters, so the
+    // strings it returns must be the strings the filter compares against.
+    [Fact]
+    public void DistinctValues_ReturnsTheSameStringsTheFilterMatchesOn()
+    {
+        var orders = CreateDrillDownOrders();
+        var engine = new PivotEngine();
+
+        foreach (var year in engine.DistinctValues(orders, "Year"))
+        {
+            var matches = engine.DrillDown(
+                orders,
+                new PivotRequest
+                {
+                    Rows = ["Region"],
+                    Columns = ["Year"],
+                    Values = [PivotValueDefinition.Sum("Amount")],
+                    Filters = [new PivotFilter("Year", [year])]
+                },
+                [],
+                []);
+
+            Assert.NotEmpty(matches);
+            Assert.All(matches, record => Assert.Equal(year, record.Year.ToString()));
+        }
+    }
+
+    // The reader only discovers an unknown field while reading a record, so an
+    // empty source would otherwise report "no values" for a field that is not
+    // there at all — a picker would open blank instead of failing.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DistinctValues_ThrowsForUnknownFieldEvenWithoutRecords(bool hasRecords)
+    {
+        var orders = hasRecords ? CreateDrillDownOrders() : [];
+
+        Assert.Throws<PivotFieldNotFoundException>(
+            () => new PivotEngine().DistinctValues(orders, "Missing"));
+    }
+
+    [Fact]
+    public void DistinctValues_ThrowsForAnEmptyFieldName()
+    {
+        var orders = CreateDrillDownOrders();
+
+        Assert.Throws<ArgumentException>(() => new PivotEngine().DistinctValues(orders, "  "));
+    }
+
+    [Fact]
+    public void DistinctValues_SupportsDataTableAndDictionaryRecords()
+    {
+        var table = new DataTable();
+        table.Columns.Add("Region", typeof(string));
+        table.Rows.Add("West");
+        table.Rows.Add("East");
+        table.Rows.Add("East");
+        var dictionaryRecords = JsonRecordParser.Parse(
+            """
+            [
+              { "region": "West" },
+              { "region": "East" },
+              { "region": "East" }
+            ]
+            """);
+        var engine = new PivotEngine();
+
+        Assert.Equal(["East", "West"], engine.DistinctValues(table, "Region"));
+        Assert.Equal(["East", "West"], engine.DistinctValuesRecords(dictionaryRecords, "region"));
+    }
+
+    [Fact]
     public void Execute_ShowAsPercentOfRowTotal_TransformsCellsAndTotals()
     {
         var result = ExecuteShowAs(PivotShowAs.PercentOfRowTotal);

@@ -115,12 +115,12 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 public sealed record PivotFilter(string Field, IReadOnlyList<string?> Values);
 ```
 
-Operatör yok, `filterType` (include/exclude) yok, ve **paket tarafında hiçbir filtre
-arayüzü yok.** Tasarımcının Filtreler bölgesine alan sürüklenebiliyor ama hangi değerlerin
-seçileceğini belirleyecek UI yok — demo bunu kendi elle yazdığı menüyle çözüyor.
+Değer seçici artık pakette (`PivotFilterPicker`): motora `PivotEngine.DistinctValues`,
+uç noktalara `POST /pivotforge/field-values`, tasarımcı çipine `▼` düğmesi eklendi.
+Kalan açık operatörler ve include/exclude tarafında.
 
-- [ ] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim, "Tümü"
-      — tasarımcıdaki Filtreler bölgesini işlevsel hale getirir
+- [x] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim,
+      "Tümünü seç"/"Temizle", kesme uyarısı — tasarımcıdaki Filtreler bölgesi artık işlevsel
 - [ ] `filterType` — include / exclude
 - [ ] Excel benzeri başlık filtresi (`headerFilter`) — sütun/satır başlığından filtreleme
 - [ ] Filtre operatörleri: içerir, başlar, arasında, boş/boş değil, Top-N
@@ -180,7 +180,7 @@ DevExpress'in alan menüsüne yaklaştı.
 | Alan seçicide klasörleme (`displayFolder`) | ❌ |
 | Bağımsız (standalone) alan seçici | ❌ |
 | Tasarımcıdan sıralama paneli | ❌ |
-| Tasarımcıdan filtre seçimi | ❌ (Bölüm 2) |
+| Tasarımcıdan filtre seçimi | ✅ | çipteki `▼` düğmesi `PivotFilterPicker`'ı açar |
 
 - [ ] Sıralama paneli — tasarımcıdan `sortBy` sürmek
 - [ ] `display-folder` ile alan gruplama

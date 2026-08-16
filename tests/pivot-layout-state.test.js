@@ -708,3 +708,57 @@ test("showAs cannot be set on a field outside the data area", () => {
 
   assert.throws(() => state.setShowAs("Region", "normal"), /not in the data area/);
 });
+
+test("filter values are written to the filter entry and reach the request", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+
+  state.setFilterValues("Quarter", ["Q1", "Q3"]);
+
+  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+  assert.deepEqual(state.toRequestState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+});
+
+test("an empty filter selection is dropped from the request rather than sent", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  state.setFilterValues("Quarter", ["Q1"]);
+
+  state.setFilterValues("Quarter", []);
+
+  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: [] }]);
+  assert.deepEqual(state.toRequestState().filters, []);
+});
+
+test("filter values are stringified, with blank standing in for null", () => {
+  const state = create();
+  state.move("Year", "filter");
+
+  state.setFilterValues("Year", [2025, null, "2026"]);
+
+  assert.deepEqual(state.getState().filters[0].values, ["2025", "", "2026"]);
+});
+
+test("filter values cannot be set on a field outside the filter area", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterValues("Region", ["East"]), /not in the filter area/);
+});
+
+test("a non-array filter selection is refused rather than coerced", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+
+  assert.throws(() => state.setFilterValues("Quarter", "Q1"), /must be an array/);
+});
+
+test("setting filter values notifies change subscribers", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  let seen = null;
+  state.on("change", next => { seen = next; });
+
+  state.setFilterValues("Quarter", ["Q1"]);
+
+  assert.deepEqual(seen.filters, [{ field: "Quarter", values: ["Q1"] }]);
+});

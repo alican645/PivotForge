@@ -37,13 +37,15 @@ function createElement(tagName) {
       names: new Set(),
       add(...names) { names.forEach(name => this.names.add(name)); },
       remove(...names) { names.forEach(name => this.names.delete(name)); },
-      contains(name) { return this.names.has(name); }
+      contains(name) { return this.names.has(name); },
+      toggle(name, on) { on ? this.names.add(name) : this.names.delete(name); }
     },
     // Drop positioning is geometric, so the stub has to carry a box. Tests
     // assign `rect` to lay chips out; anything unplaced reports a zero box.
     rect: null,
     getBoundingClientRect() { return this.rect ?? { top: 0, bottom: 0, height: 0 }; },
     appendChild(child) { this._children.push(child); return child; },
+    remove() { this.removed = true; },
     replaceChildren(...nodes) { this._children = nodes; },
     setAttribute(name, value) { this.attributes[name] = value; },
     addEventListener(name, handler) {
@@ -962,3 +964,129 @@ test("a field unplaced while its modal is open closes the modal", () => {
 
   assert.equal(panel.classList.contains("is-open"), false);
 });
+
+// --- Filter value picker ----------------------------------------------------
+// Loaded here rather than at the top of the file so the tests above run against
+// a designer whose host never offered the packaged picker, which is exactly the
+// state of an application that has not added the new script tag.
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-filter-picker.js");
+
+function buildWithFilter(options = {}) {
+  const updates = [];
+  const requested = [];
+  const widget = {
+    update: async payload => { updates.push(payload); },
+    ...(options.withoutFieldValues ? {} : {
+      fieldValues: async field => {
+        requested.push(field);
+        return {
+          field,
+          values: ["Q1", "Q2", "Q3"],
+          totalCount: 3,
+          truncated: false,
+          limit: 1000
+        };
+      }
+    })
+  };
+  const state = new PivotForge.PivotLayoutState(catalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget });
+  state.move("Quarter", "filter");
+  designer.render();
+
+  return { designer, state, host, updates, requested };
+}
+
+const filterChip = host => chips(host).find(chip => chip.dataset.field === "Quarter");
+
+const pickerPanel = () =>
+  documentBody._children.findLast(node => node.className?.includes("pivot-filter-picker"));
+
+const pickerByAction = action => allByAction(pickerPanel(), action);
+
+test("only a filter chip carries the funnel control", () => {
+  const { host } = buildWithFilter();
+
+  assert.ok(findByAction(filterChip(host), "filter"));
+  assert.equal(findByAction(chips(host).find(chip => chip.dataset.field === "Region"), "filter"), null);
+});
+
+test("a widget that cannot list values gets no funnel rather than a broken one", () => {
+  const { host } = buildWithFilter({ withoutFieldValues: true });
+
+  assert.equal(findByAction(filterChip(host), "filter"), null);
+});
+
+test("the funnel asks the widget for that field's values", async () => {
+  const { host, requested } = buildWithFilter();
+
+  await findByAction(filterChip(host), "filter").dispatch("click", {});
+
+  assert.deepEqual(requested, ["Quarter"]);
+});
+
+test("applying a selection writes it to the state and reaches the widget", async () => {
+  const { designer, host, state, updates } = buildWithFilter();
+
+  await designer.openFilterPicker("Quarter");
+  const boxes = pickerByAction("filter-value");
+  boxes[1].checked = false;
+  boxes[1].dispatch("change", {});
+  pickerByAction("filter-apply")[0].dispatch("click", {});
+
+  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+  assert.deepEqual(updates.at(-1).filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+});
+
+test("an active filter chip shows how many values it accepts", async () => {
+  const { designer, host, state } = buildWithFilter();
+
+  state.setFilterValues("Quarter", ["Q1", "Q3"]);
+  designer.render();
+
+  assert.equal(findByClassName(filterChip(host), "pivot-chip__filter-count").textContent, "(2)");
+});
+
+test("a filter accepting everything shows no count, because it restricts nothing", async () => {
+  const { designer, host, state } = buildWithFilter();
+  state.setFilterValues("Quarter", ["Q1"]);
+  designer.render();
+
+  state.setFilterValues("Quarter", []);
+  designer.render();
+
+  assert.equal(findByClassName(filterChip(host), "pivot-chip__filter-count"), null);
+});
+
+test("reopening the picker shows the selection already in force", async () => {
+  const { designer, state } = buildWithFilter();
+  state.setFilterValues("Quarter", ["Q2"]);
+
+  await designer.openFilterPicker("Quarter");
+
+  assert.deepEqual(pickerByAction("filter-value").map(box => box.checked), [false, true, false]);
+});
+
+test("disposing the designer disposes the picker it built", async () => {
+  const { designer } = buildWithFilter();
+  await designer.openFilterPicker("Quarter");
+  const picker = designer.filterPicker;
+
+  designer.dispose();
+
+  assert.equal(picker.disposed, true);
+});
+
+function findByClassName(node, name) {
+  if (node.className?.split(" ").includes(name)) {
+    return node;
+  }
+  for (const child of node.children) {
+    const match = findByClassName(child, name);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}

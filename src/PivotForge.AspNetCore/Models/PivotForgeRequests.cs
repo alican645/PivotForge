@@ -53,6 +53,19 @@ public sealed class PivotForgePageRequest
     public int PageSize { get; init; } = 40;
 }
 
+/// <summary>Requests the distinct values a filter on one field can accept.</summary>
+/// <remarks>This carries no pivot definition on purpose: a filter picker lists every value the
+/// field holds, so unchecking one and reopening the picker still shows the rest. Narrowing the
+/// list by the filters already applied would make previously excluded values unreachable.</remarks>
+public sealed class PivotForgeFieldValuesRequest
+{
+    /// <summary>Gets the source field whose values are listed.</summary>
+    public string Field { get; init; } = "";
+
+    /// <summary>Gets the source-row hint passed to the configured data provider.</summary>
+    public int SourceRowCount { get; init; } = 100_000;
+}
+
 /// <summary>Requests source records behind a pivot row and column path.</summary>
 public sealed class PivotForgeDrillDownRequest : PivotForgeRequest
 {

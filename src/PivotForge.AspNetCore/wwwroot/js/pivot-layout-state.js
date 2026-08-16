@@ -355,6 +355,25 @@
       this.emitChange();
     }
 
+    // The values a filter accepts. An empty list is how "no restriction" is
+    // spelled all the way down to the engine, so clearing a filter and never
+    // setting one are deliberately the same state.
+    setFilterValues(name, values) {
+      const filter = this.layout.filters.find(entry => entry.field === name);
+      if (!filter) {
+        throw new Error(`Field "${name}" is not in the filter area.`);
+      }
+
+      if (!Array.isArray(values)) {
+        throw new Error(`Filter values for "${name}" must be an array.`);
+      }
+
+      // Values reach the engine as strings; a null source value is compared as
+      // the empty string, so that is what blank is stored as.
+      filter.values = values.map(value => (value == null ? "" : String(value)));
+      this.emitChange();
+    }
+
     getState() {
       const placed = new Set([
         ...this.layout.rows,

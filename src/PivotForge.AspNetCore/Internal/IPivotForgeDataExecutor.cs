@@ -9,6 +9,11 @@ internal interface IPivotForgeDataExecutor
         int? sourceRowCount,
         CancellationToken cancellationToken);
 
+    ValueTask<IReadOnlyList<string?>> DistinctValuesAsync(
+        string field,
+        int? sourceRowCount,
+        CancellationToken cancellationToken);
+
     ValueTask<IReadOnlyList<object?>> DrillDownAsync(
         PivotRequest request,
         IReadOnlyList<string?> rowPath,

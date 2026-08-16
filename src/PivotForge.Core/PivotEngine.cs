@@ -154,6 +154,114 @@ public sealed class PivotEngine
             .ToArray();
     }
 
+    /// <summary>Returns the distinct display values of a field in strongly typed records.</summary>
+    /// <typeparam name="T">The source record type.</typeparam>
+    /// <param name="records">The source records.</param>
+    /// <param name="field">The source field name.</param>
+    /// <returns>The distinct values a filter on this field can accept, in value order.</returns>
+    public IReadOnlyList<string?> DistinctValues<T>(IEnumerable<T> records, string field)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+
+        return DistinctValuesCore(records.Cast<object>(), field, new ObjectRecordReader<T>());
+    }
+
+    /// <summary>Returns the distinct display values of a data table column.</summary>
+    /// <param name="table">The source data table.</param>
+    /// <param name="field">The source column name.</param>
+    /// <returns>The distinct values a filter on this column can accept, in value order.</returns>
+    public IReadOnlyList<string?> DistinctValues(DataTable table, string field)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+
+        return DistinctValuesCore(
+            table.Rows.Cast<DataRow>().Cast<object>(),
+            field,
+            new DataTableRecordReader(table));
+    }
+
+    /// <summary>Returns the distinct display values of a field in dictionary-backed records.</summary>
+    /// <param name="records">The source records.</param>
+    /// <param name="field">The source field name.</param>
+    /// <returns>The distinct values a filter on this field can accept, in value order.</returns>
+    public IReadOnlyList<string?> DistinctValuesRecords(
+        IEnumerable<IReadOnlyDictionary<string, object?>> records,
+        string field)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+
+        var materialized = records.ToList();
+        var fields = materialized
+            .SelectMany(record => record.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return DistinctValuesCore(
+            materialized.Cast<object>(),
+            field,
+            new DictionaryRecordReader(fields));
+    }
+
+    private static IReadOnlyList<string?> DistinctValuesCore(
+        IEnumerable<object> records,
+        string field,
+        IRecordReader reader)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(field);
+
+        if (!reader.HasField(field))
+        {
+            throw new PivotFieldNotFoundException(field);
+        }
+
+        // Keyed by the same string the filter compares against, so whatever a
+        // picker shows is exactly what PivotFilter will match. The raw value is
+        // carried alongside only to order the result.
+        var seen = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var hasBlank = false;
+
+        foreach (var record in records)
+        {
+            var value = reader.GetValue(record, field);
+            var text = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "";
+
+            // A null source value converts to the empty string here exactly as it
+            // does when a filter is matched, so blank is a selectable value — but
+            // it holds no raw value to order by, which is why it is kept apart.
+            if (text.Length == 0)
+            {
+                hasBlank = true;
+                continue;
+            }
+
+            seen.TryAdd(text, value);
+        }
+
+        var ordered = OrderDistinctValues(seen);
+
+        // Blank leads the list rather than being sorted into it, the way every
+        // spreadsheet filter presents it.
+        return hasBlank ? ["", .. ordered] : ordered;
+    }
+
+    // Ordinal text order would list 1, 10, 2 for a numeric field. When every
+    // raw value shares one comparable type, order by the value itself; anything
+    // mixed or non-comparable falls back to text.
+    private static IReadOnlyList<string?> OrderDistinctValues(Dictionary<string, object?> seen)
+    {
+        var values = seen.Values.ToArray();
+        var comparable =
+            values.Length > 0 &&
+            values[0] is IComparable &&
+            values.All(value => value is not null && value.GetType() == values[0]!.GetType());
+
+        return comparable
+            ? seen.OrderBy(entry => entry.Value, Comparer<object?>.Default)
+                .Select(entry => (string?)entry.Key)
+                .ToArray()
+            : seen.Keys.Order(StringComparer.Ordinal).Select(key => (string?)key).ToArray();
+    }
+
     private static IReadOnlyList<object> DrillDownCore(
         IEnumerable<object> records,
         PivotRequest request,

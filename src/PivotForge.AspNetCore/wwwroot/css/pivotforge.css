@@ -2016,6 +2016,143 @@ select {
   overflow: auto;
 }
 
+/* --- Filter value picker -------------------------------------------------- */
+
+.pivot-filter-picker {
+  z-index: 210;
+}
+
+.pivot-filter-picker__dialog {
+  width: min(420px, calc(100vw - 32px));
+  height: min(560px, calc(100vh - 48px));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.pivot-filter-picker__heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pivot-filter-picker__heading h2 {
+  margin: 0;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pivot-filter-picker__heading span {
+  color: var(--pt-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pivot-filter-picker__body {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.pivot-filter-picker__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--pt-border);
+  background: #fbfcfe;
+}
+
+.pivot-filter-picker__search {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--pt-border);
+  border-radius: 5px;
+  color: var(--pt-text);
+  outline: none;
+}
+
+.pivot-filter-picker__search:focus {
+  border-color: var(--pt-accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.pivot-filter-picker__toolbar .pivot-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.pivot-filter-picker__notice,
+.pivot-filter-picker__state {
+  padding: 8px 10px;
+  color: var(--pt-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pivot-filter-picker__notice {
+  border-bottom: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.pivot-filter-picker__state {
+  align-self: start;
+}
+
+.pivot-filter-picker__state.is-error {
+  color: var(--pt-danger);
+}
+
+.pivot-filter-picker__list {
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.pivot-filter-picker__value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.pivot-filter-picker__value:hover {
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.pivot-filter-picker__value span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pivot-filter-picker__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--pt-border);
+  background: #fbfcfe;
+}
+
+.pivot-filter-picker__foot .pivot-button {
+  min-height: 34px;
+  padding: 0 16px;
+}
+
+.pivot-filter-picker__foot .pivot-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .pivot-drill-down-table {
   width: 100%;
   min-width: 1060px;
@@ -2161,6 +2298,29 @@ select {
 
 .pivot-chip__settings:hover {
   color: var(--pt-text);
+}
+
+.pivot-chip__filter {
+  border: 0;
+  background: transparent;
+  color: var(--pt-muted);
+  cursor: pointer;
+  font-size: 0.625rem;
+  line-height: 1;
+  padding: 0 0.125rem;
+}
+
+.pivot-chip__filter:hover {
+  color: var(--pt-accent);
+}
+
+/* Sits after the caption, which takes the remaining width, so the count stays
+   pinned to the chip's right edge however long the caption is. */
+.pivot-chip__filter-count {
+  flex: 0 0 auto;
+  color: var(--pt-accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
 }
 
 .pivot-chip__remove {
