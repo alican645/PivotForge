@@ -76,7 +76,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 |---|---|---|---|
 | `dataField`, `caption`, `area`, `visible` | ✅ | ✅ | |
 | `summaryType` (aggregation) | ✅ | ✅ | 5 tür: sum/count/average/min/max |
-| `summaryDisplayMode` (`showAs`) | ✅ | ⚠️ | 7 mod motorda var; **tag helper'da nitelik yok** |
+| `summaryDisplayMode` (`showAs`) | ✅ | ✅ | `show-as` niteliği ve `ShowAs()` metodu mevcut |
 | `format` / `precision` | ✅ | ✅ | `0.4.0-preview.1`'de eklendi |
 | `areaIndex` | ✅ | ❌ | Sıra bildirim sırasından geliyor, açıkça verilemiyor |
 | `sortOrder`, `sortBy` | ⚠️ | ❌ | Alan başına sıralama yok; yalnızca tablo geneli |
@@ -96,7 +96,6 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 
 ### Yapılacaklar
 
-- [ ] `show-as` niteliği (motorda hazır, sadece bildirim eksik) — **en ucuz kazanç**
 - [ ] `area-index` ile açık sıra
 - [ ] Alan başına `sort-order` / `sort-by`
 - [ ] `expanded` başlangıç durumu
