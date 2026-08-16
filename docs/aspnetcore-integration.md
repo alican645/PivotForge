@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.6
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.7
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -241,6 +241,55 @@ the renderer keeps its own default.
 unqualified member name; whether the attribute was written is recovered from
 `TagHelperContext.AllAttributes`, so an unwritten attribute is not mistaken for a
 deliberate `Single`/`Tabular`.
+
+#### Events
+
+Every event is delivered two ways, and both always fire — naming a handler does
+not switch the DOM event off, and vice versa.
+
+| Attribute | Builder | Payload |
+| --- | --- | --- |
+| `on-data-loading` | `OnDataLoading(string)` | `{ request }` |
+| `on-data-loaded` | `OnDataLoaded(string)` | `{ result }` |
+| `on-error` | `OnError(string)` | the `Error` |
+| `on-selection-changed` | `OnSelectionChanged(string)` | the selection, or `null` |
+| `on-cell-double-click` | `OnCellDoubleClick(string)` | the cell selection |
+| `on-cell-copied` | `OnCellCopied(string)` | `{ text, copied, kind }` |
+| `on-cell-filter-requested` | `OnCellFilterRequested(string)` | the cell selection |
+| `on-view-state-changed` | `OnViewStateChanged(string)` | the renderer view state |
+
+The attribute names a function on the page, optionally as a dotted path
+(`app.handlers.onLoaded`). It is resolved when the event fires rather than when
+the grid is created: a Razor helper starts the grid inline, where its markup
+sits, which is before a `<script>` block further down the page has run.
+Declaring a handler that never appears therefore throws when the event first
+fires, not at startup.
+
+```html
+<pivot-grid id="pivotGrid" on-selection-changed="pivotSelectionChanged">
+  <pivot-field field="Amount" area="Data" aggregation="Sum" />
+</pivot-grid>
+
+<script>
+  function pivotSelectionChanged(selection) { /* ... */ }
+</script>
+```
+
+The same events are dispatched on the grid container as bubbling `CustomEvent`s
+named `pivotforge:` plus the lowercased event name, with the payload on
+`event.detail`:
+
+```javascript
+document.getElementById("pivotGrid")
+  .addEventListener("pivotforge:selectionchanged", event => {
+    console.log(event.detail);
+  });
+```
+
+A consumer that supplies its own `rendererOptions` callback still receives it;
+the widget's event fires alongside. The one exception is
+`onCellDoubleClick`, where supplying a callback also suppresses the packaged
+detail modal, so a page with its own modal does not get two.
 
 Anything not listed here still needs `rendererOptions` through
 `PivotForge.create`, or the `pivotforge:ready` event — see

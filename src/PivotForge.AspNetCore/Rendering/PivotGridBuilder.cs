@@ -20,6 +20,10 @@ public sealed class PivotGridBuilder : IHtmlContent
     // widget, so they are collected separately and emitted under "rendererOptions".
     // Kept out of _options because the widget would otherwise treat them as its own.
     private readonly Dictionary<string, object?> _rendererOptions = new(StringComparer.Ordinal);
+
+    // Handler names, resolved on the page at construction. Kept apart from the
+    // renderer options because the widget subscribes them, not the renderer.
+    private readonly Dictionary<string, object?> _events = new(StringComparer.Ordinal);
     private readonly PivotFieldCollectionBuilder _fields = new();
     private string? _id;
     private string? _cssClass;
@@ -176,6 +180,58 @@ public sealed class PivotGridBuilder : IHtmlContent
         return SetRenderer("totalText", text);
     }
 
+    /// <summary>Names a page function called before each data request.</summary>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnDataLoading(string handler) => SetEvent("dataLoading", handler);
+
+    /// <summary>Names a page function called after each successful data request.</summary>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnDataLoaded(string handler) => SetEvent("dataLoaded", handler);
+
+    /// <summary>Names a page function called when a request fails.</summary>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnError(string handler) => SetEvent("error", handler);
+
+    /// <summary>Names a page function called when the selected cell changes.</summary>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnSelectionChanged(string handler) =>
+        SetEvent("selectionChanged", handler);
+
+    /// <summary>Names a page function called when a cell is activated.</summary>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnCellDoubleClick(string handler) =>
+        SetEvent("cellDoubleClick", handler);
+
+    /// <summary>Names a page function called after a cell is copied.</summary>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnCellCopied(string handler) => SetEvent("cellCopied", handler);
+
+    /// <summary>Names a page function called when a cell asks to filter by its value.</summary>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnCellFilterRequested(string handler) =>
+        SetEvent("cellFilterRequested", handler);
+
+    /// <summary>Names a page function called when the view state changes.</summary>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnViewStateChanged(string handler) =>
+        SetEvent("viewStateChanged", handler);
+
     private PivotGridBuilder Set(string key, object? value)
     {
         _options[key] = value;
@@ -185,6 +241,13 @@ public sealed class PivotGridBuilder : IHtmlContent
     private PivotGridBuilder SetRenderer(string key, object? value)
     {
         _rendererOptions[key] = value;
+        return this;
+    }
+
+    private PivotGridBuilder SetEvent(string key, string handler)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(handler);
+        _events[key] = handler;
         return this;
     }
 
@@ -227,6 +290,11 @@ public sealed class PivotGridBuilder : IHtmlContent
         if (_rendererOptions.Count > 0)
         {
             payload["rendererOptions"] = new Dictionary<string, object?>(_rendererOptions, StringComparer.Ordinal);
+        }
+
+        if (_events.Count > 0)
+        {
+            payload["events"] = new Dictionary<string, object?>(_events, StringComparer.Ordinal);
         }
 
         var json = JsonSerializer.Serialize(payload, SerializerOptions)

@@ -14,6 +14,7 @@
     pageSize: 40,
     sourceRowCount: 100000,
     rendererOptions: null,
+    events: null,
     fetchImpl: null,
     renderImpl: null,
     fieldDesigner: null
@@ -33,6 +34,43 @@
     }
 
     return target;
+  }
+
+  // Every event a widget emits, and the DOM event name it dispatches alongside.
+  // DOM event names are lowercased because that is the convention listeners
+  // expect; the widget's own on()/emit() keeps the camelCase name.
+  const EVENTS = [
+    "dataLoading",
+    "dataLoaded",
+    "error",
+    "selectionChanged",
+    "cellDoubleClick",
+    "cellCopied",
+    "cellFilterRequested",
+    "viewStateChanged"
+  ];
+
+  // Looks up a handler declared by name, so Razor markup can name a function
+  // without the page writing any wiring code. A dotted path is walked so a
+  // handler can live on an app namespace instead of directly on window.
+  //
+  // Resolved when the event fires rather than when the grid is created. A Razor
+  // helper initializes the grid inline, where its markup sits, which is before a
+  // script block further down the page has run — resolving eagerly would reject
+  // every handler declared in the natural place for one.
+  function resolveHandler(root, path, eventName) {
+    const found = String(path ?? "")
+      .split(".")
+      .filter(Boolean)
+      .reduce((scope, part) => (scope == null ? undefined : scope[part]), root);
+
+    if (typeof found !== "function") {
+      throw new Error(
+        `PivotForge event handler "${path}" for "${eventName}" is not a function on the page.`
+      );
+    }
+
+    return found;
   }
 
   function normalizePrefix(prefix) {
@@ -83,6 +121,8 @@
       this.fields = PivotForge.PivotRequestBuilder.normalizeFields(this.options.fields ?? []);
       PivotForge.PivotRequestBuilder.buildRequest(this.options.fields ?? []);
 
+      this.subscribeDeclaredEvents();
+
       this.renderer = this.options.renderImpl ? null : this.createRenderer();
 
       this.layoutState = null;
@@ -113,6 +153,16 @@
       }
 
       const rowFields = this.fields.filter(field => field.visible && field.area === "row");
+      const consumer = this.options.rendererOptions ?? {};
+
+      // Emits the widget event, then hands the same payload to whatever the
+      // consumer supplied through rendererOptions. Declared AFTER the spread so
+      // the event always fires, while the consumer's own callback still runs --
+      // otherwise supplying a callback would silently switch the event off.
+      const bridge = (eventName, payload) => {
+        this.emit(eventName, payload);
+        consumer[`on${eventName[0].toUpperCase()}${eventName.slice(1)}`]?.(payload);
+      };
 
       return new Renderer(this.container, {
         rowFields: rowFields.map(field => field.dataField),
@@ -129,10 +179,29 @@
         // payload, labels it with that raw key and applies no format — so
         // captions are lost and a second data field disappears.
         values: this.valueDefinitions(),
-        // Declared before the spread, so a consumer that brought its own
-        // detail UI through rendererOptions keeps it.
-        onCellDoubleClick: this.drillDownHandler(),
-        ...(this.options.rendererOptions ?? {})
+        ...consumer,
+        // A cell activation always announces itself. The packaged detail modal
+        // opens only when the consumer did not bring its own detail UI, so a
+        // page with its own modal does not get two.
+        onCellDoubleClick: selection => {
+          this.emit("cellDoubleClick", selection);
+
+          if (consumer.onCellDoubleClick) {
+            consumer.onCellDoubleClick(selection);
+            return;
+          }
+
+          this.drillDownHandler()?.(selection);
+        },
+        onSelectionChanged: selection => bridge("selectionChanged", selection),
+        onCellFilterRequested: selection => bridge("cellFilterRequested", selection),
+        onViewStateChanged: state => bridge("viewStateChanged", state),
+        // The renderer reports this as three positional arguments; the event
+        // carries them as one object so listeners are not order-dependent.
+        onCellCopied: (text, copied, kind) => {
+          this.emit("cellCopied", { text, copied, kind });
+          consumer.onCellCopied?.(text, copied, kind);
+        }
       });
     }
 
@@ -197,6 +266,43 @@
 
     emit(eventName, payload) {
       this.handlers.get(eventName)?.forEach(handler => handler(payload));
+      this.dispatchDomEvent(eventName, payload);
+    }
+
+    // Mirrors every emitted event onto the container as a CustomEvent, so a page
+    // can listen with addEventListener instead of reaching into the instance.
+    dispatchDomEvent(eventName, payload) {
+      if (typeof this.container?.dispatchEvent !== "function" || !root.CustomEvent) {
+        return;
+      }
+
+      this.container.dispatchEvent(new root.CustomEvent(
+        `pivotforge:${eventName.toLowerCase()}`,
+        { detail: payload, bubbles: true }));
+    }
+
+    // Subscribes the handlers named in the declarative `events` option. The event
+    // names are checked now — that is a configuration mistake we can always catch
+    // — while each handler name is resolved when its event first fires.
+    subscribeDeclaredEvents() {
+      const declared = this.options.events;
+      if (!declared) {
+        return;
+      }
+
+      Object.entries(declared).forEach(([eventName, path]) => {
+        if (!EVENTS.includes(eventName)) {
+          throw new Error(
+            `Unknown PivotForge event "${eventName}". Expected one of: ${EVENTS.join(", ")}.`
+          );
+        }
+
+        if (path === null || path === undefined) {
+          return;
+        }
+
+        this.on(eventName, payload => resolveHandler(root, path, eventName)(payload));
+      });
     }
 
     // Shared guard for methods that issue a network request or mutate state,

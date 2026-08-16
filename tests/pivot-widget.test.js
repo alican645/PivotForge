@@ -819,7 +819,11 @@ test("no detail handler is wired when drill-down is disabled", async () => {
         allowDrillDown: false
       });
 
-      assert.equal(constructed[0].onCellDoubleClick, null);
+      // The handler still exists, because cell activation always emits its
+      // event; what drill-down being off removes is the modal.
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      assert.equal(widget.drillDownModal, null);
       widget.dispose();
     });
   });
@@ -834,7 +838,9 @@ test("the packaged modal can be declined while drill-down stays available", asyn
         drillDownModal: false
       });
 
-      assert.equal(constructed[0].onCellDoubleClick, null);
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      assert.equal(widget.drillDownModal, null);
       assert.equal(widget.options.allowDrillDown, true);
       widget.dispose();
     });
@@ -849,7 +855,10 @@ test("a page that never loaded the modal script still builds a widget", async ()
     await withSpyRenderer(async ({ constructed }) => {
       const widget = PivotForge.create(createContainer(), { fields, autoLoad: false });
 
-      assert.equal(constructed[0].onCellDoubleClick, null);
+      // No modal script, so activation must degrade to emitting only.
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      assert.equal(widget.drillDownModal, null);
       widget.dispose();
     });
   } finally {
@@ -866,6 +875,198 @@ test("disposing the widget disposes the modal it built", async () => {
       widget.dispose();
 
       assert.equal(disposed.length, 1);
+    });
+  });
+});
+
+// --- Declarative events ----------------------------------------------------
+//
+// A page that names a handler writes no wiring code; a page that prefers to
+// listen gets a CustomEvent on the container. Both fire for the same emit, so
+// neither choice switches the other off.
+
+function createEventContainer() {
+  const container = createContainer();
+  container.events = [];
+  container.dispatchEvent = event => { container.events.push(event); return true; };
+  return container;
+}
+
+test("every emitted event is mirrored onto the container as a CustomEvent", async () => {
+  const container = createEventContainer();
+  const widget = PivotForge.create(container, {
+    fields,
+    autoLoad: false,
+    renderImpl: () => {},
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+  });
+
+  await widget.refresh();
+
+  const names = container.events.map(event => event.type);
+  assert.equal(names.includes("pivotforge:dataloading"), true);
+  assert.equal(names.includes("pivotforge:dataloaded"), true);
+});
+
+test("the DOM event carries the same payload the subscriber receives", async () => {
+  const container = createEventContainer();
+  const seen = [];
+  const widget = PivotForge.create(container, {
+    fields,
+    autoLoad: false,
+    renderImpl: () => {},
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+  });
+  widget.on("dataLoaded", payload => seen.push(payload));
+
+  await widget.refresh();
+
+  const dispatched = container.events.find(event => event.type === "pivotforge:dataloaded");
+  assert.equal(dispatched.detail, seen[0]);
+  assert.equal(dispatched.bubbles, true);
+});
+
+test("a declared handler name is resolved and subscribed", async () => {
+  const seen = [];
+  globalThis.pivotTestHandler = payload => seen.push(payload);
+
+  try {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      renderImpl: () => {},
+      events: { dataLoaded: "pivotTestHandler" },
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.equal(seen.length, 1);
+    widget.dispose();
+  } finally {
+    delete globalThis.pivotTestHandler;
+  }
+});
+
+test("a dotted handler path is walked, so handlers can live on a namespace", async () => {
+  const seen = [];
+  globalThis.pivotTestApp = { handlers: { loaded: payload => seen.push(payload) } };
+
+  try {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      renderImpl: () => {},
+      events: { dataLoaded: "pivotTestApp.handlers.loaded" },
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.equal(seen.length, 1);
+    widget.dispose();
+  } finally {
+    delete globalThis.pivotTestApp;
+  }
+});
+
+test("a handler name that resolves to nothing fails when its event fires", () => {
+  // Resolution is deferred because a Razor helper starts the grid inline, before
+  // a script block further down the page has defined anything. Construction
+  // therefore has to accept a name it cannot resolve yet.
+  const widget = PivotForge.create(createContainer(), {
+    fields,
+    autoLoad: false,
+    renderImpl: () => {},
+    events: { dataLoaded: "thereIsNoSuchFunction" }
+  });
+
+  assert.throws(() => widget.emit("dataLoaded", {}), /is not a function on the page/);
+  widget.dispose();
+});
+
+test("a handler defined after the grid is created is still found", async () => {
+  const seen = [];
+  const widget = PivotForge.create(createContainer(), {
+    fields,
+    autoLoad: false,
+    renderImpl: () => {},
+    events: { dataLoaded: "pivotLateHandler" },
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+  });
+
+  // Defined only now, the way a script block below the grid markup would.
+  globalThis.pivotLateHandler = payload => seen.push(payload);
+
+  try {
+    await widget.refresh();
+    assert.equal(seen.length, 1);
+  } finally {
+    delete globalThis.pivotLateHandler;
+    widget.dispose();
+  }
+});
+
+test("an unknown event name is refused rather than silently ignored", () => {
+  assert.throws(
+    () => PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      renderImpl: () => {},
+      events: { notAnEvent: "whatever" }
+    }),
+    /Unknown PivotForge event/);
+});
+
+test("selection and copy callbacks reach both the event and the consumer", async () => {
+  await withSpyRenderer(async ({ constructed }) => {
+    const container = createEventContainer();
+    const consumerSaw = [];
+    const eventSaw = [];
+
+    const widget = PivotForge.create(container, {
+      fields,
+      autoLoad: false,
+      rendererOptions: {
+        onSelectionChanged: selection => consumerSaw.push(selection),
+        onCellCopied: (text, copied, kind) => consumerSaw.push({ text, copied, kind })
+      }
+    });
+    widget.on("selectionChanged", payload => eventSaw.push(payload));
+    widget.on("cellCopied", payload => eventSaw.push(payload));
+
+    constructed[0].onSelectionChanged({ type: "cell" });
+    constructed[0].onCellCopied("42", true, "cell");
+
+    assert.equal(consumerSaw.length, 2);
+    assert.equal(eventSaw.length, 2);
+    // The three positional arguments arrive as one object.
+    assert.deepEqual(eventSaw[1], { text: "42", copied: true, kind: "cell" });
+
+    widget.dispose();
+  });
+});
+
+test("cell activation emits even when the consumer supplies its own detail UI", async () => {
+  await withStubModal(async ({ opened }) => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const seen = [];
+      const consumerSaw = [];
+      const widget = PivotForge.create(createContainer(), {
+        fields,
+        autoLoad: false,
+        rendererOptions: { onCellDoubleClick: selection => consumerSaw.push(selection) }
+      });
+      widget.on("cellDoubleClick", payload => seen.push(payload));
+
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      assert.equal(seen.length, 1);
+      assert.equal(consumerSaw.length, 1);
+      // The consumer brought its own detail UI, so the packaged modal stays out.
+      assert.equal(opened.length, 0);
+
+      widget.dispose();
     });
   });
 });

@@ -1,7 +1,7 @@
 # PivotForge — DevExpress Denklik Yol Haritası
 
 DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge'un
-`0.4.0-preview.6` sürümündeki durumu karşılaştırıldı. Kaynaklar dosyanın sonunda.
+`0.4.0-preview.7` sürümündeki durumu karşılaştırıldı. Kaynaklar dosyanın sonunda.
 
 **Kapsam dışı (talep üzerine):** OLAP / SSAS, sunucu tarafı toplama (server mode),
 uzaktan gruplama, milyon satır ölçeğinde sanal kaydırma.
@@ -41,21 +41,21 @@ böylece renderer kendi varsayılanını korur.
 - [x] `empty-text` / `total-text` → `emptyText` / `totalText`
 - [x] Aynı seçenekler `PivotGridBuilder`'a fluent metot olarak
 
-### 0.2 Olay bildirimi
+### 0.2 Olay bildirimi — ✅ `0.4.0-preview.7` ile tamamlandı
 
 Bugün hiçbir olay bildirilemiyor. `pivotforge:ready` bir kaçış kapısı, sözleşme değil —
 üstelik `widget.renderer.options`'a dışarıdan yazmayı gerektiriyor, yani iç yapıya dokunuyor.
 
-**Önerilen tasarım (onay bekliyor):** nitelik + DOM olayı birlikte. Nitelik yazan hiç JS
-yazmaz; olay dinlemek isteyen iç yapıya dokunmadan dinler.
+Uygulanan tasarım: nitelik + DOM olayı birlikte. İkisi de her zaman tetikleniyor —
+işleyici adı vermek DOM olayını kapatmıyor.
 
-- [ ] `on-selection-changed`, `on-cell-double-click`, `on-cell-copied`,
+- [x] `on-selection-changed`, `on-cell-double-click`, `on-cell-copied`,
       `on-cell-filter-requested`, `on-view-state-changed`, `on-data-loaded`, `on-error`
       → adı verilen global fonksiyonu çağır
-- [ ] Her olay için `<pivot-grid>` elementinden `CustomEvent` yayınla
+- [x] Her olay için `<pivot-grid>` elementinden `CustomEvent` yayınla
       (`pivotforge:selectionchanged` vb.), yayınlanan yükü belgele
-- [ ] `widget.renderer.options`'a dışarıdan yazmayı gereksiz kılacak resmî
-      `widget.setRendererOption(name, value)` yüzeyi
+- [x] `widget.renderer.options`'a dışarıdan yazma ihtiyacı ortadan kalktı: sunum
+      seçenekleri 0.1 ile bildirimsel, olaylar 0.2 ile. Ayrı bir setter gerekmedi.
 
 ### 0.3 Başlangıç durumu
 

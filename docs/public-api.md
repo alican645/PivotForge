@@ -1,6 +1,6 @@
 # Public API Surface
 
-This document records the supported public surface for `0.4.0-preview.6`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
+This document records the supported public surface for `0.4.0-preview.7`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
 
 ## PivotForge.Core
 
@@ -38,7 +38,7 @@ This document records the supported public surface for `0.4.0-preview.6`. Public
 
 ### Declarative rendering
 
-`PivotSelectionMode` and `PivotGridLayoutMode` describe the renderer presentation options the grid can declare.
+`PivotSelectionMode` and `PivotGridLayoutMode` describe the renderer presentation options the grid can declare. `PivotGridBuilder.On*` methods (and the matching `on-*` attributes) name page functions for the widget's events, which are also dispatched on the container as `pivotforge:*` CustomEvents.
 
 - `PivotForge.AspNetCore.Rendering.PivotForgeHtmlHelperExtensions`: exposes `Html.PivotForge()` on `IHtmlHelper`.
 - `PivotForge.AspNetCore.Rendering.PivotForgeFactory`: creates component builders; `PivotGrid()` returns a `PivotGridBuilder`.

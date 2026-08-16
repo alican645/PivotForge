@@ -107,6 +107,45 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("total-text")]
     public string? TotalText { get; set; }
 
+    /// <summary>Gets or sets the page function called before each data request.</summary>
+    /// <remarks>
+    /// Every event attribute names a function on the page, optionally as a dotted path
+    /// such as <c>app.handlers.onLoaded</c>. The name is resolved when the grid is
+    /// created, so a misspelling fails immediately rather than never firing. The same
+    /// events are also dispatched on the container as <c>pivotforge:*</c> CustomEvents,
+    /// whether or not an attribute names a handler.
+    /// </remarks>
+    [HtmlAttributeName("on-data-loading")]
+    public string? OnDataLoading { get; set; }
+
+    /// <summary>Gets or sets the page function called after each successful data request.</summary>
+    [HtmlAttributeName("on-data-loaded")]
+    public string? OnDataLoaded { get; set; }
+
+    /// <summary>Gets or sets the page function called when a request fails.</summary>
+    [HtmlAttributeName("on-error")]
+    public string? OnError { get; set; }
+
+    /// <summary>Gets or sets the page function called when the selected cell changes.</summary>
+    [HtmlAttributeName("on-selection-changed")]
+    public string? OnSelectionChanged { get; set; }
+
+    /// <summary>Gets or sets the page function called when a cell is activated.</summary>
+    [HtmlAttributeName("on-cell-double-click")]
+    public string? OnCellDoubleClick { get; set; }
+
+    /// <summary>Gets or sets the page function called after a cell is copied.</summary>
+    [HtmlAttributeName("on-cell-copied")]
+    public string? OnCellCopied { get; set; }
+
+    /// <summary>Gets or sets the page function called when a cell asks to filter by its value.</summary>
+    [HtmlAttributeName("on-cell-filter-requested")]
+    public string? OnCellFilterRequested { get; set; }
+
+    /// <summary>Gets or sets the page function called when the view state changes.</summary>
+    [HtmlAttributeName("on-view-state-changed")]
+    public string? OnViewStateChanged { get; set; }
+
     /// <summary>Collects the declared fields and writes the grid markup.</summary>
     /// <param name="context">The tag helper context.</param>
     /// <param name="output">The output that receives the grid markup.</param>
@@ -227,6 +266,46 @@ public sealed class PivotGridTagHelper : TagHelper
         if (TotalText is { } totalText)
         {
             builder.TotalText(totalText);
+        }
+
+        if (OnDataLoading is { } onDataLoading)
+        {
+            builder.OnDataLoading(onDataLoading);
+        }
+
+        if (OnDataLoaded is { } onDataLoaded)
+        {
+            builder.OnDataLoaded(onDataLoaded);
+        }
+
+        if (OnError is { } onError)
+        {
+            builder.OnError(onError);
+        }
+
+        if (OnSelectionChanged is { } onSelectionChanged)
+        {
+            builder.OnSelectionChanged(onSelectionChanged);
+        }
+
+        if (OnCellDoubleClick is { } onCellDoubleClick)
+        {
+            builder.OnCellDoubleClick(onCellDoubleClick);
+        }
+
+        if (OnCellCopied is { } onCellCopied)
+        {
+            builder.OnCellCopied(onCellCopied);
+        }
+
+        if (OnCellFilterRequested is { } onCellFilterRequested)
+        {
+            builder.OnCellFilterRequested(onCellFilterRequested);
+        }
+
+        if (OnViewStateChanged is { } onViewStateChanged)
+        {
+            builder.OnViewStateChanged(onViewStateChanged);
         }
 
         if (CssClass is not null)

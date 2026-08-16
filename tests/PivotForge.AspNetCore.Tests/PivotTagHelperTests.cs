@@ -570,4 +570,69 @@ public class PivotTagHelperTests
         // An empty placeholder is meaningful: it renders nothing in an empty cell.
         new PivotGridBuilder().EmptyText("");
     }
+
+    // --- Declarative events ---------------------------------------------------
+
+    [Fact]
+    public async Task OmitsEventsEntirelyWhenNoHandlerIsNamed()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.TryGetProperty("events", out _));
+    }
+
+    [Fact]
+    public async Task WritesNamedHandlersUnderEvents()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                OnSelectionChanged = "handleSelection",
+                OnDataLoaded = "app.handlers.loaded",
+                OnError = "handleError"
+            },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var events = config.GetProperty("events");
+        Assert.Equal("handleSelection", events.GetProperty("selectionChanged").GetString());
+        Assert.Equal("app.handlers.loaded", events.GetProperty("dataLoaded").GetString());
+        Assert.Equal("handleError", events.GetProperty("error").GetString());
+        Assert.False(events.TryGetProperty("cellCopied", out _));
+    }
+
+    [Fact]
+    public async Task EventsMatchTheEquivalentBuilderConfiguration()
+    {
+        var fromTagHelper = await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                OnSelectionChanged = "handleSelection",
+                OnCellDoubleClick = "handleDetail"
+            },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum));
+
+        var fromBuilder = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid")
+            .OnSelectionChanged("handleSelection")
+            .OnCellDoubleClick("handleDetail")
+            .Fields(fields => fields.Add()
+                .DataField("Amount").Area(PivotArea.Data).Caption("Tutar")
+                .Aggregation(PivotAggregation.Sum)));
+
+        Assert.Equal(fromBuilder, fromTagHelper);
+    }
+
+    [Fact]
+    public void RefusesABlankHandlerName()
+    {
+        Assert.Throws<ArgumentException>(
+            () => new PivotGridBuilder().OnSelectionChanged("  "));
+        // A null name reports the more precise ArgumentNullException.
+        Assert.Throws<ArgumentNullException>(
+            () => new PivotGridBuilder().OnDataLoaded(null!));
+    }
 }

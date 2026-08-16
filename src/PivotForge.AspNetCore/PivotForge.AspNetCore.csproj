@@ -10,7 +10,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <PackageId>PivotForge.AspNetCore</PackageId>
-    <Version>0.4.0-preview.6</Version>
+    <Version>0.4.0-preview.7</Version>
     <Authors>Alican</Authors>
     <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge for ASP.NET Core</Title>
@@ -20,7 +20,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Ten renderer presentation options become declarable from Razor: selection-mode, layout-mode, context-menu, subtotals, show-grand-total, repeat-row-labels, min-column-width, max-column-width, empty-text and total-text, with matching PivotGridBuilder methods. Previously these needed hand-written JavaScript.</PackageReleaseNotes>
+    <PackageReleaseNotes>Events become declarable: on-data-loading, on-data-loaded, on-error, on-selection-changed, on-cell-double-click, on-cell-copied, on-cell-filter-requested and on-view-state-changed name a page function, with matching PivotGridBuilder methods. Every event is also dispatched on the grid container as a bubbling pivotforge:* CustomEvent, so a page can listen instead of naming a handler. A rendererOptions callback supplied by the consumer still runs alongside.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

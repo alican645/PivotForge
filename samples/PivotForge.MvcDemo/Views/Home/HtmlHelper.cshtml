@@ -55,6 +55,8 @@
                     .RepeatRowLabels(true)
                     .MinColumnWidth(96)
                     .TotalText("Genel Toplam")
+    .OnSelectionChanged("pivotSelectionChanged")
+                    .OnSelectionChanged("pivotSelectionChanged")
                     .FieldDesigner("#designerHost")
                     .Fields(fields =>
                     {
@@ -123,3 +125,23 @@
         </div>
     </section>
 </main>
+
+<div class="pivot-card">
+    <div class="pivot-panel-head"><h2>Olaylar</h2></div>
+    <div class="pivot-note" id="eventLog">Bir hücre seçin.</div>
+</div>
+
+<script>
+    // Named by on-selection-changed / .OnSelectionChanged -- no wiring code needed.
+    function pivotSelectionChanged(selection) {
+        document.getElementById("eventLog").textContent =
+            selection ? `Seçili: ${selection.rowHeader?.join(" / ") ?? "-"}` : "Seçim yok.";
+    }
+
+    // The same events are also dispatched on the container, for pages that
+    // prefer listening over naming.
+    document.getElementById("pivotGrid").addEventListener("pivotforge:dataloaded", event => {
+        document.getElementById("eventLog").dataset.rows =
+            String(event.detail.result.rowHeaders?.length ?? 0);
+    });
+</script>
