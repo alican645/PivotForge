@@ -42,9 +42,10 @@ This document records the supported public surface for `0.3.0-preview.1`. Public
 - `PivotForge.AspNetCore.Rendering.PivotForgeFactory`: creates component builders; `PivotGrid()` returns a `PivotGridBuilder`.
 - `PivotForge.AspNetCore.Rendering.PivotGridBuilder`: declares a pivot grid's container, options, and fields, and renders its markup plus the `PivotForge.create` initialization script. `FieldDesigner(string selector)` renders an interactive field designer into the matching host element.
 - `PivotForge.AspNetCore.Rendering.PivotFieldCollectionBuilder`: collects fields in declaration order via `Add()`.
-- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, role, aggregation, show-as, format, caption, and visibility.
+- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, role, aggregation, show-as, caption, visibility, and number format (`FormatType`, `FormatDecimals`, `FormatGrouping`, `FormatCurrency`).
 - `PivotForge.AspNetCore.Rendering.PivotArea`: `Row`, `Column`, `Data`, `Filter`, `Available`.
 - `PivotForge.AspNetCore.Rendering.PivotFieldRole`: `Dimension`, `Measure`. Required on `PivotArea.Available` fields; inferred elsewhere from `Area`.
+- `PivotForge.AspNetCore.Rendering.PivotValueFormatType`: `Number`, `Currency`, `Percent`. Selects how a data field's values are formatted in the browser.
 - `PivotForge.AspNetCore.Rendering.PivotGridTagHelper`: targets `<pivot-grid>`; mirrors the builder's options as kebab-case attributes, including `field-designer`, and delegates to `PivotGridBuilder`.
 - `PivotForge.AspNetCore.Rendering.PivotFieldTagHelper`: targets `<pivot-field>` inside a `<pivot-grid>`; declares one field, including its `role` attribute. Requires `@addTagHelper *, PivotForge.AspNetCore`.
 
@@ -73,7 +74,7 @@ Razor Class Library scripts expose these constructors and helpers under `window.
 - `PivotForge.PivotDrillDownData`
 - `PivotForge.PivotVirtualDataSource`
 
-`PivotForge.create(target, options)` builds and returns a `PivotWidget` from a declarative field list; see the [ASP.NET Core integration guide](aspnetcore-integration.md#declarative-api) for its full contract. `PivotForge.PivotRequestBuilder` normalizes and validates the field model shared by the declarative Razor and JavaScript APIs. `PivotWidget.update({ fields, filters, rowSort })` applies any combination of those pieces and refreshes exactly once, alongside the existing `updateFields(fields)`. `PivotForge.PivotLayoutState` and `PivotForge.PivotFieldDesigner` implement the interactive field designer described in the [ASP.NET Core integration guide](aspnetcore-integration.md#field-designer), including positional drag-and-drop: `move(name, area, index)` places a field at a specific slot, and dropping a chip into the zone it already occupies reorders it; a widget built with the `fieldDesigner` option exposes them as `widget.layoutState` and `widget.designer`.
+`PivotForge.create(target, options)` builds and returns a `PivotWidget` from a declarative field list; see the [ASP.NET Core integration guide](aspnetcore-integration.md#declarative-api) for its full contract. `PivotForge.PivotRequestBuilder` normalizes and validates the field model shared by the declarative Razor and JavaScript APIs. `PivotWidget.update({ fields, filters, rowSort })` applies any combination of those pieces and refreshes exactly once, alongside the existing `updateFields(fields)`. `PivotForge.PivotLayoutState` and `PivotForge.PivotFieldDesigner` implement the interactive field designer described in the [ASP.NET Core integration guide](aspnetcore-integration.md#field-designer), including positional drag-and-drop: `move(name, area, index)` places a field at a specific slot, and dropping a chip into the zone it already occupies reorders it. `setFormat(name, format)` sets or clears a data field's number format, which the designer edits through a per-chip panel; a widget built with the `fieldDesigner` option exposes them as `widget.layoutState` and `widget.designer`.
 
 Static assets are served from `/_content/PivotForge.AspNetCore/`.
 

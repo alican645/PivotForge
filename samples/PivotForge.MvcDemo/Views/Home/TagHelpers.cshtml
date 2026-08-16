@@ -53,7 +53,8 @@
                     <pivot-field field="Region" caption="Bölge" area="Row" />
                     <pivot-field field="Category" caption="Kategori" area="Row" />
                     <pivot-field field="Year" caption="Yıl" area="Column" />
-                    <pivot-field field="Amount" caption="Tutar" area="Data" aggregation="Sum" />
+                    <pivot-field field="Amount" caption="Tutar" area="Data" aggregation="Sum"
+                                 format-type="Currency" format-decimals="0" format-currency="TRY" />
                     <pivot-field field="SalesPerson" caption="Satış Temsilcisi" area="Available" role="Dimension" />
                     <pivot-field field="Quarter" caption="Çeyrek" area="Available" role="Dimension" />
                     <pivot-field field="Quantity" caption="Miktar" area="Available" role="Measure" />
@@ -76,7 +77,8 @@
     &lt;pivot-field field="Region"      caption="Bölge"            area="Row" /&gt;
     &lt;pivot-field field="Category"    caption="Kategori"         area="Row" /&gt;
     &lt;pivot-field field="Year"        caption="Yıl"              area="Column" /&gt;
-    &lt;pivot-field field="Amount"      caption="Tutar"            area="Data" aggregation="Sum" /&gt;
+    &lt;pivot-field field="Amount"      caption="Tutar"            area="Data" aggregation="Sum"
+                 format-type="Currency" format-decimals="0" format-currency="TRY" /&gt;
     &lt;pivot-field field="SalesPerson" caption="Satış Temsilcisi" area="Available" role="Dimension" /&gt;
     &lt;pivot-field field="Quarter"     caption="Çeyrek"           area="Available" role="Dimension" /&gt;
     &lt;pivot-field field="Quantity"    caption="Miktar"           area="Available" role="Measure" /&gt;

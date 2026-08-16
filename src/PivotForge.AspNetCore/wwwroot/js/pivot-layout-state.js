@@ -4,6 +4,48 @@
   const PLACED_AREAS = ["row", "column", "data", "filter"];
   const AREA_TO_KEY = { row: "rows", column: "columns", data: "values", filter: "filters" };
 
+  // Validates a value format against what the browser renderer and the Excel
+  // export can both actually render. Returns the accepted format, or null to
+  // mean "no formatting". Throws rather than coercing, so a bad stored layout
+  // is reported instead of silently rendering as something else.
+  function checkFormat(name, format) {
+    if (format === null || format === undefined) {
+      return null;
+    }
+
+    if (typeof format !== "object" || Array.isArray(format)) {
+      throw new Error(`Format for "${name}" must be an object.`);
+    }
+
+    const { FORMAT_TYPES } = PivotForge.PivotRequestBuilder;
+
+    if (format.type !== undefined && !FORMAT_TYPES.includes(format.type)) {
+      throw new Error(
+        `Unknown format type "${format.type}" for "${name}". Expected one of: ${FORMAT_TYPES.join(", ")}.`
+      );
+    }
+
+    // 0-6 is what the Excel export's "#,##0.00" pattern can express; allowing
+    // more here would make the two renderings disagree.
+    if (format.decimals !== undefined &&
+      (!Number.isInteger(format.decimals) || format.decimals < 0 || format.decimals > 6)) {
+      throw new Error(
+        `Format decimals for "${name}" must be an integer between 0 and 6, but was ${format.decimals}.`
+      );
+    }
+
+    if (format.useGrouping !== undefined && typeof format.useGrouping !== "boolean") {
+      throw new Error(`Format useGrouping for "${name}" must be a boolean.`);
+    }
+
+    if (format.currency !== undefined &&
+      (typeof format.currency !== "string" || format.currency.trim() === "")) {
+      throw new Error(`Format currency for "${name}" must be a non-empty string.`);
+    }
+
+    return { ...format };
+  }
+
   class PivotLayoutState {
     constructor(catalog, layout = null) {
       const normalized = PivotForge.PivotRequestBuilder.normalizeFields(catalog ?? []);
@@ -29,7 +71,8 @@
         values: inArea("data").map(field => ({
           field: field.dataField,
           aggregation: field.aggregation ?? "sum",
-          showAs: field.showAs ?? "normal"
+          showAs: field.showAs ?? "normal",
+          ...(field.format ? { format: checkFormat(field.dataField, field.format) } : {})
         })),
         filters: inArea("filter").map(field => ({ field: field.dataField, values: [] }))
       };
@@ -84,11 +127,18 @@
       return {
         rows: [...(layout.rows ?? [])],
         columns: [...(layout.columns ?? [])],
-        values: (layout.values ?? []).map(value => ({
-          field: value.field,
-          aggregation: value.aggregation ?? "sum",
-          showAs: value.showAs ?? "normal"
-        })),
+        values: (layout.values ?? []).map(value => {
+          // A stored format wins; otherwise the catalog's declaration applies,
+          // so adopting a layout saved before formats existed still formats.
+          const format = checkFormat(value.field, value.format ?? this.field(value.field).format);
+
+          return {
+            field: value.field,
+            aggregation: value.aggregation ?? "sum",
+            showAs: value.showAs ?? "normal",
+            ...(format ? { format } : {})
+          };
+        }),
         filters: (layout.filters ?? []).map(filter => ({
           field: filter.field,
           values: [...(filter.values ?? [])]
@@ -158,8 +208,14 @@
 
       this.detach(name);
 
+      const catalogFormat = area === "data" ? this.field(name).format : null;
       const entry = existing ?? (area === "data"
-        ? { field: name, aggregation: "sum", showAs: "normal" }
+        ? {
+          field: name,
+          aggregation: "sum",
+          showAs: "normal",
+          ...(catalogFormat ? { format: checkFormat(name, catalogFormat) } : {})
+        }
         : area === "filter"
           ? { field: name, values: [] }
           : name);
@@ -213,6 +269,24 @@
 
       const [entry] = target.splice(fromIndex, 1);
       target.splice(toIndex, 0, entry);
+      this.emitChange();
+    }
+
+    setFormat(name, format) {
+      const value = this.layout.values.find(entry => entry.field === name);
+      if (!value) {
+        throw new Error(`Field "${name}" is not in the data area.`);
+      }
+
+      // Validate before mutating, so a rejected format leaves the entry as it was.
+      const checked = checkFormat(name, format);
+
+      if (checked === null) {
+        delete value.format;
+      } else {
+        value.format = checked;
+      }
+
       this.emitChange();
     }
 
@@ -283,7 +357,7 @@
           area: "data",
           aggregation: value.aggregation,
           showAs: value.showAs,
-          format: formatOf(value.field),
+          format: value.format ?? null,
           visible: visibleOf(value.field)
         })),
         ...state.filters.map(filter => ({

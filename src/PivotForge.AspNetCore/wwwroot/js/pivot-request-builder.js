@@ -4,6 +4,7 @@
   const AREAS = ["row", "column", "data", "filter", "available"];
   const ROLES = ["dimension", "measure"];
   const AGGREGATIONS = ["sum", "count", "average", "min", "max"];
+  const FORMAT_TYPES = ["number", "currency", "percent"];
   const SHOW_AS = [
     "normal",
     "percentOfRowTotal",
@@ -125,7 +126,9 @@
     };
   }
 
-  PivotForge.PivotRequestBuilder = { normalizeFields, buildRequest, valueKey, AGGREGATIONS, SHOW_AS };
+  PivotForge.PivotRequestBuilder = {
+    normalizeFields, buildRequest, valueKey, AGGREGATIONS, SHOW_AS, FORMAT_TYPES
+  };
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = PivotForge.PivotRequestBuilder;

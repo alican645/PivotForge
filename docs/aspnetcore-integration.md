@@ -167,7 +167,7 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | `role` | inferred from `area` | One of `dimension`, `measure`. **Required** when `area` is `available`, because there is no placement to infer it from. Elsewhere it is inferred (`data` → `measure`, everything else → `dimension`); an explicit `role` that contradicts its `area` — e.g., `measure` outside `data` — is a validation error. See [role rules](#field-designer). |
 | `aggregation` | `"sum"` (only on `data` fields) | One of `sum`, `count`, `average`, `min`, `max`. Setting `aggregation` on a non-`data` field is a validation error. |
 | `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`. Setting `showAs` on a non-`data` field is a validation error. |
-| `format` | `null` | Number formatting for a `data` field's values: `{ type, decimals, useGrouping, currency }`, where `type` is `"number"` (default), `"currency"`, or `"percent"`, `decimals` is the fraction-digit count (default `2`), `useGrouping` toggles the thousands separator (default `true`), and `currency` is an ISO code used when `type` is `"currency"` (default `"TRY"`). Values are rendered with `Intl.NumberFormat` in the `tr-TR` locale. **Not yet settable from C#:** `PivotFieldBuilder.Format(string)` and the `format` tag-helper attribute take a string, which this shape cannot be expressed as, so a format declared there is ignored. Supply it from JavaScript, or through `rendererOptions.values`, until the typed attributes land. |
+| `format` | `null` | Number formatting for a `data` field's values: `{ type, decimals, useGrouping, currency }`, where `type` is `"number"` (default), `"currency"`, or `"percent"`, `decimals` is the fraction-digit count from 0 to 6 (default `2`), `useGrouping` toggles the thousands separator (default `true`), and `currency` is an ISO code used when `type` is `"currency"` (default `"TRY"`). Values are rendered with `Intl.NumberFormat` in the `tr-TR` locale. Declared from C# with `FormatType`/`FormatDecimals`/`FormatGrouping`/`FormatCurrency`, or from markup with `format-type`/`format-decimals`/`format-grouping`/`format-currency`. Setting a format on a non-`data` field is a validation error. |
 | `visible` | `true` | `false` configures a field without including it in the rendered request. |
 
 ### `PivotGridBuilder` (Razor)
@@ -309,6 +309,12 @@ Chips are dragged with the mouse, using the HTML5 drag-and-drop API. A drop is *
 
 The available-field list is a catalog rather than an ordered layout, so it is not reorderable; fields leave a zone through the chip's remove (`×`) button.
 
+#### Value formats
+
+A chip in the Values zone carries a `⋯` button that expands a format panel beneath it, with controls for the format type, the fraction-digit count, and the thousands separator. The panel writes through `PivotLayoutState.setFormat`, carrying the members it is not editing across, so changing the decimals never drops the currency. It opens showing the format actually in effect — a field that declared none shows the renderer's own defaults rather than empty controls.
+
+The panel expands in flow rather than floating, so it needs no positioning or outside-click handling; the same `⋯` button closes it.
+
 #### Role
 
 Every field has a `role` of `dimension` or `measure`, which constrains where it can be dropped: a `measure` may occupy only the data area; a `dimension` may occupy row, column, and filter. Role is inferred from `area` — `data` implies `measure`, everything else implies `dimension` — **except** for `area="Available"`, where there is no placement to infer from, so `role` (`Role(...)` / `role` attribute) is required. Setting a `role` that contradicts a non-`Available` area (e.g., `Role(PivotFieldRole.Measure)` on a `Row` field) is a validation error, raised by `PivotFieldBuilder.Build()` at render time.
@@ -323,6 +329,7 @@ Pure state — no DOM access. Constructed with `new PivotLayoutState(catalog, la
 | `move(name, area, index)` | Moves a catalog field into `area` at `index` (default: end), detaching it from wherever it was. Throws if `canDrop` would be `false`. Placing into `"data"` defaults `aggregation` to `"sum"`; placing into `"filter"` starts with no selected values. When the field is already in `area` this repositions it: `index` is read against the zone as it looks before the move, and the entry keeps its aggregation, showAs, and selected filter values. |
 | `remove(name)` | Detaches a field back to the available list. A no-op if the field is already available. Throws if `name` is the only field in the data area — a pivot always needs at least one. |
 | `reorder(area, fromIndex, toIndex)` | Reorders a placed field within its own zone. |
+| `setFormat(name, format)` | Sets a data field's number format, or clears it with `null`. Validates `type`, `decimals` (0-6), `useGrouping`, and `currency`, throwing rather than coercing, and leaves the existing format untouched when it refuses. Throws if the field is not in the data area. |
 | `setAggregation(name, aggregation)` | Sets the aggregation (`"sum"`, `"count"`, `"average"`, `"min"`, `"max"`) of a field already in the data area. Throws otherwise. |
 | `field(name)` | Returns the catalog entry for `name`. Throws if unknown. |
 | `getState()` | Returns `{ rows, columns, values, filters, available }` — `available` is every catalog field not currently placed. |
@@ -351,7 +358,7 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
 
 - **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
 - **No filter value picker.** A field can be dragged into the Filters zone, but there is no UI to choose which values to filter to. A filter with no selected values filters nothing — the same as an unset filter elsewhere in PivotForge — so the Filters zone alone does not yet do anything useful; a consumer must still add value selection.
-- **No show-as menu or per-value format UI.** `PivotLayoutState` exposes `setAggregation` only; changing `showAs` or `format` still requires calling `updateFields`/`update` directly.
+- **No show-as menu.** The designer edits aggregation and format; changing `showAs` still requires calling `updateFields`/`update` directly.
 - **No sort panel.** Sorting is still driven through the widget's `sortBy`, outside the designer.
 - **Saved views are not wired up automatically.** `PivotViewStore` and the designer's state are both serializable, so a consumer can persist and restore designer layouts, but connecting the two is the consumer's responsibility — see the MVC demo for one approach.
 - **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.

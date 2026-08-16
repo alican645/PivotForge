@@ -54,7 +54,9 @@
                         fields.Add().Caption("Kategori").DataField("Category").Area(PivotArea.Row);
                         fields.Add().Caption("Yıl").DataField("Year").Area(PivotArea.Column);
                         fields.Add().Caption("Tutar").DataField("Amount")
-                            .Aggregation(PivotAggregation.Sum).Area(PivotArea.Data);
+                            .Aggregation(PivotAggregation.Sum).Area(PivotArea.Data)
+                            .FormatType(PivotValueFormatType.Currency)
+                            .FormatDecimals(0).FormatCurrency("TRY");
                         fields.Add().Caption("Satış Temsilcisi").DataField("SalesPerson")
                             .Area(PivotArea.Available).Role(PivotFieldRole.Dimension);
                         fields.Add().Caption("Çeyrek").DataField("Quarter")
@@ -85,7 +87,9 @@
         fields.Add().Caption("Kategori").DataField("Category").Area(PivotArea.Row);
         fields.Add().Caption("Yıl").DataField("Year").Area(PivotArea.Column);
         fields.Add().Caption("Tutar").DataField("Amount")
-            .Aggregation(PivotAggregation.Sum).Area(PivotArea.Data);
+            .Aggregation(PivotAggregation.Sum).Area(PivotArea.Data)
+            .FormatType(PivotValueFormatType.Currency)
+            .FormatDecimals(0).FormatCurrency("TRY");
         fields.Add().Caption("Satış Temsilcisi").DataField("SalesPerson")
             .Area(PivotArea.Available).Role(PivotFieldRole.Dimension);
         fields.Add().Caption("Çeyrek").DataField("Quarter")

@@ -500,6 +500,41 @@ select {
   opacity: 0.4;
 }
 
+.pivot-chip__format-toggle {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--pt-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pivot-chip__format-toggle:hover {
+  background: var(--pt-panel);
+  color: var(--pt-text);
+}
+
+/* Expands in flow beneath the chip rather than floating, so it needs no
+   positioning, outside-click, or escape handling. */
+.pivot-chip__format {
+  display: flex;
+  flex-basis: 100%;
+  gap: 4px;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--pt-border);
+}
+
+.pivot-chip__format select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+}
+
 .pivot-field-chip:hover,
 .pivot-placed-chip:hover {
   border-color: #b8c2d2;
@@ -2105,6 +2140,8 @@ select {
 
 .pivot-chip {
   display: flex;
+  /* The format panel is a full-width child, so it needs a line of its own. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
   padding: 0.25rem 0.5rem;

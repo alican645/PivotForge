@@ -14,6 +14,7 @@ function createElement(tagName) {
     className: "",
     draggable: false,
     disabled: false,
+    checked: false,
     title: "",
     value: "",
     classList: {
@@ -597,4 +598,141 @@ test("a target the role rule refuses is not marked", () => {
   dragFieldTo(host, "Quantity", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
 
   assert.deepEqual(markedChips(body), []);
+});
+
+// --- Value format panel --------------------------------------------------
+//
+// Data chips carry a "⋯" toggle that opens an inline panel (not a floating
+// popup, which would need positioning and outside-click handling) holding the
+// format controls.
+
+const formatCatalog = [
+  { dataField: "Region", caption: "Bölge", area: "row" },
+  {
+    dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum",
+    format: { type: "currency", decimals: 0, useGrouping: true, currency: "TRY" }
+  }
+];
+
+function buildWithFormat() {
+  const updates = [];
+  const widget = { update: async payload => { updates.push(payload); } };
+  const state = new PivotForge.PivotLayoutState(formatCatalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget });
+
+  return { designer, state, host, updates };
+}
+
+const dataChip = host => chips(host).find(chip => chip.dataset.field === "Amount");
+
+test("only data chips offer the format toggle", () => {
+  const { host } = buildWithFormat();
+
+  assert.notEqual(findByAction(dataChip(host), "format-toggle"), null);
+  assert.equal(
+    findByAction(chips(host).find(chip => chip.dataset.field === "Region"), "format-toggle"),
+    null);
+});
+
+test("the format panel stays closed until the toggle is used", () => {
+  const { host } = buildWithFormat();
+
+  assert.equal(findByAction(dataChip(host), "format-type"), null);
+});
+
+test("the toggle opens the panel, seeded with the current format", () => {
+  const { host } = buildWithFormat();
+
+  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+
+  const chip = dataChip(host);
+  assert.equal(findByAction(chip, "format-type").value, "currency");
+  assert.equal(findByAction(chip, "format-decimals").value, "0");
+  assert.equal(findByAction(chip, "format-grouping").checked, true);
+});
+
+test("changing the type writes it to the state and refreshes once", async () => {
+  const { host, state, updates } = buildWithFormat();
+  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  updates.length = 0;
+
+  findByAction(dataChip(host), "format-type")
+    .dispatch("change", { target: { value: "percent" } });
+  await Promise.resolve();
+
+  assert.equal(state.getState().values[0].format.type, "percent");
+  assert.equal(updates.length, 1);
+});
+
+test("changing the decimals writes a number, not the raw string", async () => {
+  const { host, state } = buildWithFormat();
+  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+
+  findByAction(dataChip(host), "format-decimals")
+    .dispatch("change", { target: { value: "3" } });
+  await Promise.resolve();
+
+  assert.equal(state.getState().values[0].format.decimals, 3);
+});
+
+test("toggling grouping writes a boolean", async () => {
+  const { host, state } = buildWithFormat();
+  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+
+  findByAction(dataChip(host), "format-grouping")
+    .dispatch("change", { target: { checked: false } });
+  await Promise.resolve();
+
+  assert.equal(state.getState().values[0].format.useGrouping, false);
+});
+
+test("editing one member leaves the others intact", async () => {
+  const { host, state } = buildWithFormat();
+  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+
+  findByAction(dataChip(host), "format-decimals")
+    .dispatch("change", { target: { value: "2" } });
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().values[0].format, {
+    type: "currency", decimals: 2, useGrouping: true, currency: "TRY"
+  });
+});
+
+test("the panel stays open across the re-render an edit causes", async () => {
+  const { host } = buildWithFormat();
+  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+
+  findByAction(dataChip(host), "format-decimals")
+    .dispatch("change", { target: { value: "1" } });
+  await Promise.resolve();
+
+  assert.notEqual(findByAction(dataChip(host), "format-decimals"), null);
+});
+
+test("the toggle closes an open panel", () => {
+  const { host } = buildWithFormat();
+
+  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+  findByAction(dataChip(host), "format-toggle").dispatch("click", {});
+
+  assert.equal(findByAction(dataChip(host), "format-type"), null);
+});
+
+test("a value with no declared format opens the panel on the renderer's defaults", () => {
+  const updates = [];
+  const state = new PivotForge.PivotLayoutState(catalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, {
+    state,
+    widget: { update: async payload => { updates.push(payload); } }
+  });
+
+  const chip = chips(host).find(entry => entry.dataset.field === "Amount");
+  findByAction(chip, "format-toggle").dispatch("click", {});
+
+  assert.equal(findByAction(dataChip(host) ?? chip, "format-type").value, "number");
+  assert.equal(findByAction(chips(host).find(e => e.dataset.field === "Amount"), "format-decimals").value, "2");
+  void designer;
 });

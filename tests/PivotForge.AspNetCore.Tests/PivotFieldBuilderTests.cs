@@ -245,4 +245,81 @@ public class PivotFieldBuilderTests
                 .Aggregation(PivotAggregation.Sum)
                 .Build());
     }
+
+    // The browser renderer reads format as an object
+    // ({ type, decimals, useGrouping, currency }); a string could never satisfy
+    // it, which is why the old Format(string) was silently ineffective.
+    [Fact]
+    public void FormatIsEmittedAsAnObjectTheRendererCanRead()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("tutar")
+            .Area(PivotArea.Data)
+            .Aggregation(PivotAggregation.Sum)
+            .FormatType(PivotValueFormatType.Currency)
+            .FormatDecimals(0)
+            .FormatGrouping(true)
+            .FormatCurrency("TRY")
+            .Build();
+
+        var format = Assert.IsAssignableFrom<IDictionary<string, object?>>(field["format"]);
+
+        Assert.Equal("currency", format["type"]);
+        Assert.Equal(0, format["decimals"]);
+        Assert.Equal(true, format["useGrouping"]);
+        Assert.Equal("TRY", format["currency"]);
+    }
+
+    [Theory]
+    [InlineData(PivotValueFormatType.Number, "number")]
+    [InlineData(PivotValueFormatType.Currency, "currency")]
+    [InlineData(PivotValueFormatType.Percent, "percent")]
+    public void EveryFormatTypeSerializesAsLowerCamelCase(PivotValueFormatType type, string expected)
+    {
+        var field = new PivotFieldBuilder().DataField("tutar").FormatType(type).Build();
+        var format = Assert.IsAssignableFrom<IDictionary<string, object?>>(field["format"]);
+
+        Assert.Equal(expected, format["type"]);
+    }
+
+    [Fact]
+    public void OnlyTheFormatMembersThatWereSetAreEmitted()
+    {
+        var field = new PivotFieldBuilder().DataField("tutar").FormatDecimals(2).Build();
+        var format = Assert.IsAssignableFrom<IDictionary<string, object?>>(field["format"]);
+
+        Assert.Equal(2, format["decimals"]);
+        Assert.False(format.ContainsKey("type"));
+        Assert.False(format.ContainsKey("useGrouping"));
+        Assert.False(format.ContainsKey("currency"));
+    }
+
+    [Fact]
+    public void FormatOutsideTheDataAreaIsRejected()
+    {
+        var builder = new PivotFieldBuilder()
+            .DataField("bolge")
+            .Area(PivotArea.Row)
+            .FormatDecimals(2);
+
+        var error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("Format", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(7)]
+    public void FormatDecimalsOutsideTheSupportedRangeIsRejected(int decimals)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new PivotFieldBuilder().DataField("tutar").FormatDecimals(decimals));
+    }
+
+    [Fact]
+    public void FormatCurrencyRequiresAValue()
+    {
+        Assert.Throws<ArgumentException>(
+            () => new PivotFieldBuilder().DataField("tutar").FormatCurrency("  "));
+    }
 }
