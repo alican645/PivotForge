@@ -43,6 +43,46 @@
       return `\uFEFF${rows.join("\n")}`;
     },
 
+    // Turns a declared value format into a column formatter, so a detail table
+    // renders its numbers exactly as the pivot cells above it do. Mirrors
+    // PivotTableRenderer.formatValue; returns null when nothing was declared,
+    // which leaves formatValue falling back to plain String().
+    createFormatter(format) {
+      if (!format) {
+        return null;
+      }
+
+      const decimals = Number.isInteger(format.decimals) ? format.decimals : 2;
+      const options = {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+        useGrouping: format.useGrouping !== false
+      };
+
+      if (format.type === "currency") {
+        options.style = "currency";
+        options.currency = format.currency || "TRY";
+      } else if (format.type === "percent") {
+        options.style = "percent";
+      }
+
+      const formatter = new Intl.NumberFormat("tr-TR", options);
+
+      return value => {
+        if (value === null || value === undefined) {
+          return "";
+        }
+
+        if (typeof value !== "number") {
+          return String(value);
+        }
+
+        // A percent format states the value in whole percents, the same
+        // assumption the renderer makes for a cell with no showAs transform.
+        return formatter.format(format.type === "percent" ? value / 100 : value);
+      };
+    },
+
     formatValue(value, column) {
       if (typeof column.format === "function") {
         return String(column.format(value));

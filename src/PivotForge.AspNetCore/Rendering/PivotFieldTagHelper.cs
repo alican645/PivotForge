@@ -43,9 +43,21 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("show-as")]
     public PivotShowAs ShowAs { get; set; }
 
-    /// <summary>Gets or sets the browser number format applied to this field's values.</summary>
-    [HtmlAttributeName("format")]
-    public string? Format { get; set; }
+    /// <summary>Gets or sets how this field's values are formatted in the browser.</summary>
+    [HtmlAttributeName("format-type")]
+    public PivotValueFormatType FormatType { get; set; }
+
+    /// <summary>Gets or sets how many fraction digits this field's values show (0-6).</summary>
+    [HtmlAttributeName("format-decimals")]
+    public int? FormatDecimals { get; set; }
+
+    /// <summary>Gets or sets whether this field's values use a thousands separator.</summary>
+    [HtmlAttributeName("format-grouping")]
+    public bool? FormatGrouping { get; set; }
+
+    /// <summary>Gets or sets the ISO currency code used when the format type is Currency.</summary>
+    [HtmlAttributeName("format-currency")]
+    public string? FormatCurrency { get; set; }
 
     /// <summary>Gets or sets whether the field participates in the rendered layout.</summary>
     [HtmlAttributeName("visible")]
@@ -115,9 +127,27 @@ public sealed class PivotFieldTagHelper : TagHelper
             builder.Role(Role);
         }
 
-        if (Format is not null)
+        // FormatType is non-nullable so that `format-type="Currency"` binds without
+        // qualification, which means only the written-attribute set can tell
+        // "declared as Number" from "not declared at all".
+        if (_writtenAttributes.Contains("format-type"))
         {
-            builder.Format(Format);
+            builder.FormatType(FormatType);
+        }
+
+        if (FormatDecimals is { } decimals)
+        {
+            builder.FormatDecimals(decimals);
+        }
+
+        if (FormatGrouping is { } useGrouping)
+        {
+            builder.FormatGrouping(useGrouping);
+        }
+
+        if (FormatCurrency is not null)
+        {
+            builder.FormatCurrency(FormatCurrency);
         }
 
         if (Visible is { } visible)

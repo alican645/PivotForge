@@ -48,8 +48,59 @@ test("a measure may drop into data only", () => {
   assert.equal(state.canDrop("Quantity", "filter"), false);
 });
 
-test("a field already in the target area cannot be dropped there again", () => {
-  assert.equal(create().canDrop("Region", "row"), false);
+// Dropping a field into the area it already occupies is how reordering is
+// expressed: the drop carries the position it landed on.
+test("a field may be dropped into the area it already occupies, to reposition it", () => {
+  assert.equal(create().canDrop("Region", "row"), true);
+});
+
+test("the role rule still applies to a field dropped into its own area", () => {
+  const state = create();
+
+  state.move("Quantity", "data");
+  assert.equal(state.canDrop("Quantity", "data"), true);
+  assert.equal(state.canDrop("Quantity", "row"), false);
+});
+
+// move() detaches before inserting, so for a same-area move every index after
+// the field's own position shifts down by one. Without compensation the field
+// lands one slot too far right.
+test("moving a field later within its own area lands it exactly where it was dropped", () => {
+  const state = create();
+  state.move("Quarter", "row", 2);
+  assert.deepEqual(state.getState().rows, ["Region", "Category", "Quarter"]);
+
+  // Drop "Region" onto the slot before "Quarter".
+  state.move("Region", "row", 2);
+  assert.deepEqual(state.getState().rows, ["Category", "Region", "Quarter"]);
+});
+
+test("moving a field earlier within its own area needs no compensation", () => {
+  const state = create();
+  state.move("Quarter", "row", 2);
+
+  state.move("Quarter", "row", 0);
+  assert.deepEqual(state.getState().rows, ["Quarter", "Region", "Category"]);
+});
+
+test("moving a field to the end of its own area appends it last", () => {
+  const state = create();
+
+  state.move("Region", "row", 2);
+  assert.deepEqual(state.getState().rows, ["Category", "Region"]);
+});
+
+test("a same-area move keeps the value entry's aggregation instead of resetting it", () => {
+  const state = create();
+  state.move("Quantity", "data", 1);
+  state.setAggregation("Quantity", "average");
+
+  state.move("Quantity", "data", 0);
+
+  assert.deepEqual(state.getState().values, [
+    { field: "Quantity", aggregation: "average", showAs: "normal" },
+    { field: "Amount", aggregation: "sum", showAs: "normal" }
+  ]);
 });
 
 test("move places a field at the requested index", () => {
@@ -433,4 +484,144 @@ test("toFields round-trips through buildRequest unaffected by an invisible field
   const request = PivotForge.PivotRequestBuilder.buildRequest(state.toFields());
 
   assert.deepEqual(request.rows, ["Region", "Category"]);
+});
+
+// --- Value formats -------------------------------------------------------
+//
+// A format is layout state, not catalog config: the user changes it at runtime
+// through the designer, and a saved layout has to carry it back.
+
+const formatCatalog = [
+  { dataField: "Region", caption: "Bölge", area: "row" },
+  {
+    dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum",
+    format: { type: "currency", decimals: 0, useGrouping: true, currency: "TRY" }
+  },
+  { dataField: "Quantity", caption: "Miktar", area: "available", role: "measure" }
+];
+
+const withFormats = () => new PivotForge.PivotLayoutState(formatCatalog);
+
+test("a declared format is carried into the value entry", () => {
+  assert.deepEqual(withFormats().getState().values[0].format, {
+    type: "currency", decimals: 0, useGrouping: true, currency: "TRY"
+  });
+});
+
+test("a value with no declared format carries none, keeping the entry clean", () => {
+  const state = create();
+
+  assert.equal("format" in state.getState().values[0], false);
+});
+
+test("setFormat replaces a value's format and emits one change", () => {
+  const state = withFormats();
+  let changes = 0;
+  state.on("change", () => { changes += 1; });
+
+  state.setFormat("Amount", { type: "number", decimals: 2 });
+
+  assert.deepEqual(state.getState().values[0].format, { type: "number", decimals: 2 });
+  assert.equal(changes, 1);
+});
+
+test("setFormat(null) clears the format so no formatting is applied", () => {
+  const state = withFormats();
+
+  state.setFormat("Amount", null);
+
+  assert.equal("format" in state.getState().values[0], false);
+});
+
+test("setFormat refuses a field that is not in the data area", () => {
+  const state = withFormats();
+
+  assert.throws(() => state.setFormat("Region", { decimals: 2 }), /data area/);
+});
+
+test("setFormat rejects an unknown format type", () => {
+  assert.throws(() => withFormats().setFormat("Amount", { type: "scientific" }), /scientific/);
+});
+
+test("setFormat rejects a decimals value the Excel export could not render", () => {
+  assert.throws(() => withFormats().setFormat("Amount", { decimals: 7 }), /decimals/);
+  assert.throws(() => withFormats().setFormat("Amount", { decimals: -1 }), /decimals/);
+  assert.throws(() => withFormats().setFormat("Amount", { decimals: 1.5 }), /decimals/);
+});
+
+test("setFormat rejects a non-boolean useGrouping", () => {
+  assert.throws(() => withFormats().setFormat("Amount", { useGrouping: "yes" }), /useGrouping/);
+});
+
+test("a rejected setFormat leaves the format untouched and emits no change", () => {
+  const state = withFormats();
+  let changes = 0;
+  state.on("change", () => { changes += 1; });
+
+  assert.throws(() => state.setFormat("Amount", { decimals: 99 }));
+
+  assert.deepEqual(state.getState().values[0].format, {
+    type: "currency", decimals: 0, useGrouping: true, currency: "TRY"
+  });
+  assert.equal(changes, 0);
+});
+
+test("toFields reports the layout's format, not the catalog's", () => {
+  const state = withFormats();
+  state.setFormat("Amount", { type: "number", decimals: 3 });
+
+  const value = state.toFields().find(field => field.dataField === "Amount");
+
+  assert.deepEqual(value.format, { type: "number", decimals: 3 });
+});
+
+test("toFields reports no format once it has been cleared", () => {
+  const state = withFormats();
+  state.setFormat("Amount", null);
+
+  assert.equal(state.toFields().find(field => field.dataField === "Amount").format, null);
+});
+
+test("repositioning a value keeps its format", () => {
+  const state = withFormats();
+  state.move("Quantity", "data");
+  state.move("Amount", "data", 2);
+
+  assert.deepEqual(state.getState().values.at(-1).format, {
+    type: "currency", decimals: 0, useGrouping: true, currency: "TRY"
+  });
+});
+
+test("a value moved into the data area picks up its declared format", () => {
+  const state = withFormats();
+  // A pivot needs at least one value, so seat another before freeing Amount.
+  state.move("Quantity", "data");
+  state.remove("Amount");
+  state.move("Amount", "data");
+
+  assert.deepEqual(state.getState().values.at(-1).format, {
+    type: "currency", decimals: 0, useGrouping: true, currency: "TRY"
+  });
+});
+
+test("adoptLayout rejects a stored layout carrying an invalid format", () => {
+  assert.throws(
+    () => new PivotForge.PivotLayoutState(formatCatalog, {
+      rows: ["Region"],
+      columns: [],
+      values: [{ field: "Amount", aggregation: "sum", format: { decimals: 99 } }],
+      filters: []
+    }),
+    /decimals/);
+});
+
+test("adoptLayout keeps a stored format", () => {
+  const state = new PivotForge.PivotLayoutState(formatCatalog, {
+    rows: ["Region"],
+    columns: [],
+    values: [{ field: "Amount", aggregation: "sum", format: { type: "percent", decimals: 1 } }],
+    filters: []
+  });
+
+  assert.deepEqual(state.getState().values[0].format, { type: "percent", decimals: 1 });
 });

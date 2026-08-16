@@ -1,6 +1,6 @@
 # Public API Surface
 
-This document records the supported public surface for `0.3.0-preview.2`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
+This document records the supported public surface for `0.4.0-preview.1`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
 
 ## PivotForge.Core
 
@@ -42,9 +42,10 @@ This document records the supported public surface for `0.3.0-preview.2`. Public
 - `PivotForge.AspNetCore.Rendering.PivotForgeFactory`: creates component builders; `PivotGrid()` returns a `PivotGridBuilder`.
 - `PivotForge.AspNetCore.Rendering.PivotGridBuilder`: declares a pivot grid's container, options, and fields, and renders its markup plus the `PivotForge.create` initialization script. `FieldDesigner(string selector)` renders an interactive field designer into the matching host element.
 - `PivotForge.AspNetCore.Rendering.PivotFieldCollectionBuilder`: collects fields in declaration order via `Add()`.
-- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, role, aggregation, show-as, format, caption, and visibility.
+- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, role, aggregation, show-as, caption, visibility, and number format (`FormatType`, `FormatDecimals`, `FormatGrouping`, `FormatCurrency`).
 - `PivotForge.AspNetCore.Rendering.PivotArea`: `Row`, `Column`, `Data`, `Filter`, `Available`.
 - `PivotForge.AspNetCore.Rendering.PivotFieldRole`: `Dimension`, `Measure`. Required on `PivotArea.Available` fields; inferred elsewhere from `Area`.
+- `PivotForge.AspNetCore.Rendering.PivotValueFormatType`: `Number`, `Currency`, `Percent`. Selects how a data field's values are formatted in the browser.
 - `PivotForge.AspNetCore.Rendering.PivotGridTagHelper`: targets `<pivot-grid>`; mirrors the builder's options as kebab-case attributes, including `field-designer`, and delegates to `PivotGridBuilder`.
 - `PivotForge.AspNetCore.Rendering.PivotFieldTagHelper`: targets `<pivot-field>` inside a `<pivot-grid>`; declares one field, including its `role` attribute. Requires `@addTagHelper *, PivotForge.AspNetCore`.
 
@@ -71,12 +72,26 @@ Razor Class Library scripts expose these constructors and helpers under `window.
 - `PivotForge.PivotFieldDesigner`
 - `PivotForge.PivotViewStore`
 - `PivotForge.PivotDrillDownData`
+- `PivotForge.PivotDrillDownModal`
 - `PivotForge.PivotVirtualDataSource`
 
-`PivotForge.create(target, options)` builds and returns a `PivotWidget` from a declarative field list; see the [ASP.NET Core integration guide](aspnetcore-integration.md#declarative-api) for its full contract. `PivotForge.PivotRequestBuilder` normalizes and validates the field model shared by the declarative Razor and JavaScript APIs. `PivotWidget.update({ fields, filters, rowSort })` applies any combination of those pieces and refreshes exactly once, alongside the existing `updateFields(fields)`. `PivotForge.PivotLayoutState` and `PivotForge.PivotFieldDesigner` implement the interactive field designer described in the [ASP.NET Core integration guide](aspnetcore-integration.md#field-designer); a widget built with the `fieldDesigner` option exposes them as `widget.layoutState` and `widget.designer`.
+`PivotForge.create(target, options)` builds and returns a `PivotWidget` from a declarative field list; see the [ASP.NET Core integration guide](aspnetcore-integration.md#declarative-api) for its full contract. `PivotForge.PivotRequestBuilder` normalizes and validates the field model shared by the declarative Razor and JavaScript APIs. `PivotWidget.update({ fields, filters, rowSort })` applies any combination of those pieces and refreshes exactly once, alongside the existing `updateFields(fields)`. `PivotForge.PivotLayoutState` and `PivotForge.PivotFieldDesigner` implement the interactive field designer described in the [ASP.NET Core integration guide](aspnetcore-integration.md#field-designer), including positional drag-and-drop: `move(name, area, index)` places a field at a specific slot, and dropping a chip into the zone it already occupies reorders it. `setFormat(name, format)` sets or clears a data field's number format, which the designer edits through a per-chip panel; a widget built with the `fieldDesigner` option exposes them as `widget.layoutState` and `widget.designer`. `PivotForge.PivotDrillDownModal` renders the source records behind a cell — search, per-column filters, CSV export and truncation notice — deriving its columns, captions and number formats from the declared fields; `PivotWidget` builds one on first cell activation unless `drillDownModal` is `false` or the consumer supplied its own `rendererOptions.onCellDoubleClick`. `PivotForge.PivotDrillDownData.createFormatter(format)` turns a declared value format into a column formatter.
 
 Static assets are served from `/_content/PivotForge.AspNetCore/`.
 
 ## Compatibility Policy
 
 PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking changes may be made when necessary and will be called out in release notes. After `1.0.0`, incompatible public API changes require a new major version. Additive members and behavior-preserving fixes may ship in minor or patch releases as appropriate.
+
+### Breaking changes in `0.4.0-preview.1`
+
+- **`PivotFieldBuilder.Format(string)` is removed.** It took an opaque string that
+  the browser never read, so a format declared through it was silently ignored.
+  Replace it with `FormatType(PivotValueFormatType)`, `FormatDecimals(int)`,
+  `FormatGrouping(bool)`, and `FormatCurrency(string)`.
+- **The `format` attribute on the `pivot-field` tag helper is removed**, for the
+  same reason. Replace it with `format-type`, `format-decimals`,
+  `format-grouping`, and `format-currency`.
+
+Both removals are compile-time errors rather than silent behavior changes, so a
+project that used them will not build until the declaration is updated.

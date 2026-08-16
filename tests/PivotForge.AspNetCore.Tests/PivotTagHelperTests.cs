@@ -20,7 +20,10 @@ public class PivotTagHelperTests
         string? Caption = null,
         PivotAggregation? Aggregation = null,
         PivotShowAs? ShowAs = null,
-        string? Format = null,
+        PivotValueFormatType? FormatType = null,
+        int? FormatDecimals = null,
+        bool? FormatGrouping = null,
+        string? FormatCurrency = null,
         bool? Visible = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
@@ -59,10 +62,28 @@ public class PivotTagHelperTests
             attributes.Add(new TagHelperAttribute("show-as", showAs.ToString()));
         }
 
-        if (spec.Format is not null)
+        if (spec.FormatType is { } formatType)
         {
-            helper.Format = spec.Format;
-            attributes.Add(new TagHelperAttribute("format", spec.Format));
+            helper.FormatType = formatType;
+            attributes.Add(new TagHelperAttribute("format-type", formatType.ToString()));
+        }
+
+        if (spec.FormatDecimals is { } formatDecimals)
+        {
+            helper.FormatDecimals = formatDecimals;
+            attributes.Add(new TagHelperAttribute("format-decimals", formatDecimals));
+        }
+
+        if (spec.FormatGrouping is { } formatGrouping)
+        {
+            helper.FormatGrouping = formatGrouping;
+            attributes.Add(new TagHelperAttribute("format-grouping", formatGrouping));
+        }
+
+        if (spec.FormatCurrency is not null)
+        {
+            helper.FormatCurrency = spec.FormatCurrency;
+            attributes.Add(new TagHelperAttribute("format-currency", spec.FormatCurrency));
         }
 
         if (spec.Visible is { } visible)
@@ -259,8 +280,9 @@ public class PivotTagHelperTests
                 "Tutar",
                 PivotAggregation.Sum,
                 PivotShowAs.PercentOfRowTotal,
-                "n2",
-                false));
+                PivotValueFormatType.Number,
+                2,
+                Visible: false));
 
         var field = ConfigOf(html).GetProperty("fields")[0];
 
@@ -269,7 +291,8 @@ public class PivotTagHelperTests
         Assert.Equal("data", field.GetProperty("area").GetString());
         Assert.Equal("sum", field.GetProperty("aggregation").GetString());
         Assert.Equal("percentOfRowTotal", field.GetProperty("showAs").GetString());
-        Assert.Equal("n2", field.GetProperty("format").GetString());
+        Assert.Equal("number", field.GetProperty("format").GetProperty("type").GetString());
+        Assert.Equal(2, field.GetProperty("format").GetProperty("decimals").GetInt32());
         Assert.False(field.GetProperty("visible").GetBoolean());
     }
 
@@ -346,5 +369,51 @@ public class PivotTagHelperTests
             () => new PivotFieldTagHelper { Field = "Amount" }.ProcessAsync(context, output));
 
         Assert.Contains("pivot-grid", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FormatAttributesReachTheSerializedFieldAsAnObject()
+    {
+        var html = await RenderAsync(
+            new PivotGridTagHelper { Id = "grid" },
+            new FieldSpec(
+                "tutar",
+                PivotArea.Data,
+                Aggregation: PivotAggregation.Sum,
+                FormatType: PivotValueFormatType.Currency,
+                FormatDecimals: 0,
+                FormatGrouping: true,
+                FormatCurrency: "TRY"));
+
+        var format = ConfigOf(html).GetProperty("fields")[0].GetProperty("format");
+
+        Assert.Equal("currency", format.GetProperty("type").GetString());
+        Assert.Equal(0, format.GetProperty("decimals").GetInt32());
+        Assert.True(format.GetProperty("useGrouping").GetBoolean());
+        Assert.Equal("TRY", format.GetProperty("currency").GetString());
+    }
+
+    // format-type is non-nullable, so "not written" and "written as Number" are
+    // only distinguishable through the element's attribute list.
+    [Fact]
+    public async Task AnUnwrittenFormatTypeEmitsNoFormatAtAll()
+    {
+        var html = await RenderAsync(
+            new PivotGridTagHelper { Id = "grid" },
+            new FieldSpec("tutar", PivotArea.Data));
+
+        Assert.False(ConfigOf(html).GetProperty("fields")[0].TryGetProperty("format", out _));
+    }
+
+    [Fact]
+    public async Task FormatTypeWrittenAsNumberIsEmitted()
+    {
+        var html = await RenderAsync(
+            new PivotGridTagHelper { Id = "grid" },
+            new FieldSpec("tutar", PivotArea.Data, FormatType: PivotValueFormatType.Number));
+
+        var format = ConfigOf(html).GetProperty("fields")[0].GetProperty("format");
+
+        Assert.Equal("number", format.GetProperty("type").GetString());
     }
 }

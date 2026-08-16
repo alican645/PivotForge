@@ -11,7 +11,10 @@ public sealed class PivotFieldBuilder
     private PivotAggregation? _aggregation;
     private PivotShowAs? _showAs;
     private PivotFieldRole? _role;
-    private string? _format;
+    private PivotValueFormatType? _formatType;
+    private int? _formatDecimals;
+    private bool? _formatGrouping;
+    private string? _formatCurrency;
     private bool _visible = true;
 
     /// <summary>Sets the source field name.</summary>
@@ -68,12 +71,54 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
-    /// <summary>Sets the browser number format applied to this field's values.</summary>
-    /// <param name="format">A format identifier understood by the browser renderer.</param>
+    /// <summary>Sets how this field's values are formatted in the browser.</summary>
+    /// <param name="type">The format family.</param>
     /// <returns>The same builder.</returns>
-    public PivotFieldBuilder Format(string format)
+    public PivotFieldBuilder FormatType(PivotValueFormatType type)
     {
-        _format = format;
+        _formatType = type;
+        return this;
+    }
+
+    /// <summary>Sets how many fraction digits this field's values show.</summary>
+    /// <param name="decimals">The fraction-digit count, from 0 to 6.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The count is outside 0-6.</exception>
+    public PivotFieldBuilder FormatDecimals(int decimals)
+    {
+        // The Excel export builds a "#,##0.00" pattern that only supports this
+        // range, so accepting more here would make the two renderings disagree.
+        if (decimals is < 0 or > 6)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(decimals), decimals, "FormatDecimals must be between 0 and 6.");
+        }
+
+        _formatDecimals = decimals;
+        return this;
+    }
+
+    /// <summary>Sets whether this field's values use a thousands separator.</summary>
+    /// <param name="useGrouping">True to group digits; false to render them ungrouped.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder FormatGrouping(bool useGrouping)
+    {
+        _formatGrouping = useGrouping;
+        return this;
+    }
+
+    /// <summary>Sets the ISO currency code used when the format type is Currency.</summary>
+    /// <param name="currency">An ISO 4217 code, such as "TRY".</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentException">The code is null or blank.</exception>
+    public PivotFieldBuilder FormatCurrency(string currency)
+    {
+        if (string.IsNullOrWhiteSpace(currency))
+        {
+            throw new ArgumentException("FormatCurrency requires a currency code.", nameof(currency));
+        }
+
+        _formatCurrency = currency;
         return this;
     }
 
@@ -127,6 +172,14 @@ public sealed class PivotFieldBuilder
                 "Aggregation and ShowAs are only valid on fields whose Area is Data.");
         }
 
+        // Only a data field produces the numbers the renderer formats.
+        if (_area != PivotArea.Data && HasFormat)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets a Format, but its Area is \"{_area}\". " +
+                "Format is only valid on fields whose Area is Data.");
+        }
+
         var field = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["dataField"] = _dataField,
@@ -149,9 +202,33 @@ public sealed class PivotFieldBuilder
             field["showAs"] = ToCamelCase(showAs.ToString());
         }
 
-        if (_format is not null)
+        if (HasFormat)
         {
-            field["format"] = _format;
+            // Only the members that were set are emitted, so the browser's own
+            // defaults still apply to everything the caller left alone.
+            var format = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+            if (_formatType is { } formatType)
+            {
+                format["type"] = ToCamelCase(formatType.ToString());
+            }
+
+            if (_formatDecimals is { } decimals)
+            {
+                format["decimals"] = decimals;
+            }
+
+            if (_formatGrouping is { } useGrouping)
+            {
+                format["useGrouping"] = useGrouping;
+            }
+
+            if (_formatCurrency is { } currency)
+            {
+                format["currency"] = currency;
+            }
+
+            field["format"] = format;
         }
 
         if (!_visible)
@@ -161,6 +238,10 @@ public sealed class PivotFieldBuilder
 
         return field;
     }
+
+    private bool HasFormat =>
+        _formatType is not null || _formatDecimals is not null ||
+        _formatGrouping is not null || _formatCurrency is not null;
 
     private static string ToCamelCase(string value) =>
         string.Concat(char.ToLowerInvariant(value[0]), value[1..]);

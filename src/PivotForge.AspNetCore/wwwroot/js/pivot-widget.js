@@ -7,6 +7,8 @@
     allowSorting: true,
     allowFiltering: true,
     allowDrillDown: true,
+    drillDownModal: true,
+    drillDownModalOptions: null,
     allowExcelExport: false,
     largeData: false,
     pageSize: 40,
@@ -85,6 +87,7 @@
 
       this.layoutState = null;
       this.designer = null;
+      this.drillDownModal = null;
 
       if (this.options.fieldDesigner) {
         if (!PivotForge.PivotLayoutState || !PivotForge.PivotFieldDesigner) {
@@ -122,8 +125,55 @@
         // Declared before the spread so a consumer driving sorting through
         // rendererOptions keeps ownership until this widget actually sorts.
         sortState: this.rowSort,
+        // Left unset, the renderer auto-detects a single value key from the
+        // payload, labels it with that raw key and applies no format — so
+        // captions are lost and a second data field disappears.
+        values: this.valueDefinitions(),
+        // Declared before the spread, so a consumer that brought its own
+        // detail UI through rendererOptions keeps it.
+        onCellDoubleClick: this.drillDownHandler(),
         ...(this.options.rendererOptions ?? {})
       });
+    }
+
+    // Joins cell activation to the packaged detail modal. Returns null — the
+    // renderer's "no handler" value — whenever drill-down is off, the modal was
+    // declined, or pivot-drill-down-modal.js was never loaded, so an absent
+    // script degrades to no detail view rather than a broken widget.
+    drillDownHandler() {
+      if (!this.options.allowDrillDown ||
+          this.options.drillDownModal === false ||
+          !PivotForge.PivotDrillDownModal) {
+        return null;
+      }
+
+      return selection => { this.openDrillDown(selection); };
+    }
+
+    // Built on first use: a page that never drills down pays nothing, and the
+    // modal's DOM stays out of the document until it is actually needed.
+    openDrillDown(selection) {
+      this.drillDownModal ??= new PivotForge.PivotDrillDownModal({
+        widget: this,
+        ...(this.options.drillDownModalOptions ?? {})
+      });
+
+      return this.drillDownModal.open(selection);
+    }
+
+    // Describes the data-area fields for the renderer, in declaration order.
+    // The key must match how the server keys its cells and totals, which is
+    // exactly what PivotRequestBuilder.valueKey produces.
+    valueDefinitions() {
+      return this.fields
+        .filter(field => field.visible && field.area === "data")
+        .map(field => ({
+          key: PivotForge.PivotRequestBuilder.valueKey(field),
+          label: field.caption,
+          aggregation: field.aggregation,
+          showAs: field.showAs,
+          format: field.format
+        }));
     }
 
     // The renderer is built once and reused across refreshes, so a sort applied
@@ -459,6 +509,8 @@
       this.errorNode = null;
       this.designer?.dispose();
       this.designer = null;
+      this.drillDownModal?.dispose();
+      this.drillDownModal = null;
       this.container.replaceChildren();
       this.container.classList.remove("pivot-table");
     }

@@ -11,6 +11,13 @@
     filter: "Filtreler",
     remove: "Kaldır",
     search: "Alan ara...",
+    format: "Biçim",
+    formatGrouping: "Binlik ayracı",
+    formatTypes: {
+      number: "Sayı",
+      currency: "Para birimi",
+      percent: "Yüzde"
+    },
     lastValue: "Bir pivot en az bir değer alanı gerektirir.",
     aggregations: {
       sum: "Toplam",
@@ -22,6 +29,11 @@
   };
 
   const ZONES = ["filter", "column", "row", "data"];
+  const FORMAT_TYPES = ["number", "currency", "percent"];
+  const DECIMAL_CHOICES = [0, 1, 2, 3, 4, 5, 6];
+  // What the renderer applies when a member is absent, so the panel opens
+  // showing what the user is actually looking at rather than empty controls.
+  const RENDERER_DEFAULTS = { type: "number", decimals: 2, useGrouping: true };
 
   class PivotFieldDesigner {
     constructor(host, options = {}) {
@@ -51,6 +63,9 @@
       // Filters the available-field list only; never touched by mutations, and
       // must survive the re-renders they trigger, so it lives on the instance.
       this.searchTerm = "";
+      // Which data field's format panel is expanded. Held on the instance so it
+      // survives the re-render every edit triggers.
+      this.openFormatFor = null;
       this.render();
     }
 
@@ -65,10 +80,13 @@
       chip.textContent = field.caption;
       chip.addEventListener("dragstart", event => {
         this.draggedField = name;
+        chip.classList.add("is-dragging");
         event.dataTransfer?.setData?.("text/plain", name);
       });
       chip.addEventListener("dragend", () => {
         this.draggedField = null;
+        chip.classList.remove("is-dragging");
+        this.clearDropMarks();
       });
 
       if (area === "data") {
@@ -89,6 +107,23 @@
           this.apply(() => this.state.setAggregation(name, event.target.value));
         });
         chip.appendChild(select);
+
+        const toggle = document.createElement("button");
+        toggle.className = "pivot-chip__format-toggle";
+        toggle.dataset.action = "format-toggle";
+        toggle.textContent = "\u22ef";
+        toggle.setAttribute("aria-label", `${field.caption} \u2014 ${this.labels.format}`);
+        toggle.addEventListener("click", () => {
+          this.openFormatFor = this.openFormatFor === name ? null : name;
+          // A panel opening changes nothing the server cares about, so this
+          // re-renders directly instead of going through apply().
+          this.render();
+        });
+        chip.appendChild(toggle);
+
+        if (this.openFormatFor === name) {
+          chip.appendChild(this.createFormatPanel(name));
+        }
       }
 
       if (area !== "available") {
@@ -112,6 +147,69 @@
       return chip;
     }
 
+    // The current format as the user sees it: what was set, over what the
+    // renderer would otherwise apply.
+    effectiveFormat(name) {
+      const value = this.state.getState().values.find(entry => entry.field === name);
+      return { ...RENDERER_DEFAULTS, ...(value?.format ?? {}) };
+    }
+
+    // Writes one member, carrying the rest of the stored format across so an
+    // edit never silently drops the currency or another untouched setting.
+    setFormatMember(name, member, value) {
+      const stored = this.state.getState().values.find(entry => entry.field === name)?.format ?? {};
+      this.apply(() => this.state.setFormat(name, { ...stored, [member]: value }));
+    }
+
+    createFormatPanel(name) {
+      const document = root.document;
+      const format = this.effectiveFormat(name);
+
+      const panel = document.createElement("div");
+      panel.className = "pivot-chip__format";
+
+      const type = document.createElement("select");
+      type.dataset.action = "format-type";
+      FORMAT_TYPES.forEach(entry => {
+        const option = document.createElement("option");
+        option.value = entry;
+        option.textContent = this.labels.formatTypes[entry];
+        type.appendChild(option);
+      });
+      type.value = format.type;
+      type.addEventListener("change", event => {
+        this.setFormatMember(name, "type", event.target.value);
+      });
+      panel.appendChild(type);
+
+      const decimals = document.createElement("select");
+      decimals.dataset.action = "format-decimals";
+      DECIMAL_CHOICES.forEach(entry => {
+        const option = document.createElement("option");
+        option.value = String(entry);
+        option.textContent = String(entry);
+        decimals.appendChild(option);
+      });
+      decimals.value = String(format.decimals);
+      decimals.addEventListener("change", event => {
+        // The select reports a string; setFormat only accepts an integer.
+        this.setFormatMember(name, "decimals", Number(event.target.value));
+      });
+      panel.appendChild(decimals);
+
+      const grouping = document.createElement("input");
+      grouping.dataset.action = "format-grouping";
+      grouping.setAttribute("type", "checkbox");
+      grouping.checked = format.useGrouping;
+      grouping.setAttribute("aria-label", this.labels.formatGrouping);
+      grouping.addEventListener("change", event => {
+        this.setFormatMember(name, "useGrouping", event.target.checked);
+      });
+      panel.appendChild(grouping);
+
+      return panel;
+    }
+
     createZone(area) {
       const document = root.document;
       const zone = document.createElement("section");
@@ -126,27 +224,36 @@
       const body = document.createElement("div");
       body.className = "pivot-zone__body";
       zone.appendChild(body);
+      this.zoneBodies.push(body);
 
       zone.addEventListener("dragover", event => {
         const name = this.draggedField;
-        if (name && this.state.canDrop(name, area)) {
-          event.preventDefault();
-          if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = "move";
-          }
+        if (!name || !this.state.canDrop(name, area)) {
+          return;
         }
+
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = "move";
+        }
+
+        this.markDropSlot(body, this.dropIndex(body, event.clientY));
       });
+
+      zone.addEventListener("dragleave", () => this.clearDropMarks());
 
       zone.addEventListener("drop", event => {
         const name = this.draggedField ?? event.dataTransfer?.getData?.("text/plain");
         this.draggedField = null;
+        const index = this.dropIndex(body, event.clientY);
+        this.clearDropMarks();
 
         if (!name || !this.state.canDrop(name, area)) {
           return;
         }
 
         event.preventDefault();
-        this.apply(() => this.state.move(name, area));
+        this.apply(() => this.state.move(name, area, index));
       });
 
       const names = this.namesIn(area);
@@ -214,8 +321,53 @@
       body.replaceChildren(...names.map(name => this.createChip(name, "available")));
     }
 
+    // Which slot a release at `clientY` targets: the first chip whose midpoint
+    // the pointer has not yet passed, or the end of the zone. The dragged chip
+    // is deliberately included, so the index is expressed against the zone as
+    // it looks right now — which is what PivotLayoutState.move expects.
+    dropIndex(body, clientY) {
+      if (typeof clientY !== "number") {
+        return body.children.length;
+      }
+
+      const found = body.children.findIndex(chip => {
+        const rect = chip.getBoundingClientRect();
+        return clientY < rect.top + (rect.height / 2);
+      });
+
+      return found === -1 ? body.children.length : found;
+    }
+
+    // The insertion point is drawn as an edge on a chip rather than an inserted
+    // node, so the marker cannot disturb the geometry it was measured from.
+    markDropSlot(body, index) {
+      this.clearDropMarks();
+
+      const chips = body.children;
+      if (chips.length === 0) {
+        return;
+      }
+
+      if (index >= chips.length) {
+        chips[chips.length - 1].classList.add("is-drop-after");
+      } else {
+        chips[index].classList.add("is-drop-before");
+      }
+    }
+
+    clearDropMarks() {
+      (this.zoneBodies ?? []).forEach(body => {
+        body.children.forEach(chip => {
+          chip.classList.remove("is-drop-before", "is-drop-after");
+        });
+      });
+    }
+
     render() {
       const document = root.document;
+      // Rebuilt every render, so the drop-marker cleanup never touches chips
+      // from a previous tree.
+      this.zoneBodies = [];
       const grid = document.createElement("div");
       grid.className = "pivot-layout-grid";
       ZONES.forEach(area => grid.appendChild(this.createZone(area)));

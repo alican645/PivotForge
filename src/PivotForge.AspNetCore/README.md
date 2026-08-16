@@ -5,7 +5,7 @@ PivotForge.AspNetCore adds reusable browser assets and minimal API endpoints to 
 ## Installation
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.3.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.1
 ```
 
 ## Register services
@@ -53,6 +53,7 @@ The default endpoint prefix is `/pivotforge`. Static assets are available at:
 <script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 ```
 
