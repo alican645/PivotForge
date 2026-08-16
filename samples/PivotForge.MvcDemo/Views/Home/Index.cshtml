@@ -595,8 +595,9 @@
                     filters: storedFilters.filter(filter => !placed.has(filter.field))
                 });
             } catch (error) {
-                // A stored layout can name a field the catalog no longer has, or
-                // leave the data area empty.
+                // A stored layout can name a field the catalog no longer has,
+                // leave the data area empty, or place a field where its role
+                // does not allow it — all of which adoptLayout refuses.
                 setStatus(error.message || String(error), true);
                 return false;
             }
