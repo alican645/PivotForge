@@ -48,8 +48,59 @@ test("a measure may drop into data only", () => {
   assert.equal(state.canDrop("Quantity", "filter"), false);
 });
 
-test("a field already in the target area cannot be dropped there again", () => {
-  assert.equal(create().canDrop("Region", "row"), false);
+// Dropping a field into the area it already occupies is how reordering is
+// expressed: the drop carries the position it landed on.
+test("a field may be dropped into the area it already occupies, to reposition it", () => {
+  assert.equal(create().canDrop("Region", "row"), true);
+});
+
+test("the role rule still applies to a field dropped into its own area", () => {
+  const state = create();
+
+  state.move("Quantity", "data");
+  assert.equal(state.canDrop("Quantity", "data"), true);
+  assert.equal(state.canDrop("Quantity", "row"), false);
+});
+
+// move() detaches before inserting, so for a same-area move every index after
+// the field's own position shifts down by one. Without compensation the field
+// lands one slot too far right.
+test("moving a field later within its own area lands it exactly where it was dropped", () => {
+  const state = create();
+  state.move("Quarter", "row", 2);
+  assert.deepEqual(state.getState().rows, ["Region", "Category", "Quarter"]);
+
+  // Drop "Region" onto the slot before "Quarter".
+  state.move("Region", "row", 2);
+  assert.deepEqual(state.getState().rows, ["Category", "Region", "Quarter"]);
+});
+
+test("moving a field earlier within its own area needs no compensation", () => {
+  const state = create();
+  state.move("Quarter", "row", 2);
+
+  state.move("Quarter", "row", 0);
+  assert.deepEqual(state.getState().rows, ["Quarter", "Region", "Category"]);
+});
+
+test("moving a field to the end of its own area appends it last", () => {
+  const state = create();
+
+  state.move("Region", "row", 2);
+  assert.deepEqual(state.getState().rows, ["Category", "Region"]);
+});
+
+test("a same-area move keeps the value entry's aggregation instead of resetting it", () => {
+  const state = create();
+  state.move("Quantity", "data", 1);
+  state.setAggregation("Quantity", "average");
+
+  state.move("Quantity", "data", 0);
+
+  assert.deepEqual(state.getState().values, [
+    { field: "Quantity", aggregation: "average", showAs: "normal" },
+    { field: "Amount", aggregation: "sum", showAs: "normal" }
+  ]);
 });
 
 test("move places a field at the requested index", () => {

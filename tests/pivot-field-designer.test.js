@@ -22,6 +22,10 @@ function createElement(tagName) {
       remove(...names) { names.forEach(name => this.names.delete(name)); },
       contains(name) { return this.names.has(name); }
     },
+    // Drop positioning is geometric, so the stub has to carry a box. Tests
+    // assign `rect` to lay chips out; anything unplaced reports a zero box.
+    rect: null,
+    getBoundingClientRect() { return this.rect ?? { top: 0, bottom: 0, height: 0 }; },
     appendChild(child) { this.children.push(child); return child; },
     replaceChildren(...nodes) { this.children = nodes; },
     setAttribute(name, value) { this.attributes[name] = value; },
@@ -391,4 +395,206 @@ test("a designer without a state throws", () => {
     () => new PivotForge.PivotFieldDesigner(createElement("div"), { widget: { update() {} } }),
     /requires a state/
   );
+});
+
+
+// --- Positional drag-and-drop -------------------------------------------
+//
+// Row and column order is the pivot's grouping hierarchy, so where a chip
+// lands inside a zone is meaningful, not cosmetic. These tests lay the chips
+// out on a fake vertical axis (each 20px tall, stacked from y=0) and release
+// the pointer at a chosen y, exactly as a browser would report it.
+//
+// Every reorder case uses THREE chips and targets the middle slot. With two
+// chips, "move down" and "append to the end" produce the same array, so a
+// two-chip test would pass even if the drop index were ignored entirely.
+
+const CHIP_HEIGHT = 20;
+
+function zoneBody(host, area) {
+  return zone(host, area).children.find(child => child.className === "pivot-zone__body");
+}
+
+// Gives every chip in `area` a box, stacked top to bottom in render order.
+function layOutZone(host, area) {
+  const body = zoneBody(host, area);
+  body.children.forEach((chip, index) => {
+    chip.rect = {
+      top: index * CHIP_HEIGHT,
+      bottom: (index + 1) * CHIP_HEIGHT,
+      height: CHIP_HEIGHT
+    };
+  });
+  return body;
+}
+
+// Just above the midpoint of the chip at `index`: "insert before this chip".
+const beforeChip = index => index * CHIP_HEIGHT + (CHIP_HEIGHT / 2) - 1;
+// Just below it: "insert after this chip".
+const afterChip = index => index * CHIP_HEIGHT + (CHIP_HEIGHT / 2) + 1;
+
+// Rows become [Region, Quarter, Year] — three chips, so the middle slot is
+// distinguishable from both ends.
+function buildWithThreeRows() {
+  const built = build();
+  built.state.move("Quarter", "row");
+  built.state.move("Year", "row");
+  built.designer.render();
+  assert.deepEqual(built.state.getState().rows, ["Region", "Quarter", "Year"]);
+  return built;
+}
+
+function markedChips(body) {
+  return body.children
+    .filter(chip =>
+      chip.classList.contains("is-drop-before") || chip.classList.contains("is-drop-after"))
+    .map(chip => ({
+      field: chip.dataset.field,
+      edge: chip.classList.contains("is-drop-before") ? "before" : "after"
+    }));
+}
+
+test("a field from another zone lands on the released slot, not at the end", async () => {
+  const { host, state } = buildWithThreeRows();
+  state.move("Amount", "data");
+  layOutZone(host, "row");
+
+  dragFieldTo(host, "Quantity", zone(host, "row"), "drop", { clientY: beforeChip(1) });
+  await Promise.resolve();
+
+  // Quantity is a measure and must be refused regardless of position.
+  assert.deepEqual(state.getState().rows, ["Region", "Quarter", "Year"]);
+});
+
+test("a dimension dropped on the middle slot is inserted there", async () => {
+  const { host, state } = build();
+  state.move("Quarter", "row");
+  state.move("Year", "row");
+  state.remove("Quarter");
+  // Rows are [Region, Year]; Quarter is available again and drops between them.
+  const built = { host, state };
+  built.state.getState();
+  layOutZone(host, "row");
+
+  dragFieldTo(host, "Quarter", zone(host, "row"), "drop", { clientY: beforeChip(1) });
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Region", "Quarter", "Year"]);
+});
+
+test("dragging the first chip onto the middle slot reorders it, without appending", async () => {
+  const { host, state } = buildWithThreeRows();
+  layOutZone(host, "row");
+
+  // Release just past Quarter's midpoint: between Quarter and Year.
+  dragFieldTo(host, "Region", zone(host, "row"), "drop", { clientY: afterChip(1) });
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Quarter", "Region", "Year"]);
+});
+
+test("dragging the last chip onto the middle slot reorders it", async () => {
+  const { host, state } = buildWithThreeRows();
+  layOutZone(host, "row");
+
+  dragFieldTo(host, "Year", zone(host, "row"), "drop", { clientY: beforeChip(1) });
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Region", "Year", "Quarter"]);
+});
+
+test("dragging a chip below the last one moves it to the end", async () => {
+  const { host, state } = buildWithThreeRows();
+  layOutZone(host, "row");
+
+  dragFieldTo(host, "Region", zone(host, "row"), "drop", { clientY: afterChip(2) });
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Quarter", "Year", "Region"]);
+});
+
+test("a reorder refreshes the widget exactly once", async () => {
+  const { host, updates } = buildWithThreeRows();
+  updates.length = 0;
+  layOutZone(host, "row");
+
+  dragFieldTo(host, "Region", zone(host, "row"), "drop", { clientY: afterChip(1) });
+  await Promise.resolve();
+
+  assert.equal(updates.length, 1);
+});
+
+test("a value keeps its aggregation when it is only repositioned", async () => {
+  const { host, state, designer } = build();
+  state.move("Quantity", "data");
+  state.setAggregation("Quantity", "average");
+  designer.render();
+  layOutZone(host, "data");
+
+  dragFieldTo(host, "Quantity", zone(host, "data"), "drop", { clientY: beforeChip(0) });
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().values, [
+    { field: "Quantity", aggregation: "average", showAs: "normal" },
+    { field: "Amount", aggregation: "sum", showAs: "normal" }
+  ]);
+});
+
+test("dragover marks the slot the chip would land in", () => {
+  const { host } = buildWithThreeRows();
+  const body = layOutZone(host, "row");
+
+  dragFieldTo(host, "Quarter", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
+
+  assert.deepEqual(markedChips(body), [{ field: "Quarter", edge: "before" }]);
+});
+
+test("the marker follows the pointer to a different slot", () => {
+  const { host } = buildWithThreeRows();
+  const body = layOutZone(host, "row");
+
+  dragFieldTo(host, "Quarter", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
+  zone(host, "row").dispatch("dragover", { preventDefault() {}, clientY: beforeChip(2) });
+
+  assert.deepEqual(markedChips(body), [{ field: "Year", edge: "before" }]);
+});
+
+test("dragging past the last chip marks the end of the zone instead", () => {
+  const { host } = buildWithThreeRows();
+  const body = layOutZone(host, "row");
+
+  dragFieldTo(host, "Quarter", zone(host, "row"), "dragover", { clientY: afterChip(2) });
+
+  assert.deepEqual(markedChips(body), [{ field: "Year", edge: "after" }]);
+});
+
+test("the drop marker is cleared when the pointer leaves the zone", () => {
+  const { host } = buildWithThreeRows();
+  const body = layOutZone(host, "row");
+
+  dragFieldTo(host, "Quarter", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
+  zone(host, "row").dispatch("dragleave", { preventDefault() {} });
+
+  assert.deepEqual(markedChips(body), []);
+});
+
+test("the drop marker is cleared when the drag is abandoned", () => {
+  const { host } = buildWithThreeRows();
+  const body = layOutZone(host, "row");
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+
+  dragFieldTo(host, "Quarter", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
+  source.dispatch("dragend", {});
+
+  assert.deepEqual(markedChips(body), []);
+});
+
+test("a target the role rule refuses is not marked", () => {
+  const { host } = buildWithThreeRows();
+  const body = layOutZone(host, "row");
+
+  // Quantity is a measure; it may not enter the rows zone at any position.
+  dragFieldTo(host, "Quantity", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
+
+  assert.deepEqual(markedChips(body), []);
 });

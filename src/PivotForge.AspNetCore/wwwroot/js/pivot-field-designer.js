@@ -65,10 +65,13 @@
       chip.textContent = field.caption;
       chip.addEventListener("dragstart", event => {
         this.draggedField = name;
+        chip.classList.add("is-dragging");
         event.dataTransfer?.setData?.("text/plain", name);
       });
       chip.addEventListener("dragend", () => {
         this.draggedField = null;
+        chip.classList.remove("is-dragging");
+        this.clearDropMarks();
       });
 
       if (area === "data") {
@@ -126,27 +129,36 @@
       const body = document.createElement("div");
       body.className = "pivot-zone__body";
       zone.appendChild(body);
+      this.zoneBodies.push(body);
 
       zone.addEventListener("dragover", event => {
         const name = this.draggedField;
-        if (name && this.state.canDrop(name, area)) {
-          event.preventDefault();
-          if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = "move";
-          }
+        if (!name || !this.state.canDrop(name, area)) {
+          return;
         }
+
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = "move";
+        }
+
+        this.markDropSlot(body, this.dropIndex(body, event.clientY));
       });
+
+      zone.addEventListener("dragleave", () => this.clearDropMarks());
 
       zone.addEventListener("drop", event => {
         const name = this.draggedField ?? event.dataTransfer?.getData?.("text/plain");
         this.draggedField = null;
+        const index = this.dropIndex(body, event.clientY);
+        this.clearDropMarks();
 
         if (!name || !this.state.canDrop(name, area)) {
           return;
         }
 
         event.preventDefault();
-        this.apply(() => this.state.move(name, area));
+        this.apply(() => this.state.move(name, area, index));
       });
 
       const names = this.namesIn(area);
@@ -214,8 +226,53 @@
       body.replaceChildren(...names.map(name => this.createChip(name, "available")));
     }
 
+    // Which slot a release at `clientY` targets: the first chip whose midpoint
+    // the pointer has not yet passed, or the end of the zone. The dragged chip
+    // is deliberately included, so the index is expressed against the zone as
+    // it looks right now — which is what PivotLayoutState.move expects.
+    dropIndex(body, clientY) {
+      if (typeof clientY !== "number") {
+        return body.children.length;
+      }
+
+      const found = body.children.findIndex(chip => {
+        const rect = chip.getBoundingClientRect();
+        return clientY < rect.top + (rect.height / 2);
+      });
+
+      return found === -1 ? body.children.length : found;
+    }
+
+    // The insertion point is drawn as an edge on a chip rather than an inserted
+    // node, so the marker cannot disturb the geometry it was measured from.
+    markDropSlot(body, index) {
+      this.clearDropMarks();
+
+      const chips = body.children;
+      if (chips.length === 0) {
+        return;
+      }
+
+      if (index >= chips.length) {
+        chips[chips.length - 1].classList.add("is-drop-after");
+      } else {
+        chips[index].classList.add("is-drop-before");
+      }
+    }
+
+    clearDropMarks() {
+      (this.zoneBodies ?? []).forEach(body => {
+        body.children.forEach(chip => {
+          chip.classList.remove("is-drop-before", "is-drop-after");
+        });
+      });
+    }
+
     render() {
       const document = root.document;
+      // Rebuilt every render, so the drop-marker cleanup never touches chips
+      // from a previous tree.
+      this.zoneBodies = [];
       const grid = document.createElement("div");
       grid.className = "pivot-layout-grid";
       ZONES.forEach(area => grid.appendChild(this.createZone(area)));

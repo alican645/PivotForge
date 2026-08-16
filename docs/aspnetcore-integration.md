@@ -303,6 +303,12 @@ Name a host element with `field-designer` (tag helper) / `FieldDesigner(selector
 
 When a `fieldDesigner` is configured, `PivotWidget`'s constructor builds a `PivotForge.PivotLayoutState` from the declared fields and a `PivotForge.PivotFieldDesigner` bound to it, exposed as `widget.layoutState` and `widget.designer`.
 
+#### Dragging
+
+Chips are dragged with the mouse, using the HTML5 drag-and-drop API. A drop is **positional**: while dragging over a zone the designer compares the pointer against each chip's midpoint and draws an insertion line at the slot the chip would land in, and the drop places the field exactly there rather than appending it. This works both when a field enters a zone from elsewhere and when a chip is dragged **within its own zone**, which is how row and column order — the pivot's grouping hierarchy — is rearranged. Repositioning a value keeps its aggregation, and repositioning a filter keeps its selected values.
+
+The available-field list is a catalog rather than an ordered layout, so it is not reorderable; fields leave a zone through the chip's remove (`×`) button.
+
 #### Role
 
 Every field has a `role` of `dimension` or `measure`, which constrains where it can be dropped: a `measure` may occupy only the data area; a `dimension` may occupy row, column, and filter. Role is inferred from `area` — `data` implies `measure`, everything else implies `dimension` — **except** for `area="Available"`, where there is no placement to infer from, so `role` (`Role(...)` / `role` attribute) is required. Setting a `role` that contradicts a non-`Available` area (e.g., `Role(PivotFieldRole.Measure)` on a `Row` field) is a validation error, raised by `PivotFieldBuilder.Build()` at render time.
@@ -313,8 +319,8 @@ Pure state — no DOM access. Constructed with `new PivotLayoutState(catalog, la
 
 | Method | Behavior |
 | --- | --- |
-| `canDrop(name, area)` | Whether `name` may move into `area` (`"row"`, `"column"`, `"data"`, or `"filter"`), per the role rules above. |
-| `move(name, area, index)` | Moves a catalog field into `area` at `index` (default: end), detaching it from wherever it was. Throws if `canDrop` would be `false`. Placing into `"data"` defaults `aggregation` to `"sum"`; placing into `"filter"` starts with no selected values. |
+| `canDrop(name, area)` | Whether `name` may move into `area` (`"row"`, `"column"`, `"data"`, or `"filter"`), per the role rules above. A field's own area is allowed, because dropping a chip back into its own zone is how repositioning is expressed. |
+| `move(name, area, index)` | Moves a catalog field into `area` at `index` (default: end), detaching it from wherever it was. Throws if `canDrop` would be `false`. Placing into `"data"` defaults `aggregation` to `"sum"`; placing into `"filter"` starts with no selected values. When the field is already in `area` this repositions it: `index` is read against the zone as it looks before the move, and the entry keeps its aggregation, showAs, and selected filter values. |
 | `remove(name)` | Detaches a field back to the available list. A no-op if the field is already available. Throws if `name` is the only field in the data area — a pivot always needs at least one. |
 | `reorder(area, fromIndex, toIndex)` | Reorders a placed field within its own zone. |
 | `setAggregation(name, aggregation)` | Sets the aggregation (`"sum"`, `"count"`, `"average"`, `"min"`, `"max"`) of a field already in the data area. Throws otherwise. |
@@ -344,7 +350,6 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
 #### Limitations
 
 - **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
-- **No in-zone reordering by dragging.** `drop` always calls `move()` without an index, and `canDrop()` refuses a drop into a field's current area, so dropping always appends to the end of a zone; there is no way to drag a placed field to a specific position within its own zone, and row/column order determines the pivot's grouping hierarchy. `PivotLayoutState.reorder(area, fromIndex, toIndex)` exists and is fully supported, but it is programmatic only — a consumer must call it directly (e.g., from custom drag handles) to offer in-zone reordering through the UI.
 - **No filter value picker.** A field can be dragged into the Filters zone, but there is no UI to choose which values to filter to. A filter with no selected values filters nothing — the same as an unset filter elsewhere in PivotForge — so the Filters zone alone does not yet do anything useful; a consumer must still add value selection.
 - **No show-as menu or per-value format UI.** `PivotLayoutState` exposes `setAggregation` only; changing `showAs` or `format` still requires calling `updateFields`/`update` directly.
 - **No sort panel.** Sorting is still driven through the widget's `sortBy`, outside the designer.

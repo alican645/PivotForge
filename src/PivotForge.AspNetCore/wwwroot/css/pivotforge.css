@@ -463,12 +463,16 @@ select {
 }
 
 .pivot-placed-chip.is-drop-before,
-.pivot-placed-chip.is-drop-after {
+.pivot-placed-chip.is-drop-after,
+.pivot-chip.is-drop-before,
+.pivot-chip.is-drop-after {
   position: relative;
 }
 
 .pivot-placed-chip.is-drop-before::before,
-.pivot-placed-chip.is-drop-after::after {
+.pivot-placed-chip.is-drop-after::after,
+.pivot-chip.is-drop-before::before,
+.pivot-chip.is-drop-after::after {
   content: "";
   position: absolute;
   right: 6px;
@@ -480,12 +484,20 @@ select {
   box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
 }
 
-.pivot-placed-chip.is-drop-before::before {
+.pivot-placed-chip.is-drop-before::before,
+.pivot-chip.is-drop-before::before {
   top: -5px;
 }
 
-.pivot-placed-chip.is-drop-after::after {
+.pivot-placed-chip.is-drop-after::after,
+.pivot-chip.is-drop-after::after {
   bottom: -5px;
+}
+
+/* The dragged chip stays in place during an HTML5 drag, so it is dimmed to
+   read as "in flight" rather than as a second copy of itself. */
+.pivot-chip.is-dragging {
+  opacity: 0.4;
 }
 
 .pivot-field-chip:hover,

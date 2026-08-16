@@ -125,10 +125,8 @@
         return false;
       }
 
-      if (this.areaOf(name) === area) {
-        return false;
-      }
-
+      // A drop into the field's current area is not a no-op: it is how the
+      // designer expresses repositioning, and move() carries the index.
       return this.canPlaceByRole(name, area);
     }
 
@@ -139,22 +137,42 @@
       this.layout.filters = this.layout.filters.filter(filter => filter.field !== name);
     }
 
+    // Which slot in `area` currently holds `name`, or -1. Rows and columns hold
+    // plain names; data and filter hold entry objects keyed by `field`.
+    indexIn(area, name) {
+      return this.layout[AREA_TO_KEY[area]]
+        .findIndex(entry => (typeof entry === "string" ? entry : entry.field) === name);
+    }
+
     move(name, area, index) {
       if (!this.canDrop(name, area)) {
         throw new Error(`Field "${name}" cannot be placed in area "${area}".`);
       }
 
+      const key = AREA_TO_KEY[area];
+      const fromIndex = this.indexIn(area, name);
+      // Repositioning within an area must carry the existing entry across, or a
+      // reorder would silently reset a value's aggregation and showAs, or drop
+      // a filter's selected values.
+      const existing = fromIndex >= 0 ? this.layout[key][fromIndex] : null;
+
       this.detach(name);
 
-      const key = AREA_TO_KEY[area];
-      const entry = area === "data"
+      const entry = existing ?? (area === "data"
         ? { field: name, aggregation: "sum", showAs: "normal" }
         : area === "filter"
           ? { field: name, values: [] }
-          : name;
+          : name);
 
+      // detach() reassigns the area arrays, so the target has to be re-read.
       const target = this.layout[key];
-      target.splice(index ?? target.length, 0, entry);
+      // Removing the field shifted every later slot down by one, so an index
+      // past its old position refers to one slot earlier now.
+      const insertAt = index === undefined || index === null
+        ? target.length
+        : fromIndex >= 0 && index > fromIndex ? index - 1 : index;
+
+      target.splice(insertAt, 0, entry);
       this.emitChange();
     }
 
