@@ -1,6 +1,6 @@
 # Public API Surface
 
-This document records the supported public surface for `0.3.0-preview.2`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
+This document records the supported public surface for `0.4.0-preview.1`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
 
 ## PivotForge.Core
 
@@ -82,3 +82,16 @@ Static assets are served from `/_content/PivotForge.AspNetCore/`.
 ## Compatibility Policy
 
 PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking changes may be made when necessary and will be called out in release notes. After `1.0.0`, incompatible public API changes require a new major version. Additive members and behavior-preserving fixes may ship in minor or patch releases as appropriate.
+
+### Breaking changes in `0.4.0-preview.1`
+
+- **`PivotFieldBuilder.Format(string)` is removed.** It took an opaque string that
+  the browser never read, so a format declared through it was silently ignored.
+  Replace it with `FormatType(PivotValueFormatType)`, `FormatDecimals(int)`,
+  `FormatGrouping(bool)`, and `FormatCurrency(string)`.
+- **The `format` attribute on the `pivot-field` tag helper is removed**, for the
+  same reason. Replace it with `format-type`, `format-decimals`,
+  `format-grouping`, and `format-currency`.
+
+Both removals are compile-time errors rather than silent behavior changes, so a
+project that used them will not build until the declaration is updated.

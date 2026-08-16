@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.3.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.1
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
