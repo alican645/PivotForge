@@ -762,3 +762,73 @@ test("setting filter values notifies change subscribers", () => {
 
   assert.deepEqual(seen.filters, [{ field: "Quarter", values: ["Q1"] }]);
 });
+
+// --- Caption round-trip -----------------------------------------------------
+// getState() has always emitted captions; adoptLayout never read them back, so
+// a saved view silently lost every rename.
+
+const savedLayout = extra => ({
+  rows: ["Region", "Category"],
+  columns: ["Year"],
+  values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+  filters: [],
+  ...extra
+});
+
+test("a renamed caption survives a save and restore round trip", () => {
+  const source = create();
+  source.setCaption("Region", "Satış Bölgesi");
+
+  const restored = new PivotForge.PivotLayoutState(catalog, source.getState());
+
+  assert.equal(restored.field("Region").caption, "Satış Bölgesi");
+  assert.deepEqual(restored.getState().captions, { Region: "Satış Bölgesi" });
+});
+
+test("a restored caption is still resettable to the declared one", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Region: "Satış Bölgesi" } }));
+
+  state.setCaption("Region", "");
+
+  assert.equal(state.field("Region").caption, "Bölge");
+  assert.deepEqual(state.getState().captions, {});
+});
+
+test("a caption for a field the catalog no longer has is ignored, not fatal", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Gone: "Eski Alan", Region: "Satış Bölgesi" } }));
+
+  assert.equal(state.field("Region").caption, "Satış Bölgesi");
+  assert.deepEqual(state.getState().captions, { Region: "Satış Bölgesi" });
+});
+
+test("a restored caption equal to the declared one is not kept as an override", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Region: "Bölge" } }));
+
+  assert.deepEqual(state.getState().captions, {});
+});
+
+test("a blank or non-string restored caption is dropped rather than applied", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Region: "   ", Category: 42, Year: null } }));
+
+  assert.equal(state.field("Region").caption, "Bölge");
+  assert.equal(state.field("Category").caption, "Kategori");
+  assert.deepEqual(state.getState().captions, {});
+});
+
+test("a layout with no captions at all restores exactly as before", () => {
+  const state = new PivotForge.PivotLayoutState(catalog, savedLayout());
+
+  assert.deepEqual(state.getState().captions, {});
+  assert.equal(state.field("Region").caption, "Bölge");
+});
+
+test("a restored caption is trimmed the same way setCaption trims one", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Region: "  Satış Bölgesi  " } }));
+
+  assert.equal(state.field("Region").caption, "Satış Bölgesi");
+});

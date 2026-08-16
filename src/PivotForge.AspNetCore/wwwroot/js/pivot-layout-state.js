@@ -56,7 +56,13 @@
       // declared caption is always recoverable.
       this.captions = new Map();
       this.handlers = new Map();
-      this.layout = layout ? this.adoptLayout(layout) : this.layoutFromCatalog(normalized);
+
+      if (layout) {
+        this.layout = this.adoptLayout(layout);
+        this.adoptCaptions(layout.captions);
+      } else {
+        this.layout = this.layoutFromCatalog(normalized);
+      }
 
       if (this.layout.values.length === 0) {
         throw new Error("A pivot layout requires at least one field in the data area.");
@@ -183,6 +189,27 @@
       }
 
       this.emitChange();
+    }
+
+    // Restores the caption overrides getState() emitted. Unlike the layout
+    // itself, an unusable entry here is skipped rather than fatal: a caption is
+    // a display preference, and a saved view whose catalog has since changed
+    // should still open with the placements it can honour.
+    adoptCaptions(captions) {
+      if (!captions || typeof captions !== "object") {
+        return;
+      }
+
+      Object.entries(captions).forEach(([name, caption]) => {
+        if (!this.catalog.has(name) || typeof caption !== "string") {
+          return;
+        }
+
+        const trimmed = caption.trim();
+        if (trimmed && trimmed !== this.declaredCaption(name)) {
+          this.captions.set(name, trimmed);
+        }
+      });
     }
 
     areaOf(name) {

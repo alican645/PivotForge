@@ -208,8 +208,8 @@ DevExpress'in alan menüsüne yaklaştı.
 `PivotViewStore` var ve çalışıyor, ama otomatik değil.
 
 - [ ] `state-storing="local|session"` niteliği ile otomatik kaydet/geri yükle
-- [ ] `adoptLayout` kaydedilmiş **başlıkları** (caption override) geri yüklemiyor —
-      `getState().captions` dışarı veriliyor ama geri okunmuyor
+- [x] `adoptLayout` kaydedilmiş **başlıkları** geri yüklüyor — `getState()` çıktısı
+      doğrudan yapıcıya geri verilebiliyor
 - [ ] Kaydedilmiş görünümde koşullu biçimlendirme kurallarının taşınması
 
 ---
