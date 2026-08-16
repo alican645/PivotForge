@@ -56,7 +56,9 @@ for (const path of PAGES) {
 
     const config = JSON.parse(await page.locator("#pivotGrid-config").textContent());
 
-    expect(config.rendererOptions).toEqual({
+    // A subset match: conditional rules also live under rendererOptions and have
+    // their own coverage in declarative-initial-state.spec.js.
+    expect(config.rendererOptions).toMatchObject({
       selectionMode: "single",
       layoutMode: "tabular",
       contextMenu: true,

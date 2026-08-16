@@ -10,7 +10,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <PackageId>PivotForge.AspNetCore</PackageId>
-    <Version>0.4.0-preview.7</Version>
+    <Version>0.4.0-preview.8</Version>
     <Authors>Alican</Authors>
     <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge for ASP.NET Core</Title>
@@ -20,7 +20,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Events become declarable: on-data-loading, on-data-loaded, on-error, on-selection-changed, on-cell-double-click, on-cell-copied, on-cell-filter-requested and on-view-state-changed name a page function, with matching PivotGridBuilder methods. Every event is also dispatched on the grid container as a bubbling pivotforge:* CustomEvent, so a page can listen instead of naming a handler. A rendererOptions callback supplied by the consumer still runs alongside.</PackageReleaseNotes>
+    <PackageReleaseNotes>Initial state becomes declarable: pivot-filter, pivot-sort and pivot-conditional-rule child elements, with PivotGridBuilder.Filter, RowSort and ConditionalRule behind them. Anything naming a value accepts value-field plus value-aggregation and builds the value key for you. The emitted configuration is now serialized in key order, so the same configuration produces the same bytes whichever API declared it.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

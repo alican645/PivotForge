@@ -55,8 +55,10 @@
                     .RepeatRowLabels(true)
                     .MinColumnWidth(96)
                     .TotalText("Genel Toplam")
-    .OnSelectionChanged("pivotSelectionChanged")
                     .OnSelectionChanged("pivotSelectionChanged")
+                    .RowSort(PivotSort.RowTotal("Amount_sum", PivotSortDirection.Descending))
+                    .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual,
+                        900000, PivotConditionalColor.Green, id: "yuksek")
                     .FieldDesigner("#designerHost")
                     .Fields(fields =>
                     {
@@ -98,6 +100,10 @@
     .RepeatRowLabels(true)
     .MinColumnWidth(96)
     .TotalText("Genel Toplam")
+    .OnSelectionChanged("pivotSelectionChanged")
+    .RowSort(PivotSort.RowTotal("Amount_sum", PivotSortDirection.Descending))
+    .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual,
+        900000, PivotConditionalColor.Green, id: "yuksek")
     .FieldDesigner("#designerHost")
     .Fields(fields =&gt;
     {

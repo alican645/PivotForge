@@ -163,6 +163,15 @@ public sealed class PivotGridTagHelper : TagHelper
         var declaredFields = new List<PivotFieldTagHelper>();
         context.Items[PivotFieldTagHelper.FieldsKey] = declaredFields;
 
+        var declaredFilters = new List<PivotFilterTagHelper>();
+        context.Items[PivotFilterTagHelper.FiltersKey] = declaredFilters;
+
+        var declaredSort = new List<PivotSortTagHelper>();
+        context.Items[PivotSortTagHelper.SortKey] = declaredSort;
+
+        var declaredRules = new List<PivotConditionalRuleTagHelper>();
+        context.Items[PivotConditionalRuleTagHelper.RulesKey] = declaredRules;
+
         // Child pivot-field elements register themselves while their content executes.
         await output.GetChildContentAsync();
 
@@ -306,6 +315,21 @@ public sealed class PivotGridTagHelper : TagHelper
         if (OnViewStateChanged is { } onViewStateChanged)
         {
             builder.OnViewStateChanged(onViewStateChanged);
+        }
+
+        foreach (var filter in declaredFilters)
+        {
+            filter.ApplyTo(builder);
+        }
+
+        foreach (var sort in declaredSort)
+        {
+            sort.ApplyTo(builder);
+        }
+
+        foreach (var rule in declaredRules)
+        {
+            rule.ApplyTo(builder);
         }
 
         if (CssClass is not null)

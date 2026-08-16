@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Html;
+using PivotForge.Core;
 
 namespace PivotForge.AspNetCore.Rendering;
 
@@ -24,6 +25,10 @@ public sealed class PivotGridBuilder : IHtmlContent
     // Handler names, resolved on the page at construction. Kept apart from the
     // renderer options because the widget subscribes them, not the renderer.
     private readonly Dictionary<string, object?> _events = new(StringComparer.Ordinal);
+
+    // Initial state the grid starts with, rather than settings it is configured by.
+    private readonly List<Dictionary<string, object?>> _filters = [];
+    private readonly List<Dictionary<string, object?>> _conditionalRules = [];
     private readonly PivotFieldCollectionBuilder _fields = new();
     private string? _id;
     private string? _cssClass;
@@ -232,6 +237,110 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder OnViewStateChanged(string handler) =>
         SetEvent("viewStateChanged", handler);
 
+    /// <summary>Restricts a field to the given values before aggregation.</summary>
+    /// <param name="field">The source field to filter.</param>
+    /// <param name="values">The values to keep. An empty set filters nothing.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The field name is null or blank.</exception>
+    /// <exception cref="ArgumentNullException">The values are null.</exception>
+    public PivotGridBuilder Filter(string field, params string[] values)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(field);
+        ArgumentNullException.ThrowIfNull(values);
+
+        _filters.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["field"] = field,
+            ["values"] = values
+        });
+
+        return this;
+    }
+
+    /// <summary>Sets the row ordering the grid starts with.</summary>
+    /// <param name="sort">The sort definition. Build one with the <see cref="PivotSort"/> factories.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The sort is null.</exception>
+    public PivotGridBuilder RowSort(PivotSort sort)
+    {
+        ArgumentNullException.ThrowIfNull(sort);
+
+        var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["mode"] = sort.Mode.ToString(),
+            ["direction"] = sort.Direction.ToString()
+        };
+
+        if (sort.Field is not null)
+        {
+            payload["field"] = sort.Field;
+        }
+
+        if (sort.ValueKey is not null)
+        {
+            payload["valueKey"] = sort.ValueKey;
+        }
+
+        if (sort.ColumnPath is not null)
+        {
+            payload["columnPath"] = sort.ColumnPath;
+        }
+
+        return Set("rowSort", payload);
+    }
+
+    /// <summary>Highlights cells of one value that satisfy a comparison.</summary>
+    /// <param name="valueKey">The value key the rule applies to. See <see cref="PivotValueKey"/>.</param>
+    /// <param name="op">The comparison.</param>
+    /// <param name="threshold">The threshold compared against.</param>
+    /// <param name="color">The highlight applied to a matching cell.</param>
+    /// <param name="threshold2">The upper bound, required by <see cref="PivotConditionalOperator.Between"/>.</param>
+    /// <param name="id">An optional identifier carried through to the rendered cell.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The value key is blank, or Between was given no second threshold.</exception>
+    public PivotGridBuilder ConditionalRule(
+        string valueKey,
+        PivotConditionalOperator op,
+        double threshold,
+        PivotConditionalColor color,
+        double? threshold2 = null,
+        string? id = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(valueKey);
+
+        // A Between rule with one bound silently matches nothing in the browser,
+        // which reads as the rule being broken rather than incomplete.
+        if (op == PivotConditionalOperator.Between && threshold2 is null)
+        {
+            throw new ArgumentException(
+                "A Between conditional rule requires threshold2.", nameof(threshold2));
+        }
+
+        var rule = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["valueKey"] = valueKey,
+            ["operator"] = CamelCase(op.ToString()),
+            ["threshold"] = threshold,
+            ["color"] = CamelCase(color.ToString())
+        };
+
+        if (threshold2 is { } upper)
+        {
+            rule["threshold2"] = upper;
+        }
+
+        if (id is not null)
+        {
+            rule["id"] = id;
+        }
+
+        _conditionalRules.Add(rule);
+        return this;
+    }
+
+    private static string CamelCase(string name) =>
+        char.ToLowerInvariant(name[0]) + name[1..];
+
     private PivotGridBuilder Set(string key, object? value)
     {
         _options[key] = value;
@@ -287,17 +396,34 @@ public sealed class PivotGridBuilder : IHtmlContent
 
         // Omitted entirely when nothing was declared, so the widget keeps passing
         // its own renderer defaults through untouched.
-        if (_rendererOptions.Count > 0)
-        {
-            payload["rendererOptions"] = new Dictionary<string, object?>(_rendererOptions, StringComparer.Ordinal);
-        }
-
         if (_events.Count > 0)
         {
-            payload["events"] = new Dictionary<string, object?>(_events, StringComparer.Ordinal);
+            payload["events"] = new SortedDictionary<string, object?>(_events, StringComparer.Ordinal);
         }
 
-        var json = JsonSerializer.Serialize(payload, SerializerOptions)
+        if (_filters.Count > 0)
+        {
+            payload["filters"] = _filters;
+        }
+
+        // Conditional rules are drawn by the renderer, so they ride with the other
+        // presentation options rather than at the top level.
+        if (_conditionalRules.Count > 0)
+        {
+            _rendererOptions["conditionalRules"] = _conditionalRules;
+        }
+
+        if (_rendererOptions.Count > 0)
+        {
+            payload["rendererOptions"] = new SortedDictionary<string, object?>(_rendererOptions, StringComparer.Ordinal);
+        }
+
+        // Serialized in key order rather than declaration order, so the same
+        // configuration produces the same bytes whichever API declared it and in
+        // whatever order — which is what makes the two sample pages comparable.
+        var ordered = new SortedDictionary<string, object?>(payload, StringComparer.Ordinal);
+
+        var json = JsonSerializer.Serialize(ordered, SerializerOptions)
             // Prevent any string value from terminating the surrounding script block.
             .Replace("<", "\\u003c", StringComparison.Ordinal);
 

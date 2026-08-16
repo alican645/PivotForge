@@ -67,6 +67,10 @@
                     <pivot-field field="SalesPerson" caption="Satış Temsilcisi" area="Available" role="Dimension" />
                     <pivot-field field="Quarter" caption="Çeyrek" area="Available" role="Dimension" />
                     <pivot-field field="Quantity" caption="Miktar" area="Available" role="Measure" />
+                    <pivot-sort mode="RowTotalValue" value-field="Amount" direction="Descending" />
+                    <pivot-conditional-rule value-field="Amount" operator="GreaterThanOrEqual"
+                                            threshold="900000" color="Green" id="yuksek" />
+
                     <pivot-field field="Discount" caption="İskonto" area="Available" role="Measure" />
                 </pivot-grid>
             </div>

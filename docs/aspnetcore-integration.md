@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.7
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.8
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -241,6 +241,42 @@ the renderer keeps its own default.
 unqualified member name; whether the attribute was written is recovered from
 `TagHelperContext.AllAttributes`, so an unwritten attribute is not mistaken for a
 deliberate `Single`/`Tabular`.
+
+#### Initial state
+
+Three child elements declare the state a grid starts in. Each has a
+`PivotGridBuilder` equivalent.
+
+```html
+<pivot-grid id="pivotGrid">
+  <pivot-field field="Region" area="Row" />
+  <pivot-field field="Amount" area="Data" aggregation="Sum" />
+
+  <pivot-filter field="Region" values="Marmara, Ege" />
+  <pivot-sort mode="RowTotalValue" value-field="Amount" direction="Descending" />
+  <pivot-conditional-rule value-field="Amount" operator="GreaterThanOrEqual"
+                          threshold="900000" color="Green" id="high" />
+</pivot-grid>
+```
+
+| Element | Builder | Notes |
+| --- | --- | --- |
+| `pivot-filter` | `Filter(string, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. |
+| `pivot-sort` | `RowSort(PivotSort)` | At most one per grid — rows order one way, so a second is refused rather than merged. |
+| `pivot-conditional-rule` | `ConditionalRule(...)` | Repeatable. Later rules win over earlier ones on the same cell. |
+
+Anything naming a value takes either `value-key` directly, or `value-field` with
+`value-aggregation` (default `Sum`) and lets the key be built — the browser keys
+cells as `Field_aggregation`, and `PivotValueKey.For` is the same convention in
+C#. An explicit `value-key` wins.
+
+`operator` accepts `GreaterThan`, `GreaterThanOrEqual`, `LessThan`,
+`LessThanOrEqual`, `Equal` and `Between`; `Between` requires `threshold2` and is
+refused without it, because the browser would otherwise match nothing and look
+broken rather than incomplete. `color` accepts `Green`, `Amber`, `Red` and `Blue`.
+
+The emitted configuration is serialized in key order, so the same configuration
+produces the same bytes whichever API declared it and in whatever order.
 
 #### Events
 

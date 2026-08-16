@@ -9,7 +9,7 @@
     <EnablePackageValidation>true</EnablePackageValidation>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PackageId>PivotForge.Core</PackageId>
-    <Version>0.4.0-preview.7</Version>
+    <Version>0.4.0-preview.8</Version>
     <Authors>Alican</Authors>
     <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge Core</Title>

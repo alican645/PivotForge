@@ -96,8 +96,25 @@ public class PivotTagHelperTests
     }
 
     /// <summary>Runs the grid tag helper with the supplied child field declarations.</summary>
+    /// <summary>Non-field children the next RenderAsync call should also execute.</summary>
+    private static TagHelper[] Children { get; set; } = [];
+
     private static Task<string> RenderAsync(PivotGridTagHelper grid, params FieldSpec[] fields) =>
         RenderAsync(grid, [], fields);
+
+    private static async Task<string> RenderWithChildrenAsync(
+        PivotGridTagHelper grid, TagHelper[] children, params FieldSpec[] fields)
+    {
+        Children = children;
+        try
+        {
+            return await RenderAsync(grid, [], fields);
+        }
+        finally
+        {
+            Children = [];
+        }
+    }
 
     /// <param name="writtenAttributes">
     /// The attribute names the view author wrote on the pivot-grid element. Only these
@@ -127,6 +144,18 @@ public class PivotTagHelperTests
                         (_, _) => Task.FromResult<TagHelperContent>(new DefaultTagHelperContent()));
 
                     await helper.ProcessAsync(childContext, childOutput);
+                }
+
+                // Filters, sorts and rules register the same way fields do.
+                foreach (var child in Children)
+                {
+                    var childContext = new TagHelperContext([], context.Items, "child");
+                    var childOutput = new TagHelperOutput(
+                        "pivot-child",
+                        [],
+                        (_, _) => Task.FromResult<TagHelperContent>(new DefaultTagHelperContent()));
+
+                    await child.ProcessAsync(childContext, childOutput);
                 }
 
                 return new DefaultTagHelperContent();
@@ -635,4 +664,223 @@ public class PivotTagHelperTests
         Assert.Throws<ArgumentNullException>(
             () => new PivotGridBuilder().OnDataLoaded(null!));
     }
+
+    // --- Initial state --------------------------------------------------------
+
+    private static readonly FieldSpec[] MinimalFields =
+        [new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)];
+
+    [Fact]
+    public async Task WritesDeclaredFilters()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotFilterTagHelper { Field = "Region", Values = "Marmara, Ege" }],
+            MinimalFields));
+
+        var filter = config.GetProperty("filters")[0];
+        Assert.Equal("Region", filter.GetProperty("field").GetString());
+        Assert.Equal(
+            new[] { "Marmara", "Ege" },
+            filter.GetProperty("values").EnumerateArray().Select(v => v.GetString()).ToArray());
+    }
+
+    [Fact]
+    public async Task OmitsFiltersWhenNoneAreDeclared()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" }, MinimalFields));
+
+        Assert.False(config.TryGetProperty("filters", out _));
+    }
+
+    [Fact]
+    public async Task WritesALabelSort()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotSortTagHelper
+            {
+                Mode = PivotSortMode.RowLabel,
+                Field = "Region",
+                Direction = PivotSortDirection.Descending
+            }],
+            MinimalFields));
+
+        var sort = config.GetProperty("rowSort");
+        Assert.Equal("RowLabel", sort.GetProperty("mode").GetString());
+        Assert.Equal("Region", sort.GetProperty("field").GetString());
+        Assert.Equal("Descending", sort.GetProperty("direction").GetString());
+    }
+
+    [Fact]
+    public async Task BuildsTheValueKeyFromTheFieldAndAggregation()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotSortTagHelper
+            {
+                Mode = PivotSortMode.RowTotalValue,
+                ValueField = "Amount",
+                ValueAggregation = PivotAggregation.Sum
+            }],
+            MinimalFields));
+
+        // The browser keys cells the same way, so a view author does not have to
+        // spell the convention out.
+        Assert.Equal("Amount_sum", config.GetProperty("rowSort").GetProperty("valueKey").GetString());
+    }
+
+    [Fact]
+    public async Task AnExplicitValueKeyWinsOverTheFieldAndAggregation()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotSortTagHelper
+            {
+                Mode = PivotSortMode.RowTotalValue,
+                ValueKey = "custom_key",
+                ValueField = "Amount"
+            }],
+            MinimalFields));
+
+        Assert.Equal("custom_key", config.GetProperty("rowSort").GetProperty("valueKey").GetString());
+    }
+
+    [Fact]
+    public async Task ALabelSortWithoutAFieldIsRefused()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotSortTagHelper { Mode = PivotSortMode.RowLabel }],
+            MinimalFields));
+    }
+
+    [Fact]
+    public async Task AValueSortNamingNoValueIsRefused()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotSortTagHelper { Mode = PivotSortMode.RowTotalValue }],
+            MinimalFields));
+    }
+
+    [Fact]
+    public async Task ASecondSortIsRefusedBecauseRowsOrderOneWay()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [
+                new PivotSortTagHelper { Mode = PivotSortMode.RowLabel, Field = "Region" },
+                new PivotSortTagHelper { Mode = PivotSortMode.RowLabel, Field = "Category" }
+            ],
+            MinimalFields));
+    }
+
+    [Fact]
+    public async Task WritesConditionalRulesUnderRendererOptions()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotConditionalRuleTagHelper
+            {
+                ValueField = "Amount",
+                Operator = PivotConditionalOperator.GreaterThanOrEqual,
+                Threshold = 50000,
+                Color = PivotConditionalColor.Green,
+                RuleId = "high"
+            }],
+            MinimalFields));
+
+        // The renderer draws them, so they ride with the presentation options.
+        var rule = config.GetProperty("rendererOptions").GetProperty("conditionalRules")[0];
+        Assert.Equal("Amount_sum", rule.GetProperty("valueKey").GetString());
+        Assert.Equal("greaterThanOrEqual", rule.GetProperty("operator").GetString());
+        Assert.Equal(50000, rule.GetProperty("threshold").GetDouble());
+        Assert.Equal("green", rule.GetProperty("color").GetString());
+        Assert.Equal("high", rule.GetProperty("id").GetString());
+        Assert.False(rule.TryGetProperty("threshold2", out _));
+    }
+
+    [Fact]
+    public async Task ABetweenRuleCarriesBothBounds()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotConditionalRuleTagHelper
+            {
+                ValueField = "Amount",
+                Operator = PivotConditionalOperator.Between,
+                Threshold = 10,
+                Threshold2 = 20,
+                Color = PivotConditionalColor.Amber
+            }],
+            MinimalFields));
+
+        var rule = config.GetProperty("rendererOptions").GetProperty("conditionalRules")[0];
+        Assert.Equal("between", rule.GetProperty("operator").GetString());
+        Assert.Equal(20, rule.GetProperty("threshold2").GetDouble());
+    }
+
+    [Fact]
+    public void ABetweenRuleWithoutAnUpperBoundIsRefused()
+    {
+        // The browser silently matches nothing, which reads as broken rather than
+        // incomplete, so it is refused where the mistake was made.
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder()
+            .ConditionalRule("Amount_sum", PivotConditionalOperator.Between, 10, PivotConditionalColor.Red));
+    }
+
+    [Fact]
+    public async Task ARuleWithoutAThresholdIsRefused()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotConditionalRuleTagHelper { ValueField = "Amount" }],
+            MinimalFields));
+    }
+
+    [Fact]
+    public async Task InitialStateMatchesTheEquivalentBuilderConfiguration()
+    {
+        var fromTagHelper = await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [
+                new PivotFilterTagHelper { Field = "Region", Values = "Marmara" },
+                new PivotSortTagHelper
+                {
+                    Mode = PivotSortMode.RowTotalValue,
+                    ValueField = "Amount",
+                    Direction = PivotSortDirection.Descending
+                },
+                new PivotConditionalRuleTagHelper
+                {
+                    ValueField = "Amount",
+                    Operator = PivotConditionalOperator.GreaterThan,
+                    Threshold = 1000,
+                    Color = PivotConditionalColor.Blue
+                }
+            ],
+            MinimalFields);
+
+        var fromBuilder = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid")
+            .Filter("Region", "Marmara")
+            .RowSort(PivotSort.RowTotal("Amount_sum", PivotSortDirection.Descending))
+            .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThan, 1000, PivotConditionalColor.Blue)
+            .Fields(fields => fields.Add()
+                .DataField("Amount").Area(PivotArea.Data).Caption("Tutar")
+                .Aggregation(PivotAggregation.Sum)));
+
+        Assert.Equal(fromBuilder, fromTagHelper);
+    }
+
+    [Fact]
+    public void PivotValueKeyMatchesTheBrowserConvention()
+    {
+        Assert.Equal("Amount_sum", PivotValueKey.For("Amount", PivotAggregation.Sum));
+        Assert.Equal("Quantity_average", PivotValueKey.For("Quantity", PivotAggregation.Average));
+        Assert.Throws<ArgumentException>(() => PivotValueKey.For("  ", PivotAggregation.Sum));
+    }
 }
+

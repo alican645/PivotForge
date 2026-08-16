@@ -1,7 +1,7 @@
 # PivotForge — DevExpress Denklik Yol Haritası
 
 DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge'un
-`0.4.0-preview.7` sürümündeki durumu karşılaştırıldı. Kaynaklar dosyanın sonunda.
+`0.4.0-preview.8` sürümündeki durumu karşılaştırıldı. Kaynaklar dosyanın sonunda.
 
 **Kapsam dışı (talep üzerine):** OLAP / SSAS, sunucu tarafı toplama (server mode),
 uzaktan gruplama, milyon satır ölçeğinde sanal kaydırma.
@@ -57,13 +57,14 @@ işleyici adı vermek DOM olayını kapatmıyor.
 - [x] `widget.renderer.options`'a dışarıdan yazma ihtiyacı ortadan kalktı: sunum
       seçenekleri 0.1 ile bildirimsel, olaylar 0.2 ile. Ayrı bir setter gerekmedi.
 
-### 0.3 Başlangıç durumu
+### 0.3 Başlangıç durumu — ✅ `0.4.0-preview.8` ile tamamlandı
 
-- [ ] `<pivot-filter field="Region" values="Marmara,Ege" />` — başlangıç filtresi
-- [ ] `<pivot-sort field="Amount" mode="RowTotalValue" direction="Descending" />`
-- [ ] `<pivot-conditional-rule ... />` — koşullu biçimlendirme kuralları
-      (motorda `conditionalRules` var, bildirimi yok)
-- [ ] Detay modalı ayarları: `drill-down-columns`, `drill-down-labels`
+- [x] `<pivot-filter field="Region" values="Marmara,Ege" />` — başlangıç filtresi
+- [x] `<pivot-sort mode="RowTotalValue" value-field="Amount" direction="Descending" />`
+- [x] `<pivot-conditional-rule ... />` — koşullu biçimlendirme kuralları
+- [ ] Detay modalı ayarları: `drill-down-labels`. Sütunlar bilinçli olarak
+      dışarıda: sütun biçimlendiricileri fonksiyon ve bir nitelikte ifade
+      edilemiyor; katalogdan türetilen varsayılan zaten doğru çalışıyor.
 
 ---
 
@@ -79,7 +80,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `format` / `precision` | ✅ | ✅ | `0.4.0-preview.1`'de eklendi |
 | `areaIndex` | ✅ | ❌ | Sıra bildirim sırasından geliyor, açıkça verilemiyor |
 | `sortOrder`, `sortBy` | ⚠️ | ❌ | Alan başına sıralama yok; yalnızca tablo geneli |
-| `sortBySummaryField` / `Path` | ⚠️ | ❌ | `RowTotalValue` var ama sütun yoluna göre değil |
+| `sortBySummaryField` / `Path` | ⚠️ | ⚠️ | `RowTotalValue` var ama sütun yoluna göre değil |
 | `expanded` | ⚠️ | ❌ | `expandAll`/`collapseAll` var, alan başına başlangıç durumu yok |
 | `showTotals` / `showGrandTotals` (alan başına) | ❌ | ❌ | Yalnızca tablo geneli |
 | `dataType` | ❌ | ❌ | Tür dönüşümü yok |
