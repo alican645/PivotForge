@@ -205,12 +205,18 @@ DevExpress'in alan menüsüne yaklaştı.
 
 ## Bölüm 7 — Durum kalıcılığı
 
-`PivotViewStore` var ve çalışıyor, ama otomatik değil.
+`state-storing` ile otomatik kayıt/geri yükleme eklendi. `PivotViewStore` ayrı bir
+özellik olarak kalıyor: o, kullanıcının **adlandırılmış birden çok görünüm** tutup
+aralarında geçmesi için — kendi durum şeması demoya ait, bildirimsel yol onu kullanmıyor.
 
-- [ ] `state-storing="local|session"` niteliği ile otomatik kaydet/geri yükle
+- [x] `state-storing="Local|Session"` + `state-key` ile otomatik kaydet/geri yükle —
+      alan düzeni, başlıklar, filtre seçimleri, toplama, biçim ve sıralama
 - [x] `adoptLayout` kaydedilmiş **başlıkları** geri yüklüyor — `getState()` çıktısı
       doğrudan yapıcıya geri verilebiliyor
-- [ ] Kaydedilmiş görünümde koşullu biçimlendirme kurallarının taşınması
+- [~] Kaydedilmiş görünümde koşullu biçimlendirme kurallarının taşınması —
+      **kapsam dışı bırakıldı:** kurallar `pivot-conditional-rule` ile bildiriliyor ve
+      tasarımcı onları düzenleyemiyor, yani kullanıcının değiştirdiği, kaybolabilecek
+      bir şey yok. Tasarımcıya kural düzenleme eklenirse bu madde geri açılmalı.
 
 ---
 

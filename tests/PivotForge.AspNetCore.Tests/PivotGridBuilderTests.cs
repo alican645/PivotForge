@@ -202,4 +202,25 @@ public class PivotGridBuilderTests
     {
         Assert.False(ConfigOf(SalesGrid()).TryGetProperty("fieldDesigner", out _));
     }
+
+    [Fact]
+    public void StateStoringNoneWritesNothing()
+    {
+        // None is what a caller passes to turn persistence off, so it has to be a
+        // no-op rather than a third stored value the browser would have to reject.
+        var config = ConfigOf(SalesGrid().StateStoring(PivotStateStorage.None));
+
+        Assert.False(config.TryGetProperty("stateStoring", out _));
+    }
+
+    [Fact]
+    public void StateStoringAndKeyReachTheConfiguration()
+    {
+        var config = ConfigOf(SalesGrid()
+            .StateStoring(PivotStateStorage.Session)
+            .StateKey("satis"));
+
+        Assert.Equal("session", config.GetProperty("stateStoring").GetString());
+        Assert.Equal("satis", config.GetProperty("stateKey").GetString());
+    }
 }

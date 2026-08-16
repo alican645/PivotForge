@@ -60,6 +60,8 @@
                     .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual,
                         900000, PivotConditionalColor.Green, id: "yuksek")
                     .FieldDesigner("#designerHost")
+                    .StateStoring(PivotStateStorage.Session)
+                    .StateKey("tagHelperDemo")
                     .Fields(fields =>
                     {
                         fields.Add().Caption("Bölge").DataField("Region").Area(PivotArea.Row);
@@ -105,6 +107,8 @@
     .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual,
         900000, PivotConditionalColor.Green, id: "yuksek")
     .FieldDesigner("#designerHost")
+    .StateStoring(PivotStateStorage.Session)
+    .StateKey("tagHelperDemo")
     .Fields(fields =&gt;
     {
         fields.Add().Caption("Bölge").DataField("Region").Area(PivotArea.Row);

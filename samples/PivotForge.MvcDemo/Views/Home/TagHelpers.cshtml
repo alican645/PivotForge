@@ -58,7 +58,9 @@
                             min-column-width="96"
                             total-text="Genel Toplam"
                             on-selection-changed="pivotSelectionChanged"
-                            field-designer="#designerHost">
+                            field-designer="#designerHost"
+                            state-storing="Session"
+                            state-key="tagHelperDemo">
                     <pivot-field field="Region" caption="Bölge" area="Row" />
                     <pivot-field field="Category" caption="Kategori" area="Row" />
                     <pivot-field field="Year" caption="Yıl" area="Column" />
@@ -94,7 +96,9 @@
             repeat-row-labels="true"
             min-column-width="96"
             total-text="Genel Toplam"
-            field-designer="#designerHost"&gt;
+            field-designer="#designerHost"
+            state-storing="Session"
+            state-key="tagHelperDemo"&gt;
     &lt;pivot-field field="Region"      caption="Bölge"            area="Row" /&gt;
     &lt;pivot-field field="Category"    caption="Kategori"         area="Row" /&gt;
     &lt;pivot-field field="Year"        caption="Yıl"              area="Column" /&gt;

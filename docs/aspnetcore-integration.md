@@ -215,7 +215,8 @@ The same grid can be declared as markup. Register the tag helpers once, in
 `<pivot-grid>` attributes mirror the builder methods in kebab-case: `id`,
 `endpoint-prefix`, `allow-sorting`, `allow-filtering`, `allow-drill-down`,
 `allow-excel-export`, `auto-load`, `large-data`, `page-size`,
-`source-row-count`, `css-class`, and `field-designer`. An attribute you do not
+`source-row-count`, `css-class`, `field-designer`, `state-storing`, and
+`state-key`. An attribute you do not
 write is omitted from the configuration, so the browser default applies —
 writing `allow-sorting="false"` disables sorting, but omitting it leaves
 sorting on.
@@ -279,6 +280,41 @@ broken rather than incomplete. `color` accepts `Green`, `Amber`, `Red` and `Blue
 
 The emitted configuration is serialized in key order, so the same configuration
 produces the same bytes whichever API declared it and in whatever order.
+
+#### State persistence
+
+`state-storing="Local|Session"` (`StateStoring(PivotStateStorage)`) persists what
+the user arrives at — field layout, renamed captions, filter selections,
+aggregations, number formats and row sort — and restores it on the next load. It
+is off by default; persistence is something a page opts into.
+
+```cshtml
+<pivot-grid id="pivotGrid"
+            field-designer="#designerHost"
+            state-storing="Session"
+            state-key="satisRaporu">
+```
+
+`state-key` names the storage entry (`pivotforge:state:satisRaporu`). Leave it
+out and the grid's `id` stands in. With **neither**, nothing is persisted and the
+grid works from its declared configuration — a shared default key would let two
+grids on a page overwrite each other's layouts, which is worse than not saving.
+
+`Local` survives closing the browser; `Session` lasts for the tab.
+
+What is stored is a preference, never a contract. **A stored payload can never
+break the page:** unparseable JSON, a payload from another version, a layout the
+field catalog can no longer honour (a field that was removed, or one whose role
+no longer allows where it sat) and a filter naming a field that no longer exists
+are each discarded, and the grid falls back to what it declared. A stored layout
+that was rejected takes its filters down with it, rather than leaving the grid
+filtering by a layout it just refused.
+
+Persistence works without a field designer too — there is simply no layout to
+save, so only the filters and the sort are.
+
+`available` is deliberately not stored: it is derived from the catalog on every
+read, so a stale copy could only contradict it.
 
 #### Events
 
@@ -363,6 +399,8 @@ emit identical markup.
 | `fieldDesigner` | `null` | A CSS selector (or element) for a [field designer](#field-designer) host. When set, `PivotWidget` builds a `PivotLayoutState` from `fields` and a `PivotFieldDesigner` bound to it, exposed as `widget.layoutState` and `widget.designer`. Requires `pivot-layout-state.js` and `pivot-field-designer.js` to be loaded before `pivot-widget.js` runs; omitting either throws. |
 | `drillDownModal` | `true` | Wires cell activation to the packaged `PivotDrillDownModal`. Set to `false` to keep `drillDown()` available while supplying your own detail UI. Ignored when `allowDrillDown` is `false`, and silently inert when `pivot-drill-down-modal.js` was not loaded. |
 | `drillDownModalOptions` | `null` | Passed to the `PivotDrillDownModal` constructor: `columns`, `labels`, `host`. |
+| `stateStoring` | `null` | `"local"`, `"session"`, or `null`. See [State persistence](#state-persistence). Any other value throws. |
+| `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
 
 `create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
 
@@ -378,6 +416,7 @@ emit identical markup.
 | `setFilter(field, values)` | Replaces the filter for `field` (removes it when `values` is empty) and refreshes. Throws if `allowFiltering` is `false`. |
 | `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
 | `drillDown({ rowPath, columnPath, valueKey })` | Returns the source records behind a pivot coordinate. Throws if `allowDrillDown` is `false`. |
+| `saveState()` / `clearState()` / `readState()` | Write, forget, and read the persisted state by hand. All three return `false`/`null` rather than throwing when persistence is off or storage is unavailable. |
 | `fieldValues(field)` | Returns `{ field, values, totalCount, truncated, limit }`: the distinct values a filter on `field` can accept, in value order. Deliberately unaffected by the pivot layout and by the filters already applied — a list narrowed by the current filter could never offer back a value the user had excluded. Throws if `allowFiltering` is `false`. |
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
 | `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
@@ -489,7 +528,7 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
 - **A placed field can be dragged back to the Fields list to remove it**, which does the same thing as its × button and obeys the same rule: the last remaining Values field cannot be removed either way.
 - **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
 - **No sort panel from the designer.** The settings modal covers naming, position, aggregation, show-as, number format and removal; sorting is still driven through the widget's `sortBy`, outside the designer.
-- **Saved views are not wired up automatically.** `PivotViewStore` and the designer's state are both serializable, so a consumer can persist and restore designer layouts, but connecting the two is the consumer's responsibility — see the MVC demo for one approach.
+- **Named saved views are not wired up automatically.** `state-storing` persists one current state per key, automatically. Letting a user keep *several* named views and switch between them is a different feature, built on `PivotViewStore` — see the MVC demo for one approach.
 - **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.
 
 #### `PivotForge.PivotFilterPicker`

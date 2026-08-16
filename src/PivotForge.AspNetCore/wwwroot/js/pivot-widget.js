@@ -17,8 +17,17 @@
     events: null,
     fetchImpl: null,
     renderImpl: null,
-    fieldDesigner: null
+    fieldDesigner: null,
+    stateStoring: null,
+    stateKey: null
   };
+
+  // Bumped only when a stored payload can no longer be read by this code. An
+  // older or newer version is ignored rather than migrated, so a stale entry
+  // costs the user their saved layout, never a broken page.
+  const STATE_VERSION = 1;
+  const STATE_PREFIX = "pivotforge:state:";
+  const STORAGES = { local: "localStorage", session: "sessionStorage" };
 
   function resolveTarget(target) {
     if (typeof target === "string") {
@@ -121,6 +130,20 @@
       this.fields = PivotForge.PivotRequestBuilder.normalizeFields(this.options.fields ?? []);
       PivotForge.PivotRequestBuilder.buildRequest(this.options.fields ?? []);
 
+      // Resolved before anything reads state, and never fatal: a page that
+      // cannot persist is a page that keeps working from its declaration.
+      this.stateStorageName = this.resolveStateStorage();
+      this.stateKey = this.resolveStateKey();
+      const restored = this.readState();
+
+      if (restored?.filters) {
+        this.filters = restored.filters;
+      }
+
+      if (restored?.rowSort !== undefined) {
+        this.rowSort = restored.rowSort;
+      }
+
       this.subscribeDeclaredEvents();
 
       this.renderer = this.options.renderImpl ? null : this.createRenderer();
@@ -136,11 +159,156 @@
           );
         }
 
-        this.layoutState = new PivotForge.PivotLayoutState(this.options.fields);
+        this.layoutState = this.createLayoutState(restored);
         this.designer = new PivotForge.PivotFieldDesigner(this.options.fieldDesigner, {
           state: this.layoutState,
           widget: this
         });
+        // Caption edits and filter-value picks never travel through a widget
+        // method, so subscribing here is what makes them persist at all.
+        this.layoutState.on("change", () => this.saveState());
+      }
+    }
+
+    // A stored layout is a preference, not a contract: the field catalog may
+    // have changed since it was written, and PivotLayoutState rightly refuses a
+    // layout it cannot honour. Falling back to the declaration beats a page
+    // that will not load.
+    createLayoutState(restored) {
+      if (restored?.layout) {
+        try {
+          return new PivotForge.PivotLayoutState(
+            this.options.fields,
+            { ...restored.layout, captions: restored.captions });
+        } catch {
+          this.filters = [...(this.options.filters ?? [])];
+        }
+      }
+
+      return new PivotForge.PivotLayoutState(this.options.fields);
+    }
+
+    resolveStateStorage() {
+      const requested = this.options.stateStoring;
+
+      if (requested === null || requested === undefined || requested === false) {
+        return null;
+      }
+
+      if (!Object.hasOwn(STORAGES, requested)) {
+        throw new Error(
+          `Unknown stateStoring "${requested}". Expected "local", "session", or null.`);
+      }
+
+      return STORAGES[requested];
+    }
+
+    // The key is best-effort by design: naming one is how a page opts in, and a
+    // page that does not is simply not persisted. Inventing a shared default
+    // would let two grids overwrite each other's layouts.
+    resolveStateKey() {
+      if (!this.stateStorageName) {
+        return null;
+      }
+
+      const name = this.options.stateKey ?? this.container?.id ?? "";
+      return name ? `${STATE_PREFIX}${name}` : null;
+    }
+
+    // Access itself can throw — a browser with storage disabled raises on the
+    // property, not just on read — so every touch is guarded.
+    stateStorage() {
+      if (!this.stateKey) {
+        return null;
+      }
+
+      try {
+        return root[this.stateStorageName] ?? null;
+      } catch {
+        return null;
+      }
+    }
+
+    readState() {
+      const storage = this.stateStorage();
+      if (!storage) {
+        return null;
+      }
+
+      let payload = null;
+      try {
+        const raw = storage.getItem(this.stateKey);
+        payload = raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+
+      if (payload?.version !== STATE_VERSION) {
+        return null;
+      }
+
+      return {
+        layout: payload.layout ?? null,
+        captions: payload.captions ?? null,
+        // A filter naming a field the catalog dropped would be rejected by the
+        // server, so it is discarded here rather than sent.
+        filters: Array.isArray(payload.filters)
+          ? payload.filters.filter(filter =>
+            this.fields.some(field => field.dataField === filter?.field) &&
+            Array.isArray(filter.values))
+            .map(filter => ({ field: filter.field, values: [...filter.values] }))
+          : null,
+        rowSort: payload.rowSort ?? null
+      };
+    }
+
+    saveState() {
+      const storage = this.stateStorage();
+      if (!storage) {
+        return false;
+      }
+
+      const layout = this.layoutState?.getState() ?? null;
+      const payload = {
+        version: STATE_VERSION,
+        ...(layout
+          ? {
+            // available is derived from the catalog on every read, so storing
+            // it would only let a stale copy contradict the catalog.
+            layout: {
+              rows: layout.rows,
+              columns: layout.columns,
+              values: layout.values,
+              filters: layout.filters
+            },
+            captions: layout.captions
+          }
+          : {}),
+        filters: layout
+          ? layout.filters.filter(filter => filter.values.length > 0)
+          : this.filters,
+        rowSort: this.rowSort
+      };
+
+      try {
+        storage.setItem(this.stateKey, JSON.stringify(payload));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    clearState() {
+      const storage = this.stateStorage();
+      if (!storage) {
+        return false;
+      }
+
+      try {
+        storage.removeItem(this.stateKey);
+        return true;
+      } catch {
+        return false;
       }
     }
 
@@ -436,6 +604,7 @@
         this.syncRendererSortState();
       }
 
+      this.saveState();
       await this.refresh();
     }
 
@@ -593,6 +762,7 @@
 
       this.rowSort = sort;
       this.syncRendererSortState();
+      this.saveState();
       await this.refresh();
     }
 
@@ -606,6 +776,7 @@
         this.filters.push({ field, values });
       }
 
+      this.saveState();
       await this.refresh();
     }
 
@@ -615,6 +786,7 @@
       }
 
       this.filters = [];
+      this.saveState();
       await this.refresh();
     }
 

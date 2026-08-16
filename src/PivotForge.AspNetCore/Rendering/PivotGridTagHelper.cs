@@ -61,6 +61,25 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("field-designer")]
     public string? FieldDesigner { get; set; }
 
+    /// <summary>Gets or sets where the grid persists the state a user arrives at.</summary>
+    /// <remarks>
+    /// Non-nullable so Razor accepts the unqualified member name (<c>state-storing="Local"</c>).
+    /// No <see cref="TagHelperContext.AllAttributes"/> lookup is needed here, because the CLR
+    /// default <see cref="PivotStateStorage.None"/> and an unwritten attribute mean the same
+    /// thing: persistence is opt-in.
+    /// </remarks>
+    [HtmlAttributeName("state-storing")]
+    public PivotStateStorage StateStoring { get; set; }
+
+    /// <summary>Gets or sets the name of the storage entry.</summary>
+    /// <remarks>
+    /// When absent the container id stands in. With neither, nothing is persisted and the grid
+    /// works from its declared configuration, rather than sharing a default key with every other
+    /// grid on the page.
+    /// </remarks>
+    [HtmlAttributeName("state-key")]
+    public string? StateKey { get; set; }
+
     /// <summary>Gets or sets how a click on a cell selects.</summary>
     /// <remarks>
     /// Non-nullable so Razor accepts the unqualified member name (<c>selection-mode="None"</c>).
@@ -340,6 +359,18 @@ public sealed class PivotGridTagHelper : TagHelper
         if (FieldDesigner is not null)
         {
             builder.FieldDesigner(FieldDesigner);
+        }
+
+        // A key with nowhere to store is dead weight in the payload, so the two
+        // travel together or not at all.
+        if (StateStoring != PivotStateStorage.None)
+        {
+            builder.StateStoring(StateStoring);
+
+            if (StateKey is not null)
+            {
+                builder.StateKey(StateKey);
+            }
         }
 
         if (declaredFields.Count > 0)

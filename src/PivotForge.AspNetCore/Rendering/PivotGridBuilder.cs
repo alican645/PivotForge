@@ -113,6 +113,19 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder FieldDesigner(string selector) => Set("fieldDesigner", selector);
 
+    /// <summary>Persists the layout, captions, filters, and sort the user arrives at.</summary>
+    /// <param name="storage">Where to persist. <see cref="PivotStateStorage.None"/> writes nothing.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder StateStoring(PivotStateStorage storage) => storage == PivotStateStorage.None
+        ? this
+        : Set("stateStoring", storage == PivotStateStorage.Session ? "session" : "local");
+
+    /// <summary>Names the storage entry, so two grids on a page never share one.</summary>
+    /// <param name="key">The key. When absent the grid's container id stands in; with neither,
+    /// nothing is persisted and the grid works from its declared configuration.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder StateKey(string key) => Set("stateKey", key);
+
     /// <summary>Sets how a click on a cell selects.</summary>
     /// <param name="mode">The selection mode.</param>
     /// <returns>This builder.</returns>
