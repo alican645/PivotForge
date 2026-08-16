@@ -45,6 +45,18 @@ jobs:
       - name: Test browser assets
         run: node --test tests/*.test.js
 
+      # The stub-based suite above cannot express HTML5 drag-and-drop or event
+      # bubbling. Both bugs that reached a published version hid in exactly that
+      # gap, so the designer is also driven in a real browser.
+      - name: Install browser test dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Test in a browser
+        run: npx playwright test
+
       - name: Pack Core
         run: dotnet pack src/PivotForge.Core/PivotForge.Core.csproj -c Release --no-build --no-restore -o artifacts/packages
 

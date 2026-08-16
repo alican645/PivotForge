@@ -462,6 +462,16 @@ select {
   background: rgba(15, 118, 110, 0.04);
 }
 
+/* A drag the role rule refuses. Without this a forbidden drop and a broken one
+   look identical, so the user cannot tell "not allowed here" from "nothing
+   happened". Paired with dataTransfer.dropEffect = "none", which gives the
+   platform's own no-drop cursor. */
+.pivot-zone.is-drop-refused .pivot-zone__body {
+  outline: 1px dashed var(--pt-danger, #b42318);
+  outline-offset: -5px;
+  background: rgba(180, 35, 24, 0.04);
+}
+
 .pivot-placed-chip.is-drop-before,
 .pivot-placed-chip.is-drop-after,
 .pivot-chip.is-drop-before,

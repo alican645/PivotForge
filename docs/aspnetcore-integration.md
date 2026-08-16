@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.2
+dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.3
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -360,6 +360,12 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
 
 #### Limitations
 
+- **A measure can only go to Values; a dimension can go anywhere else.** The
+  rule comes from the field's `role`, which is inferred from its declared area
+  (`data` implies `measure`, `row`/`column`/`filter` imply `dimension`) and must
+  be stated explicitly for a field declared `area="Available"`. Dragging a field
+  where its role forbids marks the zone as refused and shows the platform's
+  no-drop cursor; the drop is rejected.
 - **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
 - **No filter value picker.** A field can be dragged into the Filters zone, but there is no UI to choose which values to filter to. A filter with no selected values filters nothing — the same as an unset filter elsewhere in PivotForge — so the Filters zone alone does not yet do anything useful; a consumer must still add value selection.
 - **No show-as menu.** The designer edits aggregation and format; changing `showAs` still requires calling `updateFields`/`update` directly.

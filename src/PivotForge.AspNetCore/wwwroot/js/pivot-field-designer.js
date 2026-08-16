@@ -225,16 +225,38 @@
       body.className = "pivot-zone__body";
       zone.appendChild(body);
       this.zoneBodies.push(body);
+      this.zoneElements.push(zone);
 
       zone.addEventListener("dragover", event => {
         const name = this.draggedField;
-        if (!name || !this.state.canDrop(name, area)) {
+        if (!name) {
+          return;
+        }
+
+        this.clearDropMarks();
+
+        // A refused drag used to fall out silently, leaving "not allowed here"
+        // and "broken" looking identical. Saying so costs one class and the
+        // cursor the platform already draws for dropEffect "none".
+        if (!this.state.canDrop(name, area)) {
+          zone.classList.add("is-drop-refused");
+          if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = "none";
+          }
           return;
         }
 
         event.preventDefault();
         if (event.dataTransfer) {
           event.dataTransfer.dropEffect = "move";
+        }
+
+        // The insertion line is drawn on a chip's edge, so an empty zone has
+        // nothing to draw it on. Highlight the zone itself instead, otherwise
+        // dragging into an empty area gives no feedback whatsoever.
+        if (body.children.length === 0) {
+          zone.classList.add("is-empty-drop-target");
+          return;
         }
 
         this.markDropSlot(body, this.dropIndex(body, event.clientY));
@@ -358,6 +380,10 @@
     }
 
     clearDropMarks() {
+      (this.zoneElements ?? []).forEach(zone => {
+        zone.classList.remove("is-empty-drop-target", "is-drop-refused");
+      });
+
       (this.zoneBodies ?? []).forEach(body => {
         // Same HTMLCollection constraint as dropIndex: copy before iterating.
         Array.from(body.children).forEach(chip => {
@@ -371,6 +397,7 @@
       // Rebuilt every render, so the drop-marker cleanup never touches chips
       // from a previous tree.
       this.zoneBodies = [];
+      this.zoneElements = [];
       const grid = document.createElement("div");
       grid.className = "pivot-layout-grid";
       ZONES.forEach(area => grid.appendChild(this.createZone(area)));

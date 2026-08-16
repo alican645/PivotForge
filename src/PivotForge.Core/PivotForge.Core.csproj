@@ -9,7 +9,7 @@
     <EnablePackageValidation>true</EnablePackageValidation>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PackageId>PivotForge.Core</PackageId>
-    <Version>0.4.0-preview.2</Version>
+    <Version>0.4.0-preview.3</Version>
     <Authors>Alican</Authors>
     <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge Core</Title>
@@ -19,7 +19,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Version-aligned preview release; the fix in this version applies to PivotForge.AspNetCore.</PackageReleaseNotes>
+    <PackageReleaseNotes>Version-aligned preview release; the changes in this version apply to PivotForge.AspNetCore.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

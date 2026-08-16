@@ -10,7 +10,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <PackageId>PivotForge.AspNetCore</PackageId>
-    <Version>0.4.0-preview.2</Version>
+    <Version>0.4.0-preview.3</Version>
     <Authors>Alican</Authors>
     <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge for ASP.NET Core</Title>
@@ -20,7 +20,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Fixes field-designer drag-and-drop, which threw on every dragover and was completely unusable in 0.3.0-preview.2 and 0.4.0-preview.1: the drop-position code called Array methods on element.children, which is an HTMLCollection and has none. Upgrade if you use the field designer.</PackageReleaseNotes>
+    <PackageReleaseNotes>Field designer drag-and-drop now shows where a field will land: an empty zone highlights itself (the insertion line is drawn on a chip's edge and had nothing to draw on), and a drag the role rule refuses is marked instead of being ignored silently, so 'not allowed here' no longer looks identical to 'broken'.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

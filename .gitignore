@@ -33,3 +33,7 @@ secrets.json
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# Playwright browser-test output
+test-results/
+playwright-report/

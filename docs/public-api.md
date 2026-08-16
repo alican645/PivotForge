@@ -1,6 +1,6 @@
 # Public API Surface
 
-This document records the supported public surface for `0.4.0-preview.2`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
+This document records the supported public surface for `0.4.0-preview.3`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
 
 ## PivotForge.Core
 
