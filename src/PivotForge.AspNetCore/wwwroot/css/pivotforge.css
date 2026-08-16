@@ -504,7 +504,7 @@ select {
   bottom: -5px;
 }
 
-/* The dragged chip stays in place during an HTML5 drag, so it is dimmed to
+/* The dragged chip stays in place while it is being moved, so it is dimmed to
    read as "in flight" rather than as a second copy of itself. */
 .pivot-chip.is-dragging {
   opacity: 0.4;
@@ -2270,10 +2270,45 @@ select {
   background: var(--pt-panel);
   cursor: grab;
   font-size: 0.8125rem;
+  /* A mouse drag would otherwise select the caption text as it moves. */
+  user-select: none;
+  /* Deliberately left at the browser default: a finger anywhere on the chip
+     still scrolls the list. Only the grip opts out -- see below. */
 }
 
-.pivot-chip[draggable="true"]:active {
+.pivot-chip:active {
   cursor: grabbing;
+}
+
+/* The one element that takes the gesture away from the browser, which is what
+   makes a touch drag possible at all. Applying this to the whole chip would
+   make a long available-field list impossible to scroll with a finger. */
+.pivot-chip__grip {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 0.125rem;
+  color: var(--pt-muted);
+  cursor: grab;
+  font-size: 0.75rem;
+  line-height: 1;
+  touch-action: none;
+}
+
+.pivot-chip__grip:hover {
+  color: var(--pt-text);
+}
+
+/* Coarse pointers have no hover to reveal affordances and need a bigger
+   target than a mouse does -- 24px is the WCAG 2.2 minimum. */
+@media (pointer: coarse) {
+  .pivot-chip__grip {
+    min-width: 24px;
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+  }
 }
 
 .pivot-chip__label {

@@ -222,11 +222,15 @@ aralarında geçmesi için — kendi durum şeması demoya ait, bildirimsel yol 
 
 ## Bölüm 8 — Erişilebilirlik ve platform
 
-**Bugün en zayıf alan.** Sürükle-bırakta **0 touch handler** var.
+Sürükleme Pointer Events'e taşındı; fare, dokunmatik ve kalem tek mekanizmayla
+çalışıyor. Kalan açık klavye ve ARIA tarafında.
 
-- [ ] Dokunmatik sürükle-bırak — tablet/telefonda tasarımcı çalışmıyor
-- [ ] Klavye ile alan taşıma — çipler odaklanabilir ama işletilemiyor
-- [ ] Tablo içinde klavye gezinme (`tabIndex`, ok tuşları)
+- [x] Dokunmatik sürükle-bırak — çipteki tutamaç (`⠿`) `touch-action: none`
+      taşıyor, gövdesi taşımıyor: parmakla liste kaydırılabiliyor, tutamaçtan
+      sürüklenebiliyor
+- [ ] Klavye ile alan taşıma — çipler **odaklanabilir bile değil** (`tabIndex` yok)
+- [x] ~~Tablo içinde klavye gezinme~~ — **zaten vardı:** ok tuşları, Enter/Space,
+      Ctrl+C, ContextMenu/Shift+F10 ve gezinen `tabIndex` (`pivot-table.js:931-1010`)
 - [ ] ARIA rolleri ve ekran okuyucu desteği (WCAG)
 - [ ] Uyarlanabilir (adaptive) mobil düzen
 

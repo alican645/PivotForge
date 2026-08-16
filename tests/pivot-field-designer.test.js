@@ -18,6 +18,20 @@ function asChildren(items) {
 
 // A DOM stub sufficient for the designer: element creation, class lists,
 // children, and event listeners. The designer must not need more than this.
+function matchesSelector(node, selector) {
+  if (selector.startsWith(".")) {
+    return Boolean(node.className?.split(" ").includes(selector.slice(1)));
+  }
+
+  if (selector.startsWith("[") && selector.endsWith("]")) {
+    const attribute = selector.slice(1, -1);
+    const key = attribute.replace(/^data-/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    return node.dataset?.[key] !== undefined;
+  }
+
+  return node.tagName === selector.toUpperCase();
+}
+
 function createElement(tagName) {
   return {
     tagName: tagName.toUpperCase(),
@@ -44,10 +58,38 @@ function createElement(tagName) {
     // assign `rect` to lay chips out; anything unplaced reports a zero box.
     rect: null,
     getBoundingClientRect() { return this.rect ?? { top: 0, bottom: 0, height: 0 }; },
-    appendChild(child) { this._children.push(child); return child; },
+    appendChild(child) {
+      child.parentNode = this;
+      this._children.push(child);
+      return child;
+    },
     remove() { this.removed = true; },
-    replaceChildren(...nodes) { this._children = nodes; },
+    replaceChildren(...nodes) {
+      nodes.forEach(node => { node.parentNode = this; });
+      this._children = nodes;
+    },
     setAttribute(name, value) { this.attributes[name] = value; },
+    // Real elements walk up the tree; the designer's hit testing depends on it,
+    // so the stub keeps parent links and matches the three selector shapes the
+    // production code actually uses.
+    closest(selector) {
+      for (let node = this; node; node = node.parentNode) {
+        if (matchesSelector(node, selector)) {
+          return node;
+        }
+      }
+      return null;
+    },
+    // Chromium throws NotFoundError here when the id names no live pointer,
+    // which is a state the designer has to survive rather than a state it can
+    // assume away. `captureThrows` lets a test put the stub in it.
+    setPointerCapture() {
+      if (this.captureThrows) {
+        throw new Error("No active pointer with the given id is found.");
+      }
+      this.captured = true;
+    },
+    releasePointerCapture() { this.captured = false; },
     addEventListener(name, handler) {
       const handlers = this.listeners.get(name) ?? [];
       handlers.push(handler);
@@ -141,22 +183,72 @@ function findByAction(node, action) {
   return null;
 }
 
-// Simulates a real HTML5 drag: dragstart on the source chip (which records
-// the payload on the designer instance, since dataTransfer.getData is
-// unreadable during dragover per spec), then the given event on the target.
+// Drag runs on pointer events, and pointer capture retargets every move and
+// the release to the chip being dragged — so the target zone is not the event
+// target, it is whatever hit testing finds. `elementFromPoint` is what the
+// designer asks, so that is what a test controls.
+let elementUnderPointer = null;
+globalThis.document.elementFromPoint = () => elementUnderPointer;
+
+// Simulates a drag of `fieldName` released over `target`. `eventName` is kept
+// from the drag-and-drop era: "drop" completes the gesture, anything else
+// stops after the move, which is how hover feedback is tested.
 function dragFieldTo(host, fieldName, target, eventName, extra = {}) {
   const source = chips(host).find(entry => entry.dataset.field === fieldName);
-  const dataTransfer = { data: {}, setData(type, value) { this.data[type] = value; }, getData(type) { return this.data[type] ?? ""; } };
-  source.dispatch("dragstart", { dataTransfer });
-
+  const grip = findByAction(source, "grip");
+  const clientY = extra.clientY ?? 0;
   let prevented = false;
-  target.dispatch(eventName, {
-    preventDefault() { prevented = true; },
-    dataTransfer,
-    ...extra
+  const preventDefault = () => { prevented = true; };
+
+  elementUnderPointer = target;
+  // Pressing at a point far from the move guarantees the drag threshold is
+  // crossed by the first move, whatever coordinates the test asked for.
+  source.dispatch("pointerdown", {
+    target: grip, pointerId: 1, button: 0, pointerType: "mouse",
+    clientX: -1000, clientY: -1000, preventDefault
   });
+  source.dispatch("pointermove", { pointerId: 1, clientX: 0, clientY, preventDefault });
+
+  if (eventName === "drop") {
+    source.dispatch("pointerup", { pointerId: 1, clientX: 0, clientY, preventDefault });
+  }
 
   return { prevented };
+}
+
+// Continues a drag already in flight, over a (possibly different) target.
+function continueDrag(host, fieldName, target, clientY = 0) {
+  const source = chips(host).find(entry => entry.dataset.field === fieldName);
+  elementUnderPointer = target;
+  source.dispatch("pointermove", { pointerId: 1, clientX: 0, clientY, preventDefault() {} });
+}
+
+// Ends a drag in flight: "pointerup" releases, "pointercancel" is what the
+// platform sends when it takes the gesture away.
+function finishDrag(host, fieldName, eventName, clientY = 0) {
+  const source = chips(host).find(entry => entry.dataset.field === fieldName);
+  source.dispatch(eventName, { pointerId: 1, clientX: 0, clientY, preventDefault() {} });
+}
+
+// A press-and-release that never travels: a click, not a drag.
+function tapChip(host, fieldName, onTarget) {
+  const source = chips(host).find(entry => entry.dataset.field === fieldName);
+  source.dispatch("pointerdown", {
+    target: onTarget ?? source, pointerId: 1, button: 0, pointerType: "mouse",
+    clientX: 0, clientY: 0
+  });
+  source.dispatch("pointerup", { pointerId: 1, clientX: 0, clientY: 0 });
+}
+
+// Starts a drag with a finger rather than a mouse.
+function touchDown(host, fieldName, { onGrip }) {
+  const source = chips(host).find(entry => entry.dataset.field === fieldName);
+  const grip = findByAction(source, "grip");
+  source.dispatch("pointerdown", {
+    target: onGrip ? grip : source, pointerId: 7, button: 0, pointerType: "touch",
+    clientX: 0, clientY: 0
+  });
+  return source;
 }
 
 test("renders a zone for each area plus the available list", () => {
@@ -208,40 +300,57 @@ test("dropping a measure into the rows zone changes nothing", async () => {
   assert.equal(updates.length, 0);
 });
 
-test("dragend clears the tracked dragged field", () => {
+test("releasing clears the drag session", () => {
   const { host, designer } = build();
-  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
-  const dataTransfer = { data: {}, setData(type, value) { this.data[type] = value; }, getData(type) { return this.data[type] ?? ""; } };
 
-  source.dispatch("dragstart", { dataTransfer });
+  dragFieldTo(host, "Quarter", zone(host, "row"), "dragover");
   assert.equal(designer.draggedField, "Quarter");
 
-  source.dispatch("dragend", {});
+  finishDrag(host, "Quarter", "pointerup");
   assert.equal(designer.draggedField, null);
+  assert.equal(designer.drag, null);
 });
 
-test("drop uses the tracked dragged field, not whatever the event's dataTransfer reports", async () => {
+test("a press that never travels is a click, not a drag", async () => {
+  const { host, designer, state, updates } = build();
+
+  // Released squarely over a zone that would accept the field: only the
+  // absence of travel keeps this from being a move.
+  elementUnderPointer = zone(host, "row");
+  tapChip(host, "Quarter");
+  await Promise.resolve();
+
+  assert.equal(designer.draggedField, null);
+  assert.equal(designer.drag, null);
+  assert.equal(state.areaOf("Quarter"), "available");
+  assert.equal(updates.length, 0);
+});
+
+test("the release moves the field the drag began on, not whatever it landed over", async () => {
   const { host, state, updates } = build();
 
-  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
-  const startDataTransfer = { data: {}, setData(type, value) { this.data[type] = value; }, getData(type) { return this.data[type] ?? ""; } };
-  source.dispatch("dragstart", { dataTransfer: startDataTransfer });
-
-  // The drop event's own dataTransfer names a field that is already in the
-  // target area ("Region" is already a row), so if drop ignored the tracked
-  // draggedField ("Quarter") and used only this payload, canDrop would refuse
-  // it and nothing would happen.
-  const mismatchedDataTransfer = { getData: () => "Region" };
-  let prevented = false;
-  zone(host, "row").dispatch("drop", {
-    preventDefault() { prevented = true; },
-    dataTransfer: mismatchedDataTransfer
-  });
+  // Pointer capture means every move and the release are delivered to the
+  // dragged chip, so the field can only come from the session -- but the hit
+  // test lands on the Region chip, which is already a row. Reading the field
+  // from the element under the pointer would move nothing.
+  const regionChip = chips(host).find(entry => entry.dataset.field === "Region");
+  dragFieldTo(host, "Quarter", regionChip, "drop");
   await Promise.resolve();
 
   assert.deepEqual(state.getState().rows, ["Region", "Quarter"]);
   assert.equal(updates.length, 1);
-  assert.equal(prevented, true);
+});
+
+test("a release outside every zone cancels rather than removing the field", async () => {
+  const { host, state, updates } = build();
+  state.move("Quarter", "row");
+  build().designer.render();
+
+  dragFieldTo(host, "Region", null, "drop");
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Region", "Quarter"]);
+  assert.equal(updates.length, 0);
 });
 
 test("apply mutates the state before it calls widget.update", async () => {
@@ -265,20 +374,22 @@ test("apply mutates the state before it calls widget.update", async () => {
   assert.deepEqual(rowsWhenUpdateWasCalled, ["Region", "Quarter"]);
 });
 
-test("dragover refuses an invalid target", () => {
+// preventDefault is now called on every move to stop text selection, so it is
+// no longer the accept/refuse signal -- the zone's own class is.
+test("dragging over an invalid target marks the zone refused", () => {
   const { host } = build();
 
-  const { prevented } = dragFieldTo(host, "Quantity", zone(host, "row"), "dragover");
+  dragFieldTo(host, "Quantity", zone(host, "row"), "dragover");
 
-  assert.equal(prevented, false);
+  assert.equal(zone(host, "row").classList.contains("is-drop-refused"), true);
 });
 
-test("dragover accepts a valid target", () => {
+test("dragging over a valid target does not mark it refused", () => {
   const { host } = build();
 
-  const { prevented } = dragFieldTo(host, "Quarter", zone(host, "row"), "dragover");
+  dragFieldTo(host, "Quarter", zone(host, "row"), "dragover");
 
-  assert.equal(prevented, true);
+  assert.equal(zone(host, "row").classList.contains("is-drop-refused"), false);
 });
 
 test("the remove control on the last data field is disabled and explains why", () => {
@@ -596,7 +707,7 @@ test("the marker follows the pointer to a different slot", () => {
   const body = layOutZone(host, "row");
 
   dragFieldTo(host, "Quarter", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
-  zone(host, "row").dispatch("dragover", { preventDefault() {}, clientY: beforeChip(2) });
+  continueDrag(host, "Quarter", zone(host, "row"), beforeChip(2));
 
   assert.deepEqual(markedChips(body), [{ field: "Year", edge: "before" }]);
 });
@@ -610,23 +721,22 @@ test("dragging past the last chip marks the end of the zone instead", () => {
   assert.deepEqual(markedChips(body), [{ field: "Year", edge: "after" }]);
 });
 
-test("the drop marker is cleared when the pointer leaves the zone", () => {
+test("the drop marker is cleared when the pointer leaves every zone", () => {
   const { host } = buildWithThreeRows();
   const body = layOutZone(host, "row");
 
   dragFieldTo(host, "Quarter", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
-  zone(host, "row").dispatch("dragleave", { preventDefault() {} });
+  continueDrag(host, "Quarter", null, beforeChip(1));
 
   assert.deepEqual(markedChips(body), []);
 });
 
-test("the drop marker is cleared when the drag is abandoned", () => {
+test("the drop marker is cleared when the platform takes the gesture away", () => {
   const { host } = buildWithThreeRows();
   const body = layOutZone(host, "row");
-  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
 
   dragFieldTo(host, "Quarter", zone(host, "row"), "dragover", { clientY: beforeChip(1) });
-  source.dispatch("dragend", {});
+  finishDrag(host, "Quarter", "pointercancel");
 
   assert.deepEqual(markedChips(body), []);
 });
@@ -1090,3 +1200,208 @@ function findByClassName(node, name) {
   }
   return null;
 }
+
+// --- Touch and pointer mechanics --------------------------------------------
+// HTML5 drag-and-drop never fires on a touch device, so the designer was
+// unusable on a tablet or a phone. Pointer events cover mouse, touch and pen
+// with one mechanism; what differs is where a touch is allowed to start one.
+
+test("every chip carries a grip, including available ones", () => {
+  const { host } = build();
+
+  chips(host).forEach(chip => {
+    assert.notEqual(findByAction(chip, "grip"), null, chip.dataset.field);
+  });
+});
+
+test("the grip trails the chip and is hidden from screen readers", () => {
+  const { host } = build();
+  const chip = chips(host).find(entry => entry.dataset.field === "Region");
+  const children = Array.from(chip.children);
+
+  assert.equal(children.at(-1).className, "pivot-chip__grip");
+  // It is a redundant handle for a gesture, not content: announcing it would
+  // add noise to every field a screen-reader user walks past.
+  assert.equal(children.at(-1).attributes["aria-hidden"], "true");
+});
+
+test("a finger on the grip starts a drag", () => {
+  const { host, designer } = build();
+
+  const source = touchDown(host, "Quarter", { onGrip: true });
+  elementUnderPointer = zone(host, "row");
+  source.dispatch("pointermove", { pointerId: 7, clientX: 0, clientY: 40, preventDefault() {} });
+
+  assert.equal(designer.draggedField, "Quarter");
+});
+
+test("a finger on the chip body does not, so the list can still be scrolled", () => {
+  const { host, designer } = build();
+
+  const source = touchDown(host, "Quarter", { onGrip: false });
+  source.dispatch("pointermove", { pointerId: 7, clientX: 0, clientY: 40, preventDefault() {} });
+
+  assert.equal(designer.drag, null);
+  assert.equal(designer.draggedField, null);
+});
+
+test("a mouse drags from the chip body, no grip needed", () => {
+  const { host, designer } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+
+  source.dispatch("pointerdown", {
+    target: source, pointerId: 1, button: 0, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+  elementUnderPointer = zone(host, "row");
+  source.dispatch("pointermove", { pointerId: 1, clientX: 0, clientY: 40, preventDefault() {} });
+
+  assert.equal(designer.draggedField, "Quarter");
+});
+
+test("a press on a chip control never becomes a drag", () => {
+  const { host, designer } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Region");
+  const remove = findByAction(source, "remove");
+
+  source.dispatch("pointerdown", {
+    target: remove, pointerId: 1, button: 0, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+  source.dispatch("pointermove", { pointerId: 1, clientX: 0, clientY: 40, preventDefault() {} });
+
+  assert.equal(designer.drag, null);
+});
+
+test("a right-click does not start a drag", () => {
+  const { host, designer } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+
+  source.dispatch("pointerdown", {
+    target: source, pointerId: 1, button: 2, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+
+  assert.equal(designer.drag, null);
+});
+
+test("a move under the threshold is not yet a drag", () => {
+  const { host, designer } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+
+  source.dispatch("pointerdown", {
+    target: source, pointerId: 1, button: 0, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+  source.dispatch("pointermove", { pointerId: 1, clientX: 2, clientY: 2, preventDefault() {} });
+
+  assert.equal(designer.drag.started, false);
+  assert.equal(source.classList.contains("is-dragging"), false);
+});
+
+test("a drag survives a browser that refuses pointer capture", () => {
+  const { host, designer } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+  source.captureThrows = true;
+
+  source.dispatch("pointerdown", {
+    target: source, pointerId: 1, button: 0, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+  elementUnderPointer = zone(host, "row");
+  source.dispatch("pointermove", { pointerId: 1, clientX: 0, clientY: 40, preventDefault() {} });
+
+  // Capture only keeps events arriving once the pointer leaves the chip; losing
+  // it must not cost the drag itself.
+  assert.equal(designer.draggedField, "Quarter");
+});
+
+test("the dragged chip is marked in flight, and unmarked on release", () => {
+  const { host } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+
+  dragFieldTo(host, "Quarter", zone(host, "row"), "dragover");
+  assert.equal(source.classList.contains("is-dragging"), true);
+
+  finishDrag(host, "Quarter", "pointercancel");
+  assert.equal(source.classList.contains("is-dragging"), false);
+});
+
+test("the drag takes pointer capture, so moves keep arriving off the chip", () => {
+  const { host } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+
+  source.dispatch("pointerdown", {
+    target: source, pointerId: 1, button: 0, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+
+  assert.equal(source.captured, true);
+
+  finishDrag(host, "Quarter", "pointerup");
+  assert.equal(source.captured, false);
+});
+
+test("a second pointer's events are ignored while one drag is in flight", () => {
+  const { host, designer } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+
+  source.dispatch("pointerdown", {
+    target: source, pointerId: 1, button: 0, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+
+  // A second finger travelling far enough to be a drag must not promote the
+  // first one's session, and must not end it either.
+  elementUnderPointer = zone(host, "row");
+  source.dispatch("pointermove", { pointerId: 99, clientX: 0, clientY: 400, preventDefault() {} });
+  assert.equal(designer.drag.started, false);
+  assert.equal(designer.draggedField, null);
+
+  source.dispatch("pointerup", { pointerId: 99, clientX: 0, clientY: 0 });
+  assert.notEqual(designer.drag, null);
+});
+
+test("a drag released on the available list unplaces the field", async () => {
+  const { host, state, designer, updates } = build();
+  state.move("Quarter", "row");
+  designer.render();
+
+  dragFieldTo(host, "Quarter", zone(host, "available"), "drop");
+  await Promise.resolve();
+
+  assert.equal(state.areaOf("Quarter"), "available");
+  assert.equal(updates.length, 1);
+});
+
+test("the last value field cannot be dragged out to the available list", async () => {
+  const { host, state, updates } = build();
+
+  dragFieldTo(host, "Amount", zone(host, "available"), "drop");
+  await Promise.resolve();
+
+  assert.equal(state.areaOf("Amount"), "data");
+  assert.equal(updates.length, 0);
+  assert.equal(zone(host, "available").classList.contains("is-drop-refused"), false);
+});
+
+test("disposing during a drag releases the capture it took", () => {
+  const { host, designer } = build();
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+
+  source.dispatch("pointerdown", {
+    target: source, pointerId: 1, button: 0, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+  designer.dispose();
+
+  assert.equal(source.captured, false);
+  assert.equal(designer.drag, null);
+});
+
+test("HTML5 drag-and-drop is gone: no chip is draggable and no drag listeners remain", () => {
+  const { host } = build();
+
+  chips(host).forEach(chip => {
+    assert.equal(chip.draggable, false, chip.dataset.field);
+    assert.equal(chip.listeners.has("dragstart"), false);
+  });
+
+  ["row", "column", "data", "filter", "available"].forEach(area => {
+    const target = zone(host, area);
+    assert.equal(target.listeners.has("dragover"), false, area);
+    assert.equal(target.listeners.has("drop"), false, area);
+  });
+});

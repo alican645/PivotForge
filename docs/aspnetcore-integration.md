@@ -465,7 +465,7 @@ When a `fieldDesigner` is configured, `PivotWidget`'s constructor builds a `Pivo
 
 #### Dragging
 
-Chips are dragged with the mouse, using the HTML5 drag-and-drop API. A drop is **positional**: while dragging over a zone the designer compares the pointer against each chip's midpoint and draws an insertion line at the slot the chip would land in, and the drop places the field exactly there rather than appending it. This works both when a field enters a zone from elsewhere and when a chip is dragged **within its own zone**, which is how row and column order — the pivot's grouping hierarchy — is rearranged. Repositioning a value keeps its aggregation, and repositioning a filter keeps its selected values.
+Chips are dragged with the mouse, using the HTML5 drag-and-drop API. A drop is **positional**: while dragging over a zone the designer compares the pointer against each chip's midpoint and draws an insertion line at the slot the chip would land in, and the release places the field exactly there rather than appending it. Releasing outside every zone cancels the move rather than removing the field. This works both when a field enters a zone from elsewhere and when a chip is dragged **within its own zone**, which is how row and column order — the pivot's grouping hierarchy — is rearranged. Repositioning a value keeps its aggregation, and repositioning a filter keeps its selected values.
 
 The available-field list is a catalog rather than an ordered layout, so it is not reorderable; fields leave a zone through the chip's remove (`×`) button.
 
@@ -523,10 +523,17 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
   rule comes from the field's `role`, which is inferred from its declared area
   (`data` implies `measure`, `row`/`column`/`filter` imply `dimension`) and must
   be stated explicitly for a field declared `area="Available"`. Dragging a field
-  where its role forbids marks the zone as refused and shows the platform's
-  no-drop cursor; the drop is rejected.
+  where its role forbids marks the zone as refused; the drop is rejected.
 - **A placed field can be dragged back to the Fields list to remove it**, which does the same thing as its × button and obeys the same rule: the last remaining Values field cannot be removed either way.
-- **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
+- **Mouse, touch and pen all work; keyboard does not yet.** Drag runs on pointer
+  events rather than the HTML5 drag-and-drop API, which never fires on a touch
+  device. A mouse drags from anywhere on a chip. A finger or a pen drags from
+  the chip's grip (`⠿`) only — the grip is the sole element carrying
+  `touch-action: none`, so a touch anywhere else still scrolls the panel, which
+  a long available-field list needs. A press becomes a drag only after it has
+  travelled 5px, so a tap or a click on a chip control still reaches that
+  control. There is still no keyboard equivalent: chips are not focusable and
+  cannot be moved without a pointer.
 - **No sort panel from the designer.** The settings modal covers naming, position, aggregation, show-as, number format and removal; sorting is still driven through the widget's `sortBy`, outside the designer.
 - **Named saved views are not wired up automatically.** `state-storing` persists one current state per key, automatically. Letting a user keep *several* named views and switch between them is a different feature, built on `PivotViewStore` — see the MVC demo for one approach.
 - **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.

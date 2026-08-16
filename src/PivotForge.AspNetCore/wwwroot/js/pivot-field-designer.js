@@ -68,6 +68,30 @@
   // What the renderer applies when a member is absent, so the panel opens
   // showing what the user is actually looking at rather than empty controls.
   const RENDERER_DEFAULTS = { type: "number", decimals: 2, useGrouping: true };
+  // How far a press has to travel before it counts as a drag rather than a
+  // click. Below this the chip's own controls keep working normally.
+  const DRAG_THRESHOLD = 5;
+
+  // Pointer capture is an optimisation, not a requirement: it keeps moves
+  // arriving after the pointer leaves the chip. It legitimately throws when the
+  // pointer is no longer active by the time we ask — the press was already
+  // released, or the id belongs to a pointer the platform has forgotten — and
+  // losing the drag over that would be worse than dragging without capture.
+  function capturePointer(element, pointerId) {
+    try {
+      element.setPointerCapture?.(pointerId);
+    } catch {
+      // Nothing to do: the drag proceeds on the listeners alone.
+    }
+  }
+
+  function releasePointer(element, pointerId) {
+    try {
+      element.releasePointerCapture?.(pointerId);
+    } catch {
+      // Already gone, which is the state we wanted.
+    }
+  }
 
   function format(template, ...values) {
     return values.reduce(
@@ -95,11 +119,19 @@
       this.widget = options.widget;
       this.labels = { ...DEFAULT_LABELS, ...(options.labels ?? {}) };
       this.disposed = false;
-      // The HTML5 drag-and-drop spec makes dataTransfer.getData() unreadable
-      // during dragover — only dragstart and drop can read the payload. We
-      // track the field being dragged on the instance so dragover can ask
-      // canDrop() without touching dataTransfer.
+      // Drag runs on pointer events rather than HTML5 drag-and-drop, which
+      // never fires on touch devices. One mechanism now covers mouse, touch
+      // and pen.
+      this.drag = null;
       this.draggedField = null;
+      // Bound once so the same reference can be removed again; a fresh arrow
+      // per drag would leak a listener on every press.
+      this.pointerMove = event => this.handlePointerMove(event);
+      this.pointerUp = event => this.handlePointerUp(event);
+      this.pointerCancel = event => this.handlePointerCancel(event);
+      // Which element each area's chips live in, keyed by area, so a hit test
+      // that lands anywhere in a zone can find the list it should measure.
+      this.zones = new Map();
       // Filters the available-field list only; never touched by mutations, and
       // must survive the re-renders they trigger, so it lives on the instance.
       this.searchTerm = "";
@@ -121,17 +153,7 @@
 
       chip.className = "pivot-chip";
       chip.dataset.field = name;
-      chip.draggable = true;
-      chip.addEventListener("dragstart", event => {
-        this.draggedField = name;
-        chip.classList.add("is-dragging");
-        event.dataTransfer?.setData?.("text/plain", name);
-      });
-      chip.addEventListener("dragend", () => {
-        this.draggedField = null;
-        chip.classList.remove("is-dragging");
-        this.clearDropMarks();
-      });
+      chip.addEventListener("pointerdown", event => this.beginDrag(event, chip, name));
 
       // Controls come first so they line up down the left edge of a zone,
       // independent of how long each caption is.
@@ -194,7 +216,195 @@
         chip.appendChild(count);
       }
 
+      // Trails the chip, and is the only element carrying touch-action: none —
+      // so a touch anywhere else still scrolls the list, which a long
+      // available-field catalog needs. A mouse can drag from the whole chip.
+      const grip = document.createElement("span");
+      grip.className = "pivot-chip__grip";
+      grip.dataset.action = "grip";
+      grip.textContent = "⠿";
+      grip.setAttribute("aria-hidden", "true");
+      chip.appendChild(grip);
+
       return chip;
+    }
+
+    // A press becomes a drag only after it has travelled far enough to be one,
+    // so a tap or a click on a chip control still reaches that control.
+    beginDrag(event, chip, name) {
+      const fromGrip = Boolean(event.target?.closest?.(".pivot-chip__grip"));
+
+      // A press on a control belongs to that control.
+      if (!fromGrip && event.target?.closest?.("button")) {
+        return;
+      }
+
+      // Only the grip opts out of the browser's touch gestures, so only the
+      // grip can start a drag with a finger or a pen.
+      if (!fromGrip && event.pointerType && event.pointerType !== "mouse") {
+        return;
+      }
+
+      if (event.button !== undefined && event.button !== 0) {
+        return;
+      }
+
+      this.drag = {
+        name,
+        chip,
+        pointerId: event.pointerId,
+        startX: event.clientX ?? 0,
+        startY: event.clientY ?? 0,
+        started: false
+      };
+
+      capturePointer(chip, event.pointerId);
+      chip.addEventListener("pointermove", this.pointerMove);
+      chip.addEventListener("pointerup", this.pointerUp);
+      chip.addEventListener("pointercancel", this.pointerCancel);
+    }
+
+    handlePointerMove(event) {
+      const drag = this.drag;
+      if (!drag || (event.pointerId !== undefined && event.pointerId !== drag.pointerId)) {
+        return;
+      }
+
+      if (!drag.started) {
+        const dx = (event.clientX ?? 0) - drag.startX;
+        const dy = (event.clientY ?? 0) - drag.startY;
+        if (Math.hypot(dx, dy) < DRAG_THRESHOLD) {
+          return;
+        }
+
+        drag.started = true;
+        this.draggedField = drag.name;
+        drag.chip.classList.add("is-dragging");
+      }
+
+      // Stops the page from selecting text under a mouse drag, and from
+      // treating a grip drag as a scroll on the platforms that would.
+      event.preventDefault?.();
+      this.showDropFeedback(drag.name, event.clientX, event.clientY);
+    }
+
+    handlePointerUp(event) {
+      const drag = this.drag;
+      if (!drag || (event.pointerId !== undefined && event.pointerId !== drag.pointerId)) {
+        return;
+      }
+
+      const { name, started } = drag;
+      this.endDrag();
+
+      // A press that never travelled is a click, and a click moves nothing.
+      if (!started) {
+        return;
+      }
+
+      // A drag that ends outside every zone is a cancel, not a removal:
+      // releasing off the panel is how a user backs out of a move.
+      const target = this.zoneAt(event.clientX, event.clientY);
+      if (!target) {
+        return;
+      }
+
+      if (target.area === "available") {
+        if (this.canReturn(name)) {
+          this.apply(() => this.state.remove(name));
+        }
+        return;
+      }
+
+      if (this.state.canDrop(name, target.area)) {
+        const dropAt = this.dropIndex(target.body, event.clientY);
+        this.apply(() => this.state.move(name, target.area, dropAt));
+      }
+    }
+
+    handlePointerCancel(event) {
+      if (!this.drag || (event.pointerId !== undefined && event.pointerId !== this.drag.pointerId)) {
+        return;
+      }
+
+      this.endDrag();
+    }
+
+    endDrag() {
+      const drag = this.drag;
+      this.drag = null;
+      this.draggedField = null;
+
+      if (!drag) {
+        return;
+      }
+
+      releasePointer(drag.chip, drag.pointerId);
+      drag.chip.removeEventListener("pointermove", this.pointerMove);
+      drag.chip.removeEventListener("pointerup", this.pointerUp);
+      drag.chip.removeEventListener("pointercancel", this.pointerCancel);
+      drag.chip.classList.remove("is-dragging");
+      this.clearDropMarks();
+
+      // A pointer release after a real drag also fires a click. Swallowing it
+      // once keeps a drag that started on a chip control from also activating
+      // that control.
+      if (drag.started) {
+        drag.chip.addEventListener(
+          "click",
+          event => {
+            event.stopPropagation?.();
+            event.preventDefault?.();
+          },
+          { capture: true, once: true });
+      }
+    }
+
+    // The same feedback the drop handler will act on, so what the user sees and
+    // what happens on release are decided by one piece of code.
+    showDropFeedback(name, clientX, clientY) {
+      this.clearDropMarks();
+
+      const target = this.zoneAt(clientX, clientY);
+      if (!target) {
+        return;
+      }
+
+      if (target.area === "available") {
+        target.zone.classList.add(
+          this.canReturn(name) ? "is-empty-drop-target" : "is-drop-refused");
+        return;
+      }
+
+      // A refused drag used to fall out silently, leaving "not allowed here"
+      // and "broken" looking identical.
+      if (!this.state.canDrop(name, target.area)) {
+        target.zone.classList.add("is-drop-refused");
+        return;
+      }
+
+      // The insertion line is drawn on a chip's edge, so an empty zone has
+      // nothing to draw it on. Highlight the zone itself instead, otherwise
+      // dragging into an empty area gives no feedback whatsoever.
+      if (target.body.children.length === 0) {
+        target.zone.classList.add("is-empty-drop-target");
+        return;
+      }
+
+      this.markDropSlot(target.body, this.dropIndex(target.body, clientY));
+    }
+
+    // Pointer capture retargets every move and the release to the chip being
+    // dragged, so the zone under the pointer has to be found by hit-testing
+    // rather than read off the event.
+    zoneAt(clientX, clientY) {
+      if (typeof clientX !== "number" || typeof clientY !== "number") {
+        return null;
+      }
+
+      const element = root.document?.elementFromPoint?.(clientX, clientY);
+      const zone = element?.closest?.("[data-zone]");
+      return zone ? this.zones.get(zone.dataset.zone) ?? null : null;
     }
 
     canPickFilterValues() {
@@ -515,57 +725,7 @@
       zone.appendChild(body);
       this.zoneBodies.push(body);
       this.zoneElements.push(zone);
-
-      zone.addEventListener("dragover", event => {
-        const name = this.draggedField;
-        if (!name) {
-          return;
-        }
-
-        this.clearDropMarks();
-
-        // A refused drag used to fall out silently, leaving "not allowed here"
-        // and "broken" looking identical. Saying so costs one class and the
-        // cursor the platform already draws for dropEffect "none".
-        if (!this.state.canDrop(name, area)) {
-          zone.classList.add("is-drop-refused");
-          if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = "none";
-          }
-          return;
-        }
-
-        event.preventDefault();
-        if (event.dataTransfer) {
-          event.dataTransfer.dropEffect = "move";
-        }
-
-        // The insertion line is drawn on a chip's edge, so an empty zone has
-        // nothing to draw it on. Highlight the zone itself instead, otherwise
-        // dragging into an empty area gives no feedback whatsoever.
-        if (body.children.length === 0) {
-          zone.classList.add("is-empty-drop-target");
-          return;
-        }
-
-        this.markDropSlot(body, this.dropIndex(body, event.clientY));
-      });
-
-      zone.addEventListener("dragleave", () => this.clearDropMarks());
-
-      zone.addEventListener("drop", event => {
-        const name = this.draggedField ?? event.dataTransfer?.getData?.("text/plain");
-        this.draggedField = null;
-        const index = this.dropIndex(body, event.clientY);
-        this.clearDropMarks();
-
-        if (!name || !this.state.canDrop(name, area)) {
-          return;
-        }
-
-        event.preventDefault();
-        this.apply(() => this.state.move(name, area, index));
-      });
+      this.zones.set(area, { zone, body, area });
 
       const names = this.namesIn(area);
       names.forEach(name => body.appendChild(this.createChip(name, area)));
@@ -607,44 +767,8 @@
 
       // Removing a field was only possible through its × button: a chip could be
       // dragged out of the available list but never back into it, so the gesture
-      // worked in one direction only. Dropping here unplaces the field.
+      // worked in one direction only. Releasing here unplaces the field.
       this.zoneElements.push(section);
-
-      section.addEventListener("dragover", event => {
-        const name = this.draggedField;
-        if (!name) {
-          return;
-        }
-
-        this.clearDropMarks();
-
-        if (!this.canReturn(name)) {
-          section.classList.add("is-drop-refused");
-          if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = "none";
-          }
-          return;
-        }
-
-        event.preventDefault();
-        if (event.dataTransfer) {
-          event.dataTransfer.dropEffect = "move";
-        }
-        section.classList.add("is-empty-drop-target");
-      });
-
-      section.addEventListener("drop", event => {
-        const name = this.draggedField ?? event.dataTransfer?.getData?.("text/plain");
-        this.draggedField = null;
-        this.clearDropMarks();
-
-        if (!name || !this.canReturn(name)) {
-          return;
-        }
-
-        event.preventDefault();
-        this.apply(() => this.state.remove(name));
-      });
 
       const searchWrap = document.createElement("div");
       searchWrap.className = "pivot-search";
@@ -665,6 +789,8 @@
       const body = document.createElement("div");
       body.className = "pivot-field-list";
       section.appendChild(body);
+      this.zones.set("available", { zone: section, body, area: "available" });
+      this.zoneBodies.push(body);
 
       this.renderAvailableChips(body);
 
@@ -739,6 +865,7 @@
       // from a previous tree.
       this.zoneBodies = [];
       this.zoneElements = [];
+      this.zones = new Map();
       const grid = document.createElement("div");
       grid.className = "pivot-layout-grid";
       ZONES.forEach(area => grid.appendChild(this.createZone(area)));
@@ -771,6 +898,9 @@
       }
 
       this.disposed = true;
+      // A drag in flight holds pointer capture and three listeners on a chip
+      // that is about to be thrown away.
+      this.endDrag();
       this.closeSettings();
 
       if (this.settingsKeydown) {
