@@ -57,6 +57,10 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("css-class")]
     public string? CssClass { get; set; }
 
+    /// <summary>Gets or sets a CSS selector for the field designer's host element.</summary>
+    [HtmlAttributeName("field-designer")]
+    public string? FieldDesigner { get; set; }
+
     /// <summary>Collects the declared fields and writes the grid markup.</summary>
     /// <param name="context">The tag helper context.</param>
     /// <param name="output">The output that receives the grid markup.</param>
@@ -128,6 +132,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (CssClass is not null)
         {
             builder.CssClass(CssClass);
+        }
+
+        if (FieldDesigner is not null)
+        {
+            builder.FieldDesigner(FieldDesigner);
         }
 
         if (declaredFields.Count > 0)

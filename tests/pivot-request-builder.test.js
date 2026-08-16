@@ -156,3 +156,94 @@ test("rejects a non-array field list", () => {
     /"fields" must be an array/
   );
 });
+
+test("available fields stay out of the request", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "urun", area: "row" },
+    { dataField: "tutar", area: "data", aggregation: "sum" },
+    { dataField: "miktar", area: "available", role: "measure" },
+    { dataField: "bolge", area: "available", role: "dimension" }
+  ]);
+
+  assert.deepEqual(request.rows, ["urun"]);
+  assert.deepEqual(request.columns, []);
+  assert.equal(request.values.length, 1);
+  assert.deepEqual(request.filters, []);
+});
+
+test("role is inferred from the declared area", () => {
+  const fields = PivotRequestBuilder.normalizeFields([
+    { dataField: "urun", area: "row" },
+    { dataField: "yil", area: "column" },
+    { dataField: "bolge", area: "filter" },
+    { dataField: "tutar", area: "data" }
+  ]);
+
+  assert.deepEqual(fields.map(field => field.role), [
+    "dimension", "dimension", "dimension", "measure"
+  ]);
+});
+
+test("an explicit role is honored", () => {
+  const [field] = PivotRequestBuilder.normalizeFields([
+    { dataField: "miktar", area: "available", role: "measure" }
+  ]);
+
+  assert.equal(field.role, "measure");
+});
+
+test("an available field requires a role", () => {
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([{ dataField: "miktar", area: "available" }]),
+    /requires an explicit "role"/
+  );
+});
+
+test("a role contradicting the declared area is rejected", () => {
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([
+      { dataField: "tutar", area: "data", role: "dimension" }
+    ]),
+    /cannot be "dimension"/
+  );
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([
+      { dataField: "urun", area: "row", role: "measure" }
+    ]),
+    /cannot be "measure"/
+  );
+});
+
+test("an unknown role is rejected", () => {
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([
+      { dataField: "miktar", area: "available", role: "metric" }
+    ]),
+    /Unknown role "metric"/
+  );
+});
+
+test("aggregation is still rejected outside the data area, including available", () => {
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([
+      { dataField: "miktar", area: "available", role: "measure", aggregation: "sum" }
+    ]),
+    /only valid on a "data" field/
+  );
+});
+
+test("a list with no available fields and no roles builds the same request as before", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "urun", area: "row" },
+    { dataField: "yil", area: "column" },
+    { dataField: "tutar", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.deepEqual(request, {
+    rows: ["urun"],
+    columns: ["yil"],
+    values: [{ field: "tutar", aggregation: "sum", showAs: "normal" }],
+    filters: [],
+    rowSort: null
+  });
+});

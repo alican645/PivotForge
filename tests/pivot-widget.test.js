@@ -2,7 +2,48 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-request-builder.js");
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-layout-state.js");
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-field-designer.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-widget.js");
+
+// A DOM stub sufficient for the field designer's render() to run: element
+// creation, class lists, children, and event listeners. Used only by the
+// fieldDesigner integration tests below, which construct a real designer.
+function createDesignerElement(tagName) {
+  return {
+    tagName: tagName.toUpperCase(),
+    children: [],
+    listeners: new Map(),
+    dataset: {},
+    attributes: {},
+    textContent: "",
+    className: "",
+    draggable: false,
+    disabled: false,
+    title: "",
+    value: "",
+    classList: {
+      names: new Set(),
+      add(...names) { names.forEach(name => this.names.add(name)); },
+      remove(...names) { names.forEach(name => this.names.delete(name)); },
+      contains(name) { return this.names.has(name); }
+    },
+    appendChild(child) { this.children.push(child); return child; },
+    replaceChildren(...nodes) { this.children = nodes; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    addEventListener(name, handler) {
+      const handlers = this.listeners.get(name) ?? [];
+      handlers.push(handler);
+      this.listeners.set(name, handlers);
+    },
+    removeEventListener(name, handler) {
+      this.listeners.set(name, (this.listeners.get(name) ?? []).filter(entry => entry !== handler));
+    },
+    dispatch(name, event = {}) {
+      (this.listeners.get(name) ?? []).forEach(handler => handler(event));
+    }
+  };
+}
 
 const PivotForge = globalThis.PivotForge;
 
@@ -309,5 +350,122 @@ test("exportToExcel explains itself when the widget renders through renderImpl",
   const { widget } = createWidget({ allowExcelExport: true });
 
   await assert.rejects(() => widget.exportToExcel(), /renderImpl/);
+  widget.dispose();
+});
+
+test("update applies fields, filters, and sort in a single refresh", async () => {
+  const { widget, calls } = createWidget();
+
+  await widget.update({
+    fields: [
+      { dataField: "bolge", area: "row" },
+      { dataField: "tutar", area: "data", aggregation: "average" }
+    ],
+    filters: [{ field: "bolge", values: ["Kuzey"] }],
+    rowSort: { mode: "rowLabel", direction: "descending", field: "bolge" }
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body.rows, ["bolge"]);
+  assert.deepEqual(calls[0].body.values, [
+    { field: "tutar", aggregation: "average", showAs: "normal" }
+  ]);
+  assert.deepEqual(calls[0].body.filters, [{ field: "bolge", values: ["Kuzey"] }]);
+  assert.equal(calls[0].body.rowSort.direction, "descending");
+  widget.dispose();
+});
+
+test("update leaves omitted members untouched", async () => {
+  const { widget, calls } = createWidget();
+
+  await widget.setFilter("urun", ["Lokum"]);
+  await widget.update({ rowSort: { mode: "rowLabel", direction: "ascending", field: "urun" } });
+
+  assert.deepEqual(calls[1].body.filters, [{ field: "urun", values: ["Lokum"] }]);
+  assert.deepEqual(calls[1].body.rows, ["urun"]);
+  widget.dispose();
+});
+
+test("update with no arguments still refreshes once", async () => {
+  const { widget, calls } = createWidget();
+
+  await widget.update();
+
+  assert.equal(calls.length, 1);
+  widget.dispose();
+});
+
+test("update reflects new fields in getState", async () => {
+  const { widget } = createWidget();
+
+  await widget.update({ fields: [{ dataField: "tutar", area: "data" }] });
+
+  assert.deepEqual(widget.getState().fields.map(field => field.dataField), ["tutar"]);
+  widget.dispose();
+});
+
+test("update rebuilds the renderer when the widget owns one, instead of renderImpl", async () => {
+  // Every other test in this file supplies renderImpl, so this.renderer is
+  // always null there and the rebuild branch inside update() never runs.
+  // Exercise it directly with a widget that builds its own renderer.
+  let rendererBuildCount = 0;
+  let lastRenderedResult = null;
+  class FakeRenderer {
+    constructor() {
+      rendererBuildCount++;
+    }
+    render(result) {
+      lastRenderedResult = result;
+    }
+  }
+  const previousRenderer = PivotForge.PivotTableRenderer;
+  PivotForge.PivotTableRenderer = FakeRenderer;
+
+  try {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    assert.equal(rendererBuildCount, 1);
+
+    await widget.update({ fields: [{ dataField: "tutar", area: "data" }] });
+
+    assert.equal(rendererBuildCount, 2);
+    assert.notEqual(lastRenderedResult, null);
+
+    widget.dispose();
+  } finally {
+    PivotForge.PivotTableRenderer = previousRenderer;
+  }
+});
+
+test("create builds a designer when fieldDesigner is supplied", () => {
+  const designerHost = createContainer();
+  const previousDocument = globalThis.document;
+  // The designer's render() needs createElement in addition to the selector
+  // lookup, since it builds real chip/zone elements during construction.
+  globalThis.document = { querySelector: () => designerHost, createElement: createDesignerElement };
+
+  const widget = PivotForge.create(createContainer(), {
+    fields,
+    autoLoad: false,
+    fieldDesigner: "#designerHost",
+    renderImpl: () => {},
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+  });
+
+  assert.notEqual(widget.designer, null);
+  assert.notEqual(widget.layoutState, null);
+
+  widget.dispose();
+  globalThis.document = previousDocument;
+});
+
+test("no designer is built when fieldDesigner is absent", () => {
+  const { widget } = createWidget();
+
+  assert.equal(widget.designer, null);
   widget.dispose();
 });

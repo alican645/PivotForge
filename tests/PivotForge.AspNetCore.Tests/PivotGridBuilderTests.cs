@@ -188,4 +188,18 @@ public class PivotGridBuilderTests
 
         Assert.Contains("class=\"pivotforge-grid rapor-tablosu\"", html);
     }
+
+    [Fact]
+    public void FieldDesignerSelectorReachesTheConfiguration()
+    {
+        var config = ConfigOf(SalesGrid().FieldDesigner("#designerHost"));
+
+        Assert.Equal("#designerHost", config.GetProperty("fieldDesigner").GetString());
+    }
+
+    [Fact]
+    public void FieldDesignerIsOmittedWhenNotRequested()
+    {
+        Assert.False(ConfigOf(SalesGrid()).TryGetProperty("fieldDesigner", out _));
+    }
 }

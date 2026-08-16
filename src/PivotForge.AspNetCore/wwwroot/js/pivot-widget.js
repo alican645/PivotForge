@@ -13,7 +13,8 @@
     sourceRowCount: 100000,
     rendererOptions: null,
     fetchImpl: null,
-    renderImpl: null
+    renderImpl: null,
+    fieldDesigner: null
   };
 
   function resolveTarget(target) {
@@ -81,6 +82,23 @@
       PivotForge.PivotRequestBuilder.buildRequest(this.options.fields ?? []);
 
       this.renderer = this.options.renderImpl ? null : this.createRenderer();
+
+      this.layoutState = null;
+      this.designer = null;
+
+      if (this.options.fieldDesigner) {
+        if (!PivotForge.PivotLayoutState || !PivotForge.PivotFieldDesigner) {
+          throw new Error(
+            "fieldDesigner requires pivot-layout-state.js and pivot-field-designer.js to be loaded."
+          );
+        }
+
+        this.layoutState = new PivotForge.PivotLayoutState(this.options.fields);
+        this.designer = new PivotForge.PivotFieldDesigner(this.options.fieldDesigner, {
+          state: this.layoutState,
+          widget: this
+        });
+      }
     }
 
     createRenderer() {
@@ -226,6 +244,29 @@
       node.textContent = error.message;
       this.errorNode = node;
       this.container.appendChild(node);
+    }
+
+    async update({ fields, filters, rowSort } = {}) {
+      // One call, one refresh: a designer changes several pieces per interaction
+      // and must not produce a request per piece.
+      if (fields !== undefined) {
+        PivotForge.PivotRequestBuilder.buildRequest(fields);
+        this.options.fields = fields;
+        this.fields = PivotForge.PivotRequestBuilder.normalizeFields(fields);
+        if (this.renderer) {
+          this.renderer = this.createRenderer();
+        }
+      }
+
+      if (filters !== undefined) {
+        this.filters = filters.map(filter => ({ field: filter.field, values: [...filter.values] }));
+      }
+
+      if (rowSort !== undefined) {
+        this.rowSort = rowSort;
+      }
+
+      await this.refresh();
     }
 
     async updateFields(fields) {
@@ -401,6 +442,8 @@
       this.controller = null;
       this.handlers.clear();
       this.errorNode = null;
+      this.designer?.dispose();
+      this.designer = null;
       this.container.replaceChildren();
       this.container.classList.remove("pivot-table");
     }

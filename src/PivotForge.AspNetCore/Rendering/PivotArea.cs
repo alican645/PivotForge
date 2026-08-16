@@ -10,5 +10,7 @@ public enum PivotArea
     /// <summary>Aggregates the field as a pivot value.</summary>
     Data,
     /// <summary>Exposes the field for filtering without placing it in the layout.</summary>
-    Filter
+    Filter,
+    /// <summary>Offers the field in the designer's catalog without placing it in the layout.</summary>
+    Available
 }

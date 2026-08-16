@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.2.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.3.0-preview.1
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -93,18 +93,22 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-table.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-request-builder.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-layout-state.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 ```
 
-Load scripts in the order shown; `pivot-table.js` must load before `pivot-widget.js` because the widget builds its default renderer from `PivotForge.PivotTableRenderer` at construction time. If a Razor helper on the page calls `PivotForge.create` inline (see [Declarative API](#declarative-api) below), load every PivotForge script in `<head>` rather than at the end of `<body>` — the helper's inline script runs while the page body is still being parsed, before a `<body>`-end script block would have executed.
+Load scripts in the order shown: `pivot-table.js`, then `pivot-request-builder.js`, then `pivot-widget.js`, then `pivot-layout-state.js`, then `pivot-field-designer.js`. `pivot-table.js` must load before `pivot-widget.js` because the widget builds its default renderer from `PivotForge.PivotTableRenderer` at construction time, and `pivot-layout-state.js`/`pivot-field-designer.js` must load before `pivot-widget.js` is asked to build a designer (the `fieldDesigner` option), because the widget constructs a `PivotForge.PivotLayoutState` and a `PivotForge.PivotFieldDesigner` at that point. If a Razor helper on the page calls `PivotForge.create` inline (see [Declarative API](#declarative-api) below), load every PivotForge script in `<head>` rather than at the end of `<body>` — the helper's inline script runs while the page body is still being parsed, before a `<body>`-end script block would have executed.
 
 The scripts add these members to `window.PivotForge`:
 
 - `PivotTableRenderer`
 - `PivotRequestBuilder`
 - `PivotWidget`
+- `PivotLayoutState`
+- `PivotFieldDesigner`
 - `PivotViewStore`
 - `PivotDrillDownData`
 - `PivotVirtualDataSource`
@@ -143,7 +147,7 @@ Instead of writing `fetch` calls and driving `PivotTableRenderer` by hand, a gri
 
 ### Field model
 
-Every field belongs to exactly one of four areas:
+Every field belongs to exactly one of five areas:
 
 | Area | Purpose |
 | --- | --- |
@@ -151,16 +155,18 @@ Every field belongs to exactly one of four areas:
 | `column` | Placed on the column axis. |
 | `data` | Aggregated as a pivot value. At least one `data` field is required. |
 | `filter` | Exposed for filtering without appearing in the row/column layout. |
+| `available` | Declared for the [field designer](#field-designer)'s catalog without being placed in the layout. Not used outside a designer. |
 
 Field properties and their defaults (JavaScript field object shape; `PivotFieldBuilder` exposes the same properties as fluent methods):
 
 | Property | Default | Notes |
 | --- | --- | --- |
 | `dataField` | — | Required, non-empty. |
-| `area` | `"data"` | One of `row`, `column`, `data`, `filter`. |
+| `area` | `"data"` | One of `row`, `column`, `data`, `filter`, `available`. |
 | `caption` | the `dataField` value | Display label. |
+| `role` | inferred from `area` | One of `dimension`, `measure`. **Required** when `area` is `available`, because there is no placement to infer it from. Elsewhere it is inferred (`data` → `measure`, everything else → `dimension`); an explicit `role` that contradicts its `area` — e.g., `measure` outside `data` — is a validation error. See [role rules](#field-designer). |
 | `aggregation` | `"sum"` (only on `data` fields) | One of `sum`, `count`, `average`, `min`, `max`. Setting `aggregation` on a non-`data` field is a validation error. |
-| `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`. |
+| `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`. Setting `showAs` on a non-`data` field is a validation error. |
 | `format` | `null` | A format identifier understood by the browser renderer. |
 | `visible` | `true` | `false` configures a field without including it in the rendered request. |
 
@@ -182,6 +188,7 @@ Obtained from `Html.PivotForge().PivotGrid()`. All setters return the builder fo
 | `PageSize(int)` | `40` | Rows per page when `LargeData` is enabled. |
 | `SourceRowCount(int)` | `100000` | Source-row hint passed to the data provider. |
 | `CssClass(string)` | — | Additional class appended to the container's `pivotforge-grid` class. |
+| `FieldDesigner(string selector)` | — | CSS selector for the [field designer](#field-designer)'s host element. Omit to render the grid without a designer. |
 
 `WriteTo` emits the container `<div>`, a JSON `<script>` block with the serialized configuration, and an inline `<script>PivotForge.create(...)</script>` call. Because that call runs inline as the page is parsed, register any `pivotforge:ready` listener before this markup (see below).
 
@@ -204,17 +211,19 @@ The same grid can be declared as markup. Register the tag helpers once, in
 `<pivot-grid>` attributes mirror the builder methods in kebab-case: `id`,
 `endpoint-prefix`, `allow-sorting`, `allow-filtering`, `allow-drill-down`,
 `allow-excel-export`, `auto-load`, `large-data`, `page-size`,
-`source-row-count`, and `css-class`. An attribute you do not write is omitted
-from the configuration, so the browser default applies — writing
-`allow-sorting="false"` disables sorting, but omitting it leaves sorting on.
+`source-row-count`, `css-class`, and `field-designer`. An attribute you do not
+write is omitted from the configuration, so the browser default applies —
+writing `allow-sorting="false"` disables sorting, but omitting it leaves
+sorting on.
 
 `<pivot-field>` attributes are `field` (the source column, required),
-`caption`, `area`, `aggregation`, `show-as`, `format`, and `visible`. `area`
-defaults to `Data`, matching `PivotFieldBuilder`.
+`caption`, `area`, `role`, `aggregation`, `show-as`, `format`, and `visible`.
+`area` defaults to `Data`, matching `PivotFieldBuilder`.
 
-`area`, `aggregation`, and `show-as` bind to the `PivotArea`,
-`PivotAggregation`, and `PivotShowAs` enums, so a misspelled value such as
-`area="Roww"` fails the Razor compile rather than surfacing in the browser.
+`area`, `role`, `aggregation`, and `show-as` bind to the `PivotArea`,
+`PivotFieldRole`, `PivotAggregation`, and `PivotShowAs` enums, so a misspelled
+value such as `area="Roww"` fails the Razor compile rather than surfacing in
+the browser.
 
 A `<pivot-field>` outside a `<pivot-grid>` throws, as does a grid with no
 fields or no `id`. The tag helpers hold no pivot logic of their own — they
@@ -233,6 +242,7 @@ emit identical markup.
 | `rendererOptions` | `null` | Merged into the default `PivotTableRenderer` options. |
 | `fetchImpl` | `null` | Override for `fetch`, mainly for tests. |
 | `renderImpl` | `null` | Replaces the built-in `PivotTableRenderer` entirely; when set, the widget has no renderer and `exportToExcel` cannot be used. |
+| `fieldDesigner` | `null` | A CSS selector (or element) for a [field designer](#field-designer) host. When set, `PivotWidget` builds a `PivotLayoutState` from `fields` and a `PivotFieldDesigner` bound to it, exposed as `widget.layoutState` and `widget.designer`. Requires `pivot-layout-state.js` and `pivot-field-designer.js` to be loaded before `pivot-widget.js` runs; omitting either throws. |
 
 `create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
 
@@ -243,6 +253,7 @@ emit identical markup.
 | `refresh()` | Builds the request from the current fields/filters/sort and loads it. Aborts any request already in flight. |
 | `cancel()` | Aborts the in-flight request (if any) and resets loading state, without loading anything new. Prefer this over reaching into `widget.controller` directly. |
 | `updateFields(fields)` | Validates and replaces the field set, rebuilds the renderer, and refreshes. |
+| `update({ fields, filters, rowSort })` | Applies whichever of `fields`, `filters`, and `rowSort` are given (each is left untouched when omitted) and refreshes exactly once, instead of once per piece the way calling `updateFields`, `setFilter`, and `sortBy` in sequence would. This is what `PivotFieldDesigner` calls after every drag-and-drop mutation. |
 | `sortBy(sort)` | Sets `rowSort` and refreshes. Throws if `allowSorting` is `false`. |
 | `setFilter(field, values)` | Replaces the filter for `field` (removes it when `values` is empty) and refreshes. Throws if `allowFiltering` is `false`. |
 | `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
@@ -250,7 +261,7 @@ emit identical markup.
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
 | `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
 | `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, sessionId, totalRowCount }`. |
-| `dispose()` | Aborts any in-flight request, detaches all `on()` handlers, and empties the container. After disposal, any method that would issue a network request or trigger a refresh (`refresh`, `sortBy`, `setFilter`, `clearFilters`, `updateFields`, `drillDown`, `loadPage`, `exportToExcel`) throws; `getState()` remains safe to call for a final snapshot. |
+| `dispose()` | Aborts any in-flight request, detaches all `on()` handlers, empties the container, and — when the widget built a designer — calls `widget.designer.dispose()` too. After disposal, any method that would issue a network request or trigger a refresh (`refresh`, `sortBy`, `setFilter`, `clearFilters`, `updateFields`, `update`, `drillDown`, `loadPage`, `exportToExcel`) throws; `getState()` remains safe to call for a final snapshot. |
 
 ### Events
 
@@ -273,10 +284,77 @@ In addition, `PivotForge.create` dispatches a plain DOM `CustomEvent` named `piv
 </script>
 ```
 
+### Field designer
+
+An interactive panel that lets a user build the pivot layout by dragging fields between an available-field list and four drop zones (filters, columns, rows, values), instead of the layout being fixed in markup.
+
+Name a host element with `field-designer` (tag helper) / `FieldDesigner(selector)` (builder) / `fieldDesigner` (`PivotForge.create` option), and declare at least one field with `area="Available"` so there is something to drag in:
+
+```cshtml
+<div id="designerHost"></div>
+
+<pivot-grid id="pivotGrid" field-designer="#designerHost">
+    <pivot-field field="Region"   caption="Bölge"  area="Row" />
+    <pivot-field field="Year"     caption="Yıl"    area="Column" />
+    <pivot-field field="Amount"   caption="Tutar"  area="Data" aggregation="Sum" />
+    <pivot-field field="Quantity" caption="Miktar" area="Available" role="Measure" />
+</pivot-grid>
+```
+
+When a `fieldDesigner` is configured, `PivotWidget`'s constructor builds a `PivotForge.PivotLayoutState` from the declared fields and a `PivotForge.PivotFieldDesigner` bound to it, exposed as `widget.layoutState` and `widget.designer`.
+
+#### Role
+
+Every field has a `role` of `dimension` or `measure`, which constrains where it can be dropped: a `measure` may occupy only the data area; a `dimension` may occupy row, column, and filter. Role is inferred from `area` — `data` implies `measure`, everything else implies `dimension` — **except** for `area="Available"`, where there is no placement to infer from, so `role` (`Role(...)` / `role` attribute) is required. Setting a `role` that contradicts a non-`Available` area (e.g., `Role(PivotFieldRole.Measure)` on a `Row` field) is a validation error, raised by `PivotFieldBuilder.Build()` at render time.
+
+#### `PivotForge.PivotLayoutState`
+
+Pure state — no DOM access. Constructed with `new PivotLayoutState(catalog, layout = null)`, where `catalog` is the full declared field list (every area, including `available`) and `layout` is an optional existing layout to adopt.
+
+| Method | Behavior |
+| --- | --- |
+| `canDrop(name, area)` | Whether `name` may move into `area` (`"row"`, `"column"`, `"data"`, or `"filter"`), per the role rules above. |
+| `move(name, area, index)` | Moves a catalog field into `area` at `index` (default: end), detaching it from wherever it was. Throws if `canDrop` would be `false`. Placing into `"data"` defaults `aggregation` to `"sum"`; placing into `"filter"` starts with no selected values. |
+| `remove(name)` | Detaches a field back to the available list. A no-op if the field is already available. Throws if `name` is the only field in the data area — a pivot always needs at least one. |
+| `reorder(area, fromIndex, toIndex)` | Reorders a placed field within its own zone. |
+| `setAggregation(name, aggregation)` | Sets the aggregation (`"sum"`, `"count"`, `"average"`, `"min"`, `"max"`) of a field already in the data area. Throws otherwise. |
+| `field(name)` | Returns the catalog entry for `name`. Throws if unknown. |
+| `getState()` | Returns `{ rows, columns, values, filters, available }` — `available` is every catalog field not currently placed. |
+| `toFields()` | Converts the current layout into the field-array shape `PivotForge.create`/`updateFields` accept. |
+| `toRequestState()` | Returns `{ fields, filters }` shaped for `widget.update(...)` — `filters` is pre-filtered to entries that actually have selected values. |
+| `on("change", handler)` | Subscribes to layout mutations; fires once per successful `move`/`remove`/`reorder`/`setAggregation` call, with the current `getState()` as the payload. Returns an unsubscribe function. `remove()` on a field already in `available` is a no-op — it does not fire `change`, because it did not actually move or remove anything. |
+
+The catalog is fixed at construction — it is every field the grid declared, regardless of area — so removing a placed field always returns it to `available`, and it can be dragged back in later.
+
+#### `PivotForge.PivotFieldDesigner`
+
+`new PivotFieldDesigner(host, { state, widget, labels })`:
+
+- `host` — an element or a selector matching one. Throws if nothing matches.
+- `state` — a `PivotLayoutState`. Required.
+- `widget` — anything exposing an `update()` method (a `PivotWidget` in practice). Required.
+- `labels` — optional overrides for the panel's zone headings, the remove-button label, the search placeholder, and aggregation names; unset labels keep the built-in Turkish defaults.
+
+`render()` rebuilds the panel's DOM from the current state — the available-field list (with its search box) and the four drop zones, each showing its placed fields as draggable chips. Every drag-and-drop action, chip removal, and aggregation change calls the state's mutator and then `widget.update(state.toRequestState())`, so the designer never talks to the server directly. `dispose()` empties the host element; it is idempotent.
+
+The designer renders a **search input** above the available-field list that filters it case-insensitively by matching the field's **caption**, not its `dataField` name. Search is a display-only filter — it never touches `PivotLayoutState` and never triggers `widget.update()`.
+
+Removing the last field from the data area is refused by `PivotLayoutState.remove`, and the designer reflects this in the UI: that chip's remove (`×`) button is rendered `disabled`, with a `title` explaining why.
+
+#### Limitations
+
+- **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
+- **No in-zone reordering by dragging.** `drop` always calls `move()` without an index, and `canDrop()` refuses a drop into a field's current area, so dropping always appends to the end of a zone; there is no way to drag a placed field to a specific position within its own zone, and row/column order determines the pivot's grouping hierarchy. `PivotLayoutState.reorder(area, fromIndex, toIndex)` exists and is fully supported, but it is programmatic only — a consumer must call it directly (e.g., from custom drag handles) to offer in-zone reordering through the UI.
+- **No filter value picker.** A field can be dragged into the Filters zone, but there is no UI to choose which values to filter to. A filter with no selected values filters nothing — the same as an unset filter elsewhere in PivotForge — so the Filters zone alone does not yet do anything useful; a consumer must still add value selection.
+- **No show-as menu or per-value format UI.** `PivotLayoutState` exposes `setAggregation` only; changing `showAs` or `format` still requires calling `updateFields`/`update` directly.
+- **No sort panel.** Sorting is still driven through the widget's `sortBy`, outside the designer.
+- **Saved views are not wired up automatically.** `PivotViewStore` and the designer's state are both serializable, so a consumer can persist and restore designer layouts, but connecting the two is the consumer's responsibility — see the MVC demo for one approach.
+- **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.
+
 ### Known limitations
 
 - **Large-data paging is not wired to a virtual-scrolling UI.** `loadPage()` exists and is unit-tested, but `PivotWidget` has no page cache, no cache-hit state, and does not pass a `virtualState` to the renderer. Driving an actual virtual-scrolling grid still requires orchestrating `PivotVirtualDataSource` and `PivotTableRenderer` manually — see the MVC demo, which deliberately keeps its own `/large/start` + `/large/page` code for this reason.
-- **No single call changes multiple pieces of state and refreshes once.** Changing fields, filters, and sort together currently means calling `updateFields`, `setFilter`, and `sortBy` in sequence (each triggering its own `refresh()`), or mutating `widget.options.fields`, `widget.fields` (via `PivotForge.PivotRequestBuilder.normalizeFields(...)`, so `getState().fields` and row headers stay in sync), `widget.filters`, and `widget.rowSort` directly before calling `refresh()` once, as the demo's `syncWidgetRequest` does. Skipping the `widget.fields` reassignment leaves `getState().fields` stale and can leave row headers wrong, since the renderer only reads `rowFields`/`rowFieldLabels` at construction or `updateFields`.
+- **Batching multiple pieces of state into one refresh needs `update()`.** Calling `updateFields`, `setFilter`, and `sortBy` in sequence still works, but each triggers its own `refresh()`. Use `widget.update({ fields, filters, rowSort })` to change several pieces and refresh exactly once — this is how `PivotFieldDesigner` applies drag-and-drop mutations.
 - **Saved views, conditional formatting, and selection/clipboard UI** are not part of the declarative API. They remain lower-level features built on `PivotViewStore`, `PivotTableRenderer`'s `conditionalRules`/`onSelectionChanged`/`onCellCopied` options, and manual request construction — see [Render a Result](#render-a-result) above.
 
 ## Endpoint Contract

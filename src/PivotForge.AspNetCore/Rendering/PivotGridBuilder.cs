@@ -94,6 +94,11 @@ public sealed class PivotGridBuilder : IHtmlContent
         return this;
     }
 
+    /// <summary>Renders an interactive field designer into the element matching a selector.</summary>
+    /// <param name="selector">A CSS selector for the designer's host element.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder FieldDesigner(string selector) => Set("fieldDesigner", selector);
+
     private PivotGridBuilder Set(string key, object? value)
     {
         _options[key] = value;

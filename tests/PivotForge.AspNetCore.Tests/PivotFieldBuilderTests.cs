@@ -167,4 +167,82 @@ public class PivotFieldBuilderTests
         Assert.Same(builder, builder.Caption("Tutar"));
         Assert.Same(builder, builder.Area(PivotArea.Data));
     }
+
+    [Fact]
+    public void AvailableAreaSerializesAsLowerCamelCase()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("miktar")
+            .Area(PivotArea.Available)
+            .Role(PivotFieldRole.Measure)
+            .Build();
+
+        Assert.Equal("available", field["area"]);
+        Assert.Equal("measure", field["role"]);
+    }
+
+    [Theory]
+    [InlineData(PivotFieldRole.Dimension, "dimension")]
+    [InlineData(PivotFieldRole.Measure, "measure")]
+    public void EveryRoleSerializesAsLowerCamelCase(PivotFieldRole role, string expected)
+    {
+        var area = role == PivotFieldRole.Measure ? PivotArea.Data : PivotArea.Row;
+        var field = new PivotFieldBuilder().DataField("alan").Area(area).Role(role).Build();
+
+        Assert.Equal(expected, field["role"]);
+    }
+
+    [Fact]
+    public void RoleIsOmittedWhenNotSetSoJavaScriptInfersIt()
+    {
+        var field = new PivotFieldBuilder().DataField("urun").Area(PivotArea.Row).Build();
+
+        Assert.False(field.ContainsKey("role"));
+    }
+
+    [Fact]
+    public void AnAvailableFieldWithoutARoleThrows()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => new PivotFieldBuilder().DataField("miktar").Area(PivotArea.Available).Build());
+
+        Assert.Contains("miktar", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Role", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMeasureOutsideTheDataAreaThrows()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => new PivotFieldBuilder()
+                .DataField("tutar")
+                .Area(PivotArea.Row)
+                .Role(PivotFieldRole.Measure)
+                .Build());
+
+        Assert.Contains("tutar", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ADimensionInTheDataAreaThrows()
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => new PivotFieldBuilder()
+                .DataField("urun")
+                .Area(PivotArea.Data)
+                .Role(PivotFieldRole.Dimension)
+                .Build());
+    }
+
+    [Fact]
+    public void AnAggregationOnAnAvailableFieldThrows()
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => new PivotFieldBuilder()
+                .DataField("miktar")
+                .Area(PivotArea.Available)
+                .Role(PivotFieldRole.Measure)
+                .Aggregation(PivotAggregation.Sum)
+                .Build());
+    }
 }

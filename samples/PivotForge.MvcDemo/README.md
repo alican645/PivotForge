@@ -18,7 +18,7 @@ Use the URL printed by ASP.NET Core.
 - Packaged `/pivotforge` minimal API endpoints
 - Razor Class Library assets under `_content/PivotForge.AspNetCore`
 - Compact and tabular layouts
-- Field drag-and-drop, filtering, sorting, and show-as calculations
+- The packaged field designer (drag-and-drop layout building from `PivotForge.AspNetCore`), plus filtering, sorting, and show-as calculations
 - Single row and cell selection with keyboard navigation
 - Drill-down filtering and CSV export
 - Excel export

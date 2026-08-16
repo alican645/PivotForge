@@ -22,6 +22,14 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("area")]
     public PivotArea Area { get; set; } = PivotArea.Data;
 
+    /// <summary>Gets or sets which areas the field may occupy.</summary>
+    /// <remarks>
+    /// Declared non-nullable so Razor accepts the unqualified <c>role="Measure"</c> form;
+    /// whether the author wrote the attribute is tracked through the element's attributes.
+    /// </remarks>
+    [HtmlAttributeName("role")]
+    public PivotFieldRole Role { get; set; }
+
     /// <summary>Gets or sets the aggregation applied to a data field.</summary>
     /// <remarks>
     /// Declared non-nullable so Razor accepts the unqualified <c>aggregation="Sum"</c> form;
@@ -100,6 +108,11 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (_writtenAttributes.Contains("show-as"))
         {
             builder.ShowAs(ShowAs);
+        }
+
+        if (_writtenAttributes.Contains("role"))
+        {
+            builder.Role(Role);
         }
 
         if (Format is not null)
