@@ -469,3 +469,135 @@ test("no designer is built when fieldDesigner is absent", () => {
   assert.equal(widget.designer, null);
   widget.dispose();
 });
+
+// The renderer re-sorts rows itself whenever settings.sortState is falsy
+// (pivot-table.js createRowPlan/createSubtotalRowPlan), which silently undoes
+// the server's ordering. So a widget that sorts must tell its renderer what the
+// active sort is, or header-click sorting appears to do nothing.
+function createSortSpyRenderer() {
+  const constructed = [];
+  const renders = [];
+
+  class SpyRenderer {
+    constructor(container, options) {
+      this.options = options;
+      constructed.push(options);
+    }
+    render(result, options = {}) {
+      renders.push({ ...this.options, ...options });
+    }
+  }
+
+  return { SpyRenderer, constructed, renders };
+}
+
+async function withSpyRenderer(run) {
+  const spy = createSortSpyRenderer();
+  const previous = PivotForge.PivotTableRenderer;
+  PivotForge.PivotTableRenderer = spy.SpyRenderer;
+
+  try {
+    await run(spy);
+  } finally {
+    PivotForge.PivotTableRenderer = previous;
+  }
+}
+
+test("the renderer is told the active sort, so it does not re-sort the server's rows", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      allowSorting: true,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    const sort = { mode: "RowTotalValue", valueKey: "tutar_sum", direction: "Descending" };
+    await widget.sortBy(sort);
+
+    assert.equal(renders.length, 1);
+    assert.deepEqual(renders[0].sortState, sort);
+
+    widget.dispose();
+  });
+});
+
+test("clearing the sort tells the renderer to resume its own row ordering", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      allowSorting: true,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.sortBy({ mode: "RowLabel", field: "urun", direction: "Ascending" });
+    await widget.update({ rowSort: null });
+
+    assert.equal(renders.at(-1).sortState, null);
+
+    widget.dispose();
+  });
+});
+
+// The MVC demo drives sorting itself: it never calls widget.sortBy, and passes
+// its own sortState through rendererOptions. The widget must not overwrite that
+// with its own (permanently null) rowSort.
+test("a consumer-supplied sortState survives, because the widget never sorted", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const consumerSort = { mode: "RowLabel", field: "urun", direction: "Descending" };
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      allowSorting: true,
+      rendererOptions: { sortState: consumerSort },
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.deepEqual(renders.at(-1).sortState, consumerSort);
+
+    widget.dispose();
+  });
+});
+
+test("an initial rowSort reaches the renderer on the very first render", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const sort = { mode: "RowLabel", field: "urun", direction: "Ascending" };
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      allowSorting: true,
+      rowSort: sort,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    await widget.refresh();
+
+    assert.deepEqual(renders.at(-1).sortState, sort);
+
+    widget.dispose();
+  });
+});
+
+test("the active sort survives the renderer rebuild that update({ fields }) performs", async () => {
+  await withSpyRenderer(async ({ renders }) => {
+    const widget = PivotForge.create(createContainer(), {
+      fields,
+      autoLoad: false,
+      allowSorting: true,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() })
+    });
+
+    const sort = { mode: "RowTotalValue", valueKey: "tutar_sum", direction: "Descending" };
+    await widget.sortBy(sort);
+    // Changing fields rebuilds the renderer; the rebuilt one must still know
+    // the sort, or reordering the designer silently unsorts the table.
+    await widget.update({ fields });
+
+    assert.deepEqual(renders.at(-1).sortState, sort);
+
+    widget.dispose();
+  });
+});

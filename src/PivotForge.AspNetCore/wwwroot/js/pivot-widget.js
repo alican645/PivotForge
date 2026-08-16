@@ -117,8 +117,21 @@
         onSortRequested: this.options.allowSorting
           ? request => { this.sortBy(request); }
           : null,
+        // Without this the renderer treats every result as unsorted and re-orders
+        // rows itself, discarding the ordering the server was just asked for.
+        // Declared before the spread so a consumer driving sorting through
+        // rendererOptions keeps ownership until this widget actually sorts.
+        sortState: this.rowSort,
         ...(this.options.rendererOptions ?? {})
       });
+    }
+
+    // The renderer is built once and reused across refreshes, so a sort applied
+    // after construction has to be pushed onto it.
+    syncRendererSortState() {
+      if (this.renderer) {
+        this.renderer.options.sortState = this.rowSort;
+      }
     }
 
     on(eventName, handler) {
@@ -264,6 +277,7 @@
 
       if (rowSort !== undefined) {
         this.rowSort = rowSort;
+        this.syncRendererSortState();
       }
 
       await this.refresh();
@@ -406,6 +420,7 @@
       }
 
       this.rowSort = sort;
+      this.syncRendererSortState();
       await this.refresh();
     }
 
