@@ -376,13 +376,27 @@ Anything not listed here still needs `rendererOptions` through
 
 `<pivot-field>` attributes are `field` (the source column, required),
 `caption`, `area`, `role`, `aggregation`, `show-as`, the four `format-*`
-attributes, `visible`, and — on `Row` fields only — `expanded` and
-`show-totals`. `area` defaults to `Data`, matching `PivotFieldBuilder`.
+attributes, `visible`, `area-index`, `sort-order`, and — on `Row` fields
+only — `expanded` and `show-totals`. `area` defaults to `Data`, matching
+`PivotFieldBuilder`.
 
-`area`, `role`, `aggregation`, and `show-as` bind to the `PivotArea`,
-`PivotFieldRole`, `PivotAggregation`, and `PivotShowAs` enums, so a misspelled
-value such as `area="Roww"` fails the Razor compile rather than surfacing in
-the browser.
+`area-index` gives the field an explicit position among the fields sharing its
+area, instead of taking the declaration order. It is the opening order only:
+once the user moves a chip the layout owns the order, and a restored
+`state-storing` view is loaded as it was saved.
+
+`sort-order` (`Ascending` / `Descending`, valid on `Row` and `Column` fields)
+orders that field's own header level inside its parent group, so the hierarchy
+survives the ordering. The two axes differ in what "undeclared" means: the row
+axis is ascending unless told otherwise, while an undeclared column level keeps
+the order the data arrived in — a query that ordered months by month number
+would be ruined by alphabetical ordering, so the engine does not impose one. A
+sort the user applies by clicking a header still wins over the declaration.
+
+`area`, `role`, `aggregation`, `show-as`, and `sort-order` bind to the
+`PivotArea`, `PivotFieldRole`, `PivotAggregation`, `PivotShowAs`, and
+`PivotSortDirection` enums, so a misspelled value such as `area="Roww"` fails
+the Razor compile rather than surfacing in the browser.
 
 A `<pivot-field>` outside a `<pivot-grid>` throws, as does a grid with no
 fields or no `id`. The tag helpers hold no pivot logic of their own — they

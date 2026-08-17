@@ -806,11 +806,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   }
 
   createRowPlan(rowHeaders, rowDepth, settings) {
+    // Drawn in the order the engine sent. It re-sorted here once, in a
+    // hard-coded "tr" collation, which quietly overrode both the culture the
+    // request asked for and any per-field order it declared.
     const items = rowHeaders.map((rowHeader, rowIndex) => ({ rowHeader, rowIndex }));
-
-    if (!settings.sortState) {
-      items.sort((left, right) => this.compareRowHeaders(left.rowHeader, right.rowHeader, rowDepth));
-    }
 
     if (rowDepth > 1) {
       const plan = [];
@@ -888,18 +887,6 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }
 
     return [...groupsByKey.values()];
-  }
-
-  compareRowHeaders(left, right, rowDepth) {
-    for (let level = 0; level < rowDepth; level++) {
-      const comparison = String(left[level] ?? "").localeCompare(String(right[level] ?? ""), "tr");
-
-      if (comparison !== 0) {
-        return comparison;
-      }
-    }
-
-    return 0;
   }
 
   createSubtotalKey(prefix) {

@@ -18,6 +18,8 @@ public sealed class PivotFieldBuilder
     private bool _visible = true;
     private bool? _expanded;
     private bool? _showTotals;
+    private int? _areaIndex;
+    private PivotSortDirection? _sortOrder;
 
     /// <summary>Sets the source field name.</summary>
     /// <param name="dataField">The source field name.</param>
@@ -162,13 +164,51 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Sets this field's position among the fields sharing its area.</summary>
+    /// <remarks>
+    /// The opening order only: once the user moves a chip the layout owns the order, and a stored
+    /// <c>state-storing</c> view is restored as saved. Fields without an index follow the ones that
+    /// have one, in declaration order.
+    /// </remarks>
+    /// <param name="areaIndex">The zero-based position within the area.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The index is negative.</exception>
+    public PivotFieldBuilder AreaIndex(int areaIndex)
+    {
+        if (areaIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(areaIndex), areaIndex, "AreaIndex cannot be negative.");
+        }
+
+        _areaIndex = areaIndex;
+        return this;
+    }
+
+    /// <summary>Sets the direction this field's own header level is ordered in.</summary>
+    /// <remarks>
+    /// Orders the level within its parent group, so the hierarchy stays intact. A row axis left
+    /// undeclared stays ascending; a column axis left undeclared keeps the order the data arrived
+    /// in. A sort the user applies by clicking a header still wins over this. Valid on
+    /// <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/> fields only.
+    /// </remarks>
+    /// <param name="direction">The direction applied to this field's level.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder SortOrder(PivotSortDirection direction)
+    {
+        _sortOrder = direction;
+        return this;
+    }
+
     /// <summary>Builds the browser field configuration.</summary>
     /// <returns>A dictionary matching the JavaScript field model.</returns>
     /// <exception cref="InvalidOperationException">
     /// No data field was supplied, a field in the <see cref="PivotArea.Available"/> area has no <see cref="Role"/>,
     /// a <see cref="Role"/> contradicts its <see cref="Area"/> (e.g., <see cref="PivotFieldRole.Measure"/> outside
     /// <see cref="PivotArea.Data"/>), or <see cref="Aggregation"/>/<see cref="ShowAs"/> was set on a field whose
-    /// <see cref="Area"/> is not <see cref="PivotArea.Data"/>.
+    /// <see cref="Area"/> is not <see cref="PivotArea.Data"/>, <see cref="Expanded"/>/<see cref="ShowTotals"/>
+    /// was set outside <see cref="PivotArea.Row"/>, or <see cref="SortOrder"/> was set outside
+    /// <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/>.
     /// </exception>
     public IDictionary<string, object?> Build()
     {
@@ -212,6 +252,14 @@ public sealed class PivotFieldBuilder
                 "Expanded and ShowTotals are only valid on fields whose Area is Row.");
         }
 
+        // Only the row and column axes draw a header level to order.
+        if (_area is not (PivotArea.Row or PivotArea.Column) && _sortOrder is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets SortOrder, but its Area is \"{_area}\". " +
+                "SortOrder is only valid on fields whose Area is Row or Column.");
+        }
+
         // Only a data field produces the numbers the renderer formats.
         if (_area != PivotArea.Data && HasFormat)
         {
@@ -250,6 +298,16 @@ public sealed class PivotFieldBuilder
         if (_showTotals is { } showTotals)
         {
             field["showTotals"] = showTotals;
+        }
+
+        if (_areaIndex is { } areaIndex)
+        {
+            field["areaIndex"] = areaIndex;
+        }
+
+        if (_sortOrder is { } sortOrder)
+        {
+            field["sortOrder"] = sortOrder.ToString();
         }
 
         if (HasFormat)

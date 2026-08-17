@@ -430,6 +430,24 @@
       // default) the moment toFields() round-trips through buildRequest.
       const visibleOf = name => this.field(name).visible;
       const formatOf = name => this.field(name).format;
+      // The same reasoning, for the attributes that are only meaningful in some
+      // areas: each is carried into the areas that accept it and dropped
+      // elsewhere, because a row field dragged into the column zone must not
+      // arrive still holding showTotals -- normalizeField refuses it there.
+      // areaIndex is deliberately absent: it declares the opening order, and
+      // re-emitting it would undo the drag that just changed the order.
+      const declaredIn = (name, area) => {
+        const field = this.field(name);
+        const isRow = area === "row";
+
+        return {
+          ...(isRow && field.expanded === false ? { expanded: false } : {}),
+          ...(isRow && field.showTotals === false ? { showTotals: false } : {}),
+          ...((isRow || area === "column") && field.sortOrder
+            ? { sortOrder: field.sortOrder }
+            : {})
+        };
+      };
 
       const state = this.getState();
 
@@ -439,14 +457,16 @@
           caption: captionOf(name),
           area: "row",
           format: formatOf(name),
-          visible: visibleOf(name)
+          visible: visibleOf(name),
+          ...declaredIn(name, "row")
         })),
         ...state.columns.map(name => ({
           dataField: name,
           caption: captionOf(name),
           area: "column",
           format: formatOf(name),
-          visible: visibleOf(name)
+          visible: visibleOf(name),
+          ...declaredIn(name, "column")
         })),
         ...state.values.map(value => ({
           dataField: value.field,

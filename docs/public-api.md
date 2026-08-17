@@ -7,7 +7,7 @@ This document records the supported public surface for `0.5.0-preview.1`. Public
 ### Pivot model and engine
 
 - `PivotEngine`: executes object, `DataTable`, and dictionary sources; supports cancellation and drill-down. `DistinctValues` / `DistinctValuesRecords` list the values a filter on a field can accept, in reading order. The parameterless constructor collates row labels with `CultureInfo.CurrentCulture`, resolved per call; `new PivotEngine(CultureInfo)` pins it.
-- `PivotRequest`, `PivotFilter`, `PivotValueDefinition`, `PivotSort`: define layout, filtering, values, show-as calculations, and row ordering.
+- `PivotRequest`, `PivotFilter`, `PivotValueDefinition`, `PivotSort`, `PivotFieldSort`: define layout, filtering, values, show-as calculations, and ordering. `PivotSort` orders the row axis as a whole; `PivotRequest.FieldSorts` orders one row or column field's own header level within its parent group, and `PivotSort` wins over it on the row axis.
 - `PivotAggregation`, `PivotShowAs`, `PivotSortMode`, `PivotSortDirection`: configure calculations and ordering.
 - `PivotResult`, `PivotCell`, `PivotTotal`, `PivotSubtotal`, `PivotMetadata`: represent completed pivot output.
 - `PivotResultPaginator`, `PivotResultPage`: create row-based pages from a completed result.
@@ -44,7 +44,7 @@ This document records the supported public surface for `0.5.0-preview.1`. Public
 - `PivotForge.AspNetCore.Rendering.PivotForgeFactory`: creates component builders; `PivotGrid()` returns a `PivotGridBuilder`.
 - `PivotForge.AspNetCore.Rendering.PivotGridBuilder`: declares a pivot grid's container, options, and fields, and renders its markup plus the `PivotForge.create` initialization script. `FieldDesigner(string selector)` renders an interactive field designer into the matching host element.
 - `PivotForge.AspNetCore.Rendering.PivotFieldCollectionBuilder`: collects fields in declaration order via `Add()`.
-- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, role, aggregation, show-as, caption, visibility, number format (`FormatType`, `FormatDecimals`, `FormatGrouping`, `FormatCurrency`), and — on `Row` fields — its initial expansion (`Expanded`) and whether its groups carry a total (`ShowTotals`).
+- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, role, aggregation, show-as, caption, visibility, number format (`FormatType`, `FormatDecimals`, `FormatGrouping`, `FormatCurrency`), its position within its area (`AreaIndex`), its own level's ordering on the `Row` and `Column` axes (`SortOrder`), and — on `Row` fields — its initial expansion (`Expanded`) and whether its groups carry a total (`ShowTotals`).
 - `PivotForge.AspNetCore.Rendering.PivotArea`: `Row`, `Column`, `Data`, `Filter`, `Available`.
 - `PivotForge.AspNetCore.Rendering.PivotFieldRole`: `Dimension`, `Measure`. Required on `PivotArea.Available` fields; inferred elsewhere from `Area`.
 - `PivotForge.AspNetCore.Rendering.PivotValueFormatType`: `Number`, `Currency`, `Percent`. Selects how a data field's values are formatted in the browser.
@@ -87,6 +87,15 @@ Static assets are served from `/_content/PivotForge.AspNetCore/`.
 ## Compatibility Policy
 
 PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking changes may be made when necessary and will be called out in release notes. After `1.0.0`, incompatible public API changes require a new major version. Additive members and behavior-preserving fixes may ship in minor or patch releases as appropriate.
+
+### Behaviour changes since `0.5.0-preview.1`
+
+- **The rendered table no longer re-sorts rows in the browser.** It drew them in
+  a hard-coded `tr` collation of its own, which overrode both the culture the
+  request was executed in and any order the engine had been asked for. Rows are
+  now drawn in the order the engine sent. A grid whose ambient culture is not
+  `tr-TR` will therefore see its rows collated in that culture, as the
+  `0.5.0-preview.1` culture fix already intended.
 
 ### Behaviour changes in `0.5.0-preview.1`
 

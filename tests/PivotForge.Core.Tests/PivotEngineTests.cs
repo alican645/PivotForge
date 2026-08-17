@@ -107,6 +107,154 @@ public sealed class PivotEngineTests
         Assert.Equal(["Çanakkale", "Corum", "Zonguldak"], english);
     }
 
+    // Deliberately arriving in neither alphabetical nor chronological order, so
+    // "sorted" and "as observed" can never be confused for one another.
+    private static readonly Order[] NestedOrders =
+    [
+        new Order("West", 2026, "Alpha", 1m),
+        new Order("West", 2024, "Beta", 2m),
+        new Order("East", 2025, "Beta", 4m),
+        new Order("East", 2026, "Alpha", 8m)
+    ];
+
+    private static string[] RowPaths(PivotResult result)
+        => result.RowHeaders.Select(header => string.Join("/", header)).ToArray();
+
+    private static string[] ColumnPaths(PivotResult result)
+        => result.ColumnHeaders.Select(header => string.Join("/", header)).ToArray();
+
+    [Fact]
+    public void Execute_ReversesADeclaredRowLevel_WithoutBreakingTheHierarchy()
+    {
+        PivotRequest Request(params PivotFieldSort[] fieldSorts) => new()
+        {
+            Rows = ["Region", "Category"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            FieldSorts = fieldSorts
+        };
+
+        var engine = new PivotEngine(CultureInfo.InvariantCulture);
+
+        Assert.Equal(
+            ["East/Alpha", "East/Beta", "West/Alpha", "West/Beta"],
+            RowPaths(engine.Execute(NestedOrders, Request())));
+
+        // The reversal happens inside each parent group: the regions keep their
+        // own ascending order and their children stay together underneath them.
+        Assert.Equal(
+            ["East/Beta", "East/Alpha", "West/Beta", "West/Alpha"],
+            RowPaths(engine.Execute(
+                NestedOrders, Request(new PivotFieldSort("Category", PivotSortDirection.Descending)))));
+
+        Assert.Equal(
+            ["West/Alpha", "West/Beta", "East/Alpha", "East/Beta"],
+            RowPaths(engine.Execute(
+                NestedOrders, Request(new PivotFieldSort("Region", PivotSortDirection.Descending)))));
+    }
+
+    [Fact]
+    public void Execute_PrefersAnExplicitRowSort_OverTheDeclaredLevelOrder()
+    {
+        // Clicking a header is a decision the user just made; the declaration is
+        // one the view author made months ago.
+        var result = new PivotEngine(CultureInfo.InvariantCulture).Execute(NestedOrders, new PivotRequest
+        {
+            Rows = ["Region"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            FieldSorts = [new PivotFieldSort("Region", PivotSortDirection.Descending)],
+            RowSort = PivotSort.RowLabel("Region", PivotSortDirection.Ascending)
+        });
+
+        Assert.Equal(["East", "West"], RowPaths(result));
+    }
+
+    [Fact]
+    public void Execute_LeavesAnUndeclaredColumnLevel_InTheOrderItArrived()
+    {
+        // Sorting these silently would destroy an order the query may have chosen
+        // on purpose — month names ordered by month number, say.
+        var result = new PivotEngine(CultureInfo.InvariantCulture).Execute(NestedOrders, new PivotRequest
+        {
+            Rows = ["Region"],
+            Columns = ["Year"],
+            Values = [PivotValueDefinition.Sum("Amount")]
+        });
+
+        Assert.Equal(["2026", "2024", "2025"], ColumnPaths(result));
+    }
+
+    [Fact]
+    public void Execute_OrdersADeclaredColumnLevel()
+    {
+        PivotResult Execute(PivotSortDirection direction) =>
+            new PivotEngine(CultureInfo.InvariantCulture).Execute(NestedOrders, new PivotRequest
+            {
+                Rows = ["Region"],
+                Columns = ["Year"],
+                Values = [PivotValueDefinition.Sum("Amount")],
+                FieldSorts = [new PivotFieldSort("Year", direction)]
+            });
+
+        Assert.Equal(["2024", "2025", "2026"], ColumnPaths(Execute(PivotSortDirection.Ascending)));
+        Assert.Equal(["2026", "2025", "2024"], ColumnPaths(Execute(PivotSortDirection.Descending)));
+    }
+
+    [Fact]
+    public void Execute_OrdersOnlyTheDeclaredLevel_OfANestedColumnAxis()
+    {
+        var result = new PivotEngine(CultureInfo.InvariantCulture).Execute(NestedOrders, new PivotRequest
+        {
+            Rows = ["Region"],
+            Columns = ["Year", "Category"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            FieldSorts = [new PivotFieldSort("Category", PivotSortDirection.Descending)]
+        });
+
+        // The years stay as observed (2026 arrived first) while the categories
+        // reverse — and Beta first is the opposite of the order they arrived in,
+        // so this cannot pass by the declaration being applied to the wrong level.
+        Assert.Equal(
+            ["2026/Beta", "2026/Alpha", "2024/Beta", "2024/Alpha", "2025/Beta", "2025/Alpha"],
+            ColumnPaths(result));
+    }
+
+    [Fact]
+    public void Execute_CollatesADeclaredColumnLevel_WithTheCultureItWasGiven()
+    {
+        var orders = TurkishLabels
+            .Select(order => new Order("East", order.Year, order.Region, order.Amount))
+            .ToArray();
+        var request = new PivotRequest
+        {
+            Rows = ["Region"],
+            Columns = ["Category"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            FieldSorts = [new PivotFieldSort("Category", PivotSortDirection.Ascending)]
+        };
+
+        Assert.Equal(
+            ["Corum", "Çanakkale", "Zonguldak"],
+            ColumnPaths(new PivotEngine(CultureInfo.GetCultureInfo("tr-TR")).Execute(orders, request)));
+        Assert.Equal(
+            ["Çanakkale", "Corum", "Zonguldak"],
+            ColumnPaths(new PivotEngine(CultureInfo.GetCultureInfo("en-US")).Execute(orders, request)));
+    }
+
+    [Fact]
+    public void Execute_IgnoresAFieldSortNamingAFieldThatIsNotOnThatAxis()
+    {
+        // A field can be dragged out of the row area while its declaration stays
+        // behind; naming a column field here must not shift the row levels along.
+        var result = new PivotEngine(CultureInfo.InvariantCulture).Execute(NestedOrders, new PivotRequest
+        {
+            Rows = ["Region", "Category"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            FieldSorts = [new PivotFieldSort("Year", PivotSortDirection.Descending)]
+        });
+
+        Assert.Equal(["East/Alpha", "East/Beta", "West/Alpha", "West/Beta"], RowPaths(result));
+    }
+
     [Fact]
     public void Execute_GroupsRowsAndColumns_WithSum()
     {
@@ -409,6 +557,21 @@ public sealed class PivotEngineTests
         Assert.Empty(result.Cells);
         Assert.Null(result.GrandTotals["Amount_sum"]);
         Assert.Equal(0, result.Metadata.SourceRowCount);
+    }
+
+    [Fact]
+    public void Execute_ReturnsNoColumnHeaders_ForEmptyDataWithNoColumnFields()
+    {
+        // A pivot with no column axis has one implicit, nameless column, which the
+        // header builder would happily produce out of nothing — leaving an empty
+        // grid claiming a column it has no data for.
+        var result = new PivotEngine().Execute(Array.Empty<Order>(), new PivotRequest
+        {
+            Rows = ["Region"],
+            Values = [PivotValueDefinition.Sum("Amount")]
+        });
+
+        Assert.Empty(result.ColumnHeaders);
     }
 
     [Fact]

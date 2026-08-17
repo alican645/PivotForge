@@ -26,7 +26,9 @@ public class PivotTagHelperTests
         string? FormatCurrency = null,
         bool? Visible = null,
         bool? Expanded = null,
-        bool? ShowTotals = null);
+        bool? ShowTotals = null,
+        int? AreaIndex = null,
+        PivotSortDirection? SortOrder = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -104,6 +106,18 @@ public class PivotTagHelperTests
         {
             helper.ShowTotals = showTotals;
             attributes.Add(new TagHelperAttribute("show-totals", showTotals));
+        }
+
+        if (spec.AreaIndex is { } areaIndex)
+        {
+            helper.AreaIndex = areaIndex;
+            attributes.Add(new TagHelperAttribute("area-index", areaIndex));
+        }
+
+        if (spec.SortOrder is { } sortOrder)
+        {
+            helper.SortOrder = sortOrder;
+            attributes.Add(new TagHelperAttribute("sort-order", sortOrder.ToString()));
         }
 
         return (helper, attributes);
@@ -687,6 +701,62 @@ public class PivotTagHelperTests
         // The row area accepts both.
         new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
             .Expanded(false).ShowTotals(false).Build();
+    }
+
+    [Fact]
+    public async Task WritesAreaIndexAndSortOrderOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge",
+                AreaIndex: 1, SortOrder: PivotSortDirection.Descending),
+            new FieldSpec("Category", PivotArea.Row, "Kategori"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var fields = declared.GetProperty("fields");
+        Assert.Equal(1, fields[0].GetProperty("areaIndex").GetInt32());
+        Assert.Equal("Descending", fields[0].GetProperty("sortOrder").GetString());
+
+        Assert.False(fields[1].TryGetProperty("areaIndex", out _));
+        Assert.False(fields[1].TryGetProperty("sortOrder", out _));
+    }
+
+    [Fact]
+    public async Task WritesADeclaredAscendingSortOrder()
+    {
+        // Ascending is the enum's default value, so an unwritten attribute and a
+        // deliberate sort-order="Ascending" arrive at the tag helper identically.
+        // They differ on the column axis, where undeclared means discovery order.
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Year", PivotArea.Column, "Yıl", SortOrder: PivotSortDirection.Ascending),
+            new FieldSpec("Region", PivotArea.Row, "Bölge"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal("Ascending", declared.GetProperty("fields")[0].GetProperty("sortOrder").GetString());
+    }
+
+    [Fact]
+    public void RefusesSortOrderOutsideTheRowAndColumnAreas()
+    {
+        // Only those two axes draw a header level there is an order to declare.
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Data)
+            .SortOrder(PivotSortDirection.Ascending).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Filter)
+            .SortOrder(PivotSortDirection.Ascending).Build());
+
+        new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
+            .SortOrder(PivotSortDirection.Descending).Build();
+        new PivotFieldBuilder().DataField("Year").Area(PivotArea.Column)
+            .SortOrder(PivotSortDirection.Ascending).Build();
+    }
+
+    [Fact]
+    public void RefusesANegativeAreaIndex()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotFieldBuilder().AreaIndex(-1));
     }
 
     [Fact]

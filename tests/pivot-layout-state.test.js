@@ -832,3 +832,69 @@ test("a restored caption is trimmed the same way setCaption trims one", () => {
 
   assert.equal(state.field("Region").caption, "Satış Bölgesi");
 });
+
+test("a declared showTotals survives a layout mutation", () => {
+  // Without this, dragging any chip anywhere silently restored the subtotals a
+  // field had opted out of: toFields() rebuilds the field list from the layout,
+  // and whatever it forgets to carry reverts to the normalizeField default.
+  const state = new PivotForge.PivotLayoutState([
+    ...catalog.map(field =>
+      field.dataField === "Category" ? { ...field, showTotals: false, expanded: false } : field)
+  ]);
+
+  state.reorder("row", 0, 1);
+  const [carried] = PivotForge.PivotRequestBuilder
+    .normalizeFields(state.toFields())
+    .filter(field => field.dataField === "Category");
+
+  assert.equal(carried.showTotals, false);
+  assert.equal(carried.expanded, false);
+});
+
+test("a declared sortOrder survives a layout mutation", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Year" ? { ...field, sortOrder: "Descending" } : field));
+
+  state.move("Quarter", "column", 0);
+  const request = PivotForge.PivotRequestBuilder.buildRequest(state.toFields());
+
+  assert.deepEqual(request.fieldSorts, [{ field: "Year", direction: "Descending" }]);
+});
+
+test("a row-only declaration is dropped when the field moves to another area", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Category" ? { ...field, showTotals: false } : field));
+
+  // showTotals means nothing on the column axis and normalizeField refuses it
+  // there, so carrying it along would turn a legal drag into an exception.
+  state.move("Category", "column", 0);
+  const emitted = state.toFields().find(field => field.dataField === "Category");
+
+  assert.equal(emitted.showTotals, undefined);
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
+});
+
+test("areaIndex is not re-emitted, so a move is not undone by the declaration", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Region" ? { ...field, areaIndex: 0 }
+        : field.dataField === "Category" ? { ...field, areaIndex: 1 } : field));
+
+  state.reorder("row", 0, 1);
+  const request = PivotForge.PivotRequestBuilder.buildRequest(state.toFields());
+
+  // areaIndex declares the opening order; once the user has moved a chip the
+  // layout owns the order, and re-applying the declaration would undo the move.
+  assert.deepEqual(request.rows, ["Category", "Region"]);
+});
+
+test("areaIndex decides the opening layout", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Region" ? { ...field, areaIndex: 1 }
+        : field.dataField === "Category" ? { ...field, areaIndex: 0 } : field));
+
+  assert.deepEqual(state.getState().rows, ["Category", "Region"]);
+});

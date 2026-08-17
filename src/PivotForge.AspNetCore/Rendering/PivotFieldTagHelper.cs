@@ -73,6 +73,20 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("show-totals")]
     public bool? ShowTotals { get; set; }
 
+    /// <summary>Gets or sets this field's position among the fields sharing its area.</summary>
+    /// <remarks>The opening order only; after that the layout owns the order.</remarks>
+    [HtmlAttributeName("area-index")]
+    public int? AreaIndex { get; set; }
+
+    /// <summary>Gets or sets the direction this field's own header level is ordered in.</summary>
+    /// <remarks>
+    /// Declared non-nullable so Razor accepts the unqualified <c>sort-order="Descending"</c> form;
+    /// whether the author wrote it is tracked through the element's attributes. Valid on
+    /// <c>Row</c> and <c>Column</c> fields.
+    /// </remarks>
+    [HtmlAttributeName("sort-order")]
+    public PivotSortDirection SortOrder { get; set; }
+
     /// <summary>The attribute names the view author actually wrote on this element.</summary>
     private HashSet<string> _writtenAttributes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -173,6 +187,19 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (ShowTotals is { } showTotals)
         {
             builder.ShowTotals(showTotals);
+        }
+
+        if (AreaIndex is { } areaIndex)
+        {
+            builder.AreaIndex(areaIndex);
+        }
+
+        // Ascending is the enum's default value, so only the written-attribute set
+        // separates a declared ascending level from an undeclared one -- and the
+        // two differ on the column axis, where undeclared means discovery order.
+        if (_writtenAttributes.Contains("sort-order"))
+        {
+            builder.SortOrder(SortOrder);
         }
     }
 }

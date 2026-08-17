@@ -5,6 +5,7 @@
   const ROLES = ["dimension", "measure"];
   const AGGREGATIONS = ["sum", "count", "average", "min", "max"];
   const FORMAT_TYPES = ["number", "currency", "percent"];
+  const SORT_ORDERS = ["Ascending", "Descending"];
   const SHOW_AS = [
     "normal",
     "percentOfRowTotal",
@@ -92,10 +93,37 @@
       }
     });
 
+    const areaIndex = field.areaIndex;
+    if (areaIndex !== undefined &&
+      (!Number.isInteger(areaIndex) || areaIndex < 0)) {
+      throw new Error(
+        `"areaIndex" on field "${dataField}" must be a non-negative integer, but was ${areaIndex}.`
+      );
+    }
+
+    // Row and column fields are the only ones that produce a header axis to
+    // order; a data field's order is its area order and a filter field has no
+    // axis at all.
+    const isDimensionAxis = area === "row" || area === "column";
+    if (!isDimensionAxis && field.sortOrder !== undefined) {
+      throw new Error(
+        `"sortOrder" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+
+    const sortOrder = isDimensionAxis ? field.sortOrder ?? null : null;
+    if (sortOrder !== null && !SORT_ORDERS.includes(sortOrder)) {
+      throw new Error(
+        `Unknown sortOrder "${sortOrder}" on field "${dataField}". Expected one of: ${SORT_ORDERS.join(", ")}.`
+      );
+    }
+
     return {
       dataField,
       area,
       role,
+      areaIndex: areaIndex ?? null,
+      sortOrder,
       caption: field.caption ?? dataField,
       aggregation,
       showAs,
@@ -108,12 +136,43 @@
     };
   }
 
+  // Reorders each area's fields by their declared areaIndex, leaving the areas
+  // themselves where they are: only the fields sharing an area trade places, so
+  // a list that declares no index at all comes back untouched. An undeclared
+  // field sorts after every declared one and keeps its position relative to the
+  // other undeclared ones.
+  function applyAreaIndex(fields) {
+    const rank = field => field.areaIndex ?? Number.MAX_SAFE_INTEGER;
+    const areas = new Map();
+
+    fields.forEach((field, position) => {
+      const slots = areas.get(field.area) ?? { positions: [], fields: [] };
+      slots.positions.push(position);
+      slots.fields.push(field);
+      areas.set(field.area, slots);
+    });
+
+    const ordered = fields.slice();
+
+    areas.forEach(({ positions, fields: inArea }) => {
+      // Array#sort is stable, so equal ranks -- which is every pair of
+      // undeclared fields -- keep the order they were written in.
+      const sorted = inArea.slice().sort((left, right) => rank(left) - rank(right));
+
+      positions.forEach((position, at) => {
+        ordered[position] = sorted[at];
+      });
+    });
+
+    return ordered;
+  }
+
   function normalizeFields(fields) {
     if (!Array.isArray(fields)) {
       throw new Error('"fields" must be an array.');
     }
 
-    return fields.map(normalizeField);
+    return applyAreaIndex(fields.map(normalizeField));
   }
 
   function valueKey(field) {
@@ -138,12 +197,17 @@
         showAs: field.showAs
       })),
       filters: extras.filters ?? [],
-      rowSort: extras.rowSort ?? null
+      rowSort: extras.rowSort ?? null,
+      // Named rather than positional so the list survives a field moving to
+      // another area, and so a later per-field sortBy has somewhere to live.
+      fieldSorts: normalized
+        .filter(field => field.sortOrder !== null)
+        .map(field => ({ field: field.dataField, direction: field.sortOrder }))
     };
   }
 
   PivotForge.PivotRequestBuilder = {
-    normalizeFields, buildRequest, valueKey, AGGREGATIONS, SHOW_AS, FORMAT_TYPES
+    normalizeFields, buildRequest, valueKey, AGGREGATIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS
   };
 
   if (typeof module !== "undefined" && module.exports) {

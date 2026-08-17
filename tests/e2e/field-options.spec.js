@@ -113,3 +113,75 @@ test("declaring expanded on a column field is refused, not ignored", async ({ pa
 
   expect(refused).toContain('"expanded" is only valid on a "row" field');
 });
+
+// A single row level keeps every row-header cell a plain detail label, so the
+// list below is the level's order and nothing else.
+const SORTABLE = [
+  { dataField: "Region", caption: "Bölge", area: "row" },
+  { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+];
+
+const rowLabels = page => page.locator("#scratchPivot tbody th.pivot-table__row-header")
+  .evaluateAll(nodes => nodes.map(node => node.textContent.trim()).filter(Boolean));
+
+const columnLabels = page => page.locator("#scratchPivot thead th.pivot-table__column-header")
+  .evaluateAll(nodes => nodes.map(node => node.textContent.trim()));
+
+test("area-index decides which row field is the outer level", async ({ page }) => {
+  const order = { SalesPerson: 0, Category: 1, Region: 2 };
+  const fields = FIELDS.map(field =>
+    field.dataField in order ? { ...field, areaIndex: order[field.dataField] } : field);
+
+  await build(page, fields);
+
+  const rows = await page.evaluate(() => window.scratchWidget.request.rows);
+
+  // Declared out of order and sent in the declared order: the whole chain --
+  // designer layout, request, renderer -- reads the one normalized list.
+  expect(rows).toEqual(["SalesPerson", "Category", "Region"]);
+  expect(page.errors).toEqual([]);
+});
+
+test("a descending row field reverses the rendered level", async ({ page }) => {
+  await build(page, SORTABLE);
+  const ascending = await rowLabels(page);
+
+  await build(page, SORTABLE.map(field =>
+    field.dataField === "Region" ? { ...field, sortOrder: "Descending" } : field));
+  const descending = await rowLabels(page);
+
+  expect(ascending.length).toBeGreaterThan(1);
+  expect(descending).toEqual([...ascending].reverse());
+  expect(page.errors).toEqual([]);
+});
+
+test("a column field orders its own headers", async ({ page }) => {
+  const withColumn = [...SORTABLE, { dataField: "Quarter", caption: "Çeyrek", area: "column" }];
+
+  await build(page, withColumn.map(field =>
+    field.dataField === "Quarter" ? { ...field, sortOrder: "Ascending" } : field));
+  const ascending = await columnLabels(page);
+
+  await build(page, withColumn.map(field =>
+    field.dataField === "Quarter" ? { ...field, sortOrder: "Descending" } : field));
+  const descending = await columnLabels(page);
+
+  expect(ascending.length).toBeGreaterThan(1);
+  expect(descending).toEqual([...ascending].reverse());
+  expect(page.errors).toEqual([]);
+});
+
+test("declaring sortOrder on a data field is refused, not ignored", async ({ page }) => {
+  const refused = await page.evaluate(fields => {
+    try {
+      PivotForge.PivotRequestBuilder.normalizeFields(
+        fields.map(field => field.dataField === "Amount"
+          ? { ...field, sortOrder: "Ascending" } : field));
+      return null;
+    } catch (error) {
+      return error.message;
+    }
+  }, FIELDS);
+
+  expect(refused).toContain('"sortOrder" is only valid on a "row" or "column" field');
+});

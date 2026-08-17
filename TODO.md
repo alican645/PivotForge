@@ -78,8 +78,9 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `summaryType` (aggregation) | ✅ | ✅ | 5 tür: sum/count/average/min/max |
 | `summaryDisplayMode` (`showAs`) | ✅ | ✅ | `show-as` niteliği ve `ShowAs()` metodu mevcut |
 | `format` / `precision` | ✅ | ✅ | `0.4.0-preview.1`'de eklendi |
-| `areaIndex` | ✅ | ❌ | Sıra bildirim sırasından geliyor, açıkça verilemiyor |
-| `sortOrder`, `sortBy` | ⚠️ | ❌ | Alan başına sıralama yok; yalnızca tablo geneli |
+| `areaIndex` | ✅ | ✅ | `area-index` niteliği ve `AreaIndex()` metodu |
+| `sortOrder` | ✅ | ✅ | `sort-order` niteliği; satır ve sütun ekseninde seviye başına yön |
+| `sortBy` | ⚠️ | ❌ | Özet değere göre seviye sıralaması yok; yalnızca tablo geneli |
 | `sortBySummaryField` / `Path` | ⚠️ | ⚠️ | `RowTotalValue` var ama sütun yoluna göre değil |
 | `expanded` | ✅ | ✅ | Alan başına başlangıç durumu; yalnızca ilk çizimde |
 | `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
@@ -97,8 +98,16 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 
 ### Yapılacaklar
 
-- [ ] `area-index` ile açık sıra
-- [ ] Alan başına `sort-order` / `sort-by`
+- [x] `area-index` ile açık sıra — yalnızca açılış düzenini kurar; kullanıcı bir
+      çipi taşıdıktan sonra düzen sıranın sahibidir, bu yüzden `toFields()` bunu
+      geri yaymaz
+- [x] Alan başına `sort-order` — seviyeyi kendi üst grubunun içinde sıralar,
+      hiyerarşi bozulmaz. İki eksen "bildirilmemiş"i farklı yorumluyor: satır
+      ekseni aksi söylenmedikçe artan, sütun ekseni verinin geliş sırasını korur
+      (ay adlarını ay numarasına göre sıralayan bir sorgu alfabetik sıralamayla
+      bozulurdu). Kullanıcının başlığa tıklayarak kurduğu sıralama bildirime
+      üstün gelir
+- [ ] Alan başına `sort-by` — özet değere göre seviye sıralaması
 - [x] `expanded` başlangıç durumu — `Row` alanında `expanded="false"` o seviyenin
       gruplarını **ilk** çizimde kapatıyor; sonrası kullanıcıya ait ve geri
       yüklenen `state-storing` görünümü ona üstün geliyor

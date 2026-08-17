@@ -20,13 +20,17 @@ public class PivotForgeRequest
     /// <summary>Gets the optional row ordering definition.</summary>
     public PivotSort? RowSort { get; init; }
 
+    /// <summary>Gets the per-field ordering of individual row and column header levels.</summary>
+    public IReadOnlyList<PivotFieldSort> FieldSorts { get; init; } = [];
+
     internal PivotRequest ToPivotRequest() => new()
     {
         Rows = Rows,
         Columns = Columns,
         Values = Values,
         Filters = Filters,
-        RowSort = RowSort
+        RowSort = RowSort,
+        FieldSorts = FieldSorts
     };
 }
 

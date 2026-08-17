@@ -613,3 +613,33 @@ test("only an explicit false collapses, and only where there are groups to colla
   assert.deepEqual(seed([]), []);
   assert.deepEqual(seed([undefined, true, true]), []);
 });
+
+test("the row plan keeps the order the engine sent", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  // Descending, and in a collation no browser would produce for "tr" -- the
+  // renderer used to re-sort these locally, which threw away both the culture
+  // the request was executed with and any per-field order it declared.
+  const rowHeaders = [["Marmara"], ["Ege"], ["Akdeniz"]];
+
+  const plan = renderer.createRowPlan(rowHeaders, 1, { sortState: null });
+
+  assert.deepEqual(plan.map(row => row.rowHeader[0]), ["Marmara", "Ege", "Akdeniz"]);
+});
+
+test("grouping follows the sent order rather than re-sorting into it", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const rowHeaders = [
+    ["Marmara", "Teknoloji"],
+    ["Marmara", "Mobilya"],
+    ["Ege", "Teknoloji"]
+  ];
+
+  const plan = renderer.createRowPlan(rowHeaders, 2, { subtotals: true, sortState: null });
+
+  assert.deepEqual(
+    plan.filter(row => row.type === "subtotal").map(row => row.rowHeader[0]),
+    ["Marmara", "Ege"]);
+  assert.deepEqual(
+    plan.filter(row => row.type === "detail").map(row => row.rowHeader[1]),
+    ["Teknoloji", "Mobilya", "Teknoloji"]);
+});

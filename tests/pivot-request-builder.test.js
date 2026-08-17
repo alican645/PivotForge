@@ -244,7 +244,8 @@ test("a list with no available fields and no roles builds the same request as be
     columns: ["yil"],
     values: [{ field: "tutar", aggregation: "sum", showAs: "normal" }],
     filters: [],
-    rowSort: null
+    rowSort: null,
+    fieldSorts: []
   });
 });
 
@@ -289,4 +290,106 @@ test("a non-row field that declares neither is untouched", () => {
 
   assert.equal(field.expanded, null);
   assert.equal(field.showTotals, null);
+});
+
+test("areaIndex decides the order of the fields sharing an area", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "Category", area: "row", areaIndex: 1 },
+    { dataField: "Region", area: "row", areaIndex: 0 },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.deepEqual(request.rows, ["Region", "Category"]);
+});
+
+test("a field without an areaIndex follows the ones that have one", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "City", area: "row" },
+    { dataField: "Category", area: "row", areaIndex: 1 },
+    { dataField: "Country", area: "row" },
+    { dataField: "Region", area: "row", areaIndex: 0 },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+
+  // Declared first, in their own order; then the undeclared ones, keeping the
+  // order they were written in.
+  assert.deepEqual(request.rows, ["Region", "Category", "City", "Country"]);
+});
+
+test("areaIndex orders each area independently", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "Category", area: "row", areaIndex: 1 },
+    { dataField: "Quarter", area: "column", areaIndex: 1 },
+    { dataField: "Region", area: "row", areaIndex: 0 },
+    { dataField: "Year", area: "column", areaIndex: 0 },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.deepEqual(request.rows, ["Region", "Category"]);
+  assert.deepEqual(request.columns, ["Year", "Quarter"]);
+});
+
+test("a list declaring no areaIndex comes back in the order it was written", () => {
+  const [first, second] = PivotRequestBuilder.normalizeFields([
+    { dataField: "Category", area: "row" },
+    { dataField: "Region", area: "row" }
+  ]);
+
+  assert.equal(first.dataField, "Category");
+  assert.equal(second.dataField, "Region");
+});
+
+test("areaIndex must be a non-negative integer", () => {
+  [-1, 1.5, "0", null].forEach(areaIndex => {
+    assert.throws(
+      () => PivotRequestBuilder.normalizeFields([
+        { dataField: "Region", area: "row", areaIndex }
+      ]),
+      /"areaIndex" on field "Region" must be a non-negative integer/,
+      String(areaIndex));
+  });
+});
+
+test("a declared sortOrder reaches the request as a named field sort", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "Region", area: "row", sortOrder: "Descending" },
+    { dataField: "Year", area: "column", sortOrder: "Ascending" },
+    { dataField: "Category", area: "row" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+
+  // Named rather than positional, so it still points at the right field after
+  // the field moves to another area.
+  assert.deepEqual(request.fieldSorts, [
+    { field: "Region", direction: "Descending" },
+    { field: "Year", direction: "Ascending" }
+  ]);
+});
+
+test("an undeclared level contributes no field sort at all", () => {
+  const request = PivotRequestBuilder.buildRequest(salesFields);
+
+  // Not "Ascending": the engine treats undeclared and ascending differently on
+  // the column axis, where undeclared means the order the data arrived in.
+  assert.deepEqual(request.fieldSorts, []);
+});
+
+test("sortOrder is refused outside the row and column areas", () => {
+  ["filter", "data"].forEach(area => {
+    assert.throws(
+      () => PivotRequestBuilder.normalizeFields([
+        { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension",
+          sortOrder: "Ascending" }
+      ]),
+      /"sortOrder" is only valid on a "row" or "column" field/,
+      area);
+  });
+});
+
+test("an unknown sortOrder is refused rather than passed through", () => {
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([
+      { dataField: "Region", area: "row", sortOrder: "descending" }
+    ]),
+    /Unknown sortOrder "descending"/);
 });
