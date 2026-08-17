@@ -80,6 +80,18 @@
       );
     }
 
+    // Both describe how the row axis is drawn, and the grid draws subtotals and
+    // collapsible groups on the row axis only -- so declaring either elsewhere
+    // is a mistake worth reporting rather than a setting that does nothing.
+    const isRow = area === "row";
+    ["expanded", "showTotals"].forEach(member => {
+      if (!isRow && field[member] !== undefined) {
+        throw new Error(
+          `"${member}" is only valid on a "row" field, but was set on "${dataField}" in area "${area}".`
+        );
+      }
+    });
+
     return {
       dataField,
       area,
@@ -88,6 +100,10 @@
       aggregation,
       showAs,
       format: field.format ?? null,
+      // Default true, so an undeclared field behaves exactly as it did before
+      // these existed.
+      expanded: isRow ? field.expanded !== false : null,
+      showTotals: isRow ? field.showTotals !== false : null,
       visible: field.visible !== false
     };
   }

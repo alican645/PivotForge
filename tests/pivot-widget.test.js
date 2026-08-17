@@ -486,7 +486,7 @@ test("no designer is built when fieldDesigner is absent", () => {
 });
 
 // The renderer re-sorts rows itself whenever settings.sortState is falsy
-// (pivot-table.js createRowPlan/createSubtotalRowPlan), which silently undoes
+// (pivot-table.js createRowPlan), which silently undoes
 // the server's ordering. So a widget that sorts must tell its renderer what the
 // active sort is, or header-click sorting appears to do nothing.
 function createSortSpyRenderer() {
@@ -1102,5 +1102,53 @@ test("cell activation emits even when the consumer supplies its own detail UI", 
 
       widget.dispose();
     });
+  });
+});
+
+test("row fields' expansion and totals reach the renderer, in row order", async () => {
+  await withSpyRenderer(async ({ constructed }) => {
+    const widget = PivotForge.create(createContainer(), {
+      autoLoad: false,
+      fields: [
+        { dataField: "Bolge", area: "row" },
+        { dataField: "Kategori", area: "row", expanded: false, showTotals: false },
+        { dataField: "Yil", area: "column" },
+        { dataField: "Tutar", area: "data", aggregation: "sum" }
+      ]
+    });
+
+    // Parallel to rowFields, and covering only row fields — a column field has
+    // no level for the renderer to collapse or total.
+    assert.deepEqual(constructed[0].rowFields, ["Bolge", "Kategori"]);
+    assert.deepEqual(constructed[0].rowFieldExpanded, [true, false]);
+    assert.deepEqual(constructed[0].rowFieldSubtotals, [true, false]);
+
+    widget.dispose();
+  });
+});
+
+test("moving a field rebuilds the renderer with the new levels", async () => {
+  await withSpyRenderer(async ({ constructed }) => {
+    const widget = PivotForge.create(createContainer(), {
+      autoLoad: false,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => createResult() }),
+      fields: [
+        { dataField: "Bolge", area: "row", expanded: false },
+        { dataField: "Tutar", area: "data", aggregation: "sum" }
+      ]
+    });
+
+    await widget.update({
+      fields: [
+        { dataField: "Bolge", area: "row", expanded: false },
+        { dataField: "Kategori", area: "row", expanded: false },
+        { dataField: "Tutar", area: "data", aggregation: "sum" }
+      ]
+    });
+
+    // A new hierarchy is a new declaration, so the fresh renderer honours it
+    // again rather than inheriting the previous one's collapse decisions.
+    assert.deepEqual(constructed.at(-1).rowFieldExpanded, [false, false]);
+    widget.dispose();
   });
 });

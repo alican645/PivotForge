@@ -494,3 +494,122 @@ test("context menu labels come from the supplied text map", () => {
 
   assert.deepEqual(items.map(item => item.label), Object.values(english));
 });
+
+// --- Per-field expansion and totals ------------------------------------------
+
+const threeLevelHeaders = [
+  ["Marmara", "Teknoloji", "Alican"],
+  ["Marmara", "Teknoloji", "Ece"],
+  ["Marmara", "Mobilya", "Deniz"],
+  ["Ege", "Teknoloji", "Kaan"]
+];
+
+const planOf = (renderer, settings) =>
+  renderer.createRowPlan(threeLevelHeaders, 3, { subtotals: true, sortState: null, ...settings });
+
+const typesAtLevel = (plan, level) =>
+  [...new Set(plan.filter(row => row.level === level).map(row => row.type))];
+
+test("a row field opting out of totals leaves a group header instead", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+
+  const plan = planOf(renderer, { rowFieldSubtotals: [true, false, true] });
+
+  // The header stays -- the hierarchy would lose its label otherwise -- but it
+  // stops carrying sums, which is exactly the shape subtotals: false produces.
+  assert.deepEqual(typesAtLevel(plan, 0), ["subtotal"]);
+  assert.deepEqual(typesAtLevel(plan, 1), ["group"]);
+  assert.deepEqual(typesAtLevel(plan, 2), ["detail"]);
+});
+
+test("a level's key is the same whether it totals or not, so collapse survives", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+
+  const withTotals = planOf(renderer, {});
+  const without = planOf(renderer, { rowFieldSubtotals: [false, false, false] });
+
+  assert.deepEqual(withTotals.map(row => row.key), without.map(row => row.key));
+});
+
+test("the grid-wide subtotals switch still wins over a field asking for totals", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+
+  const plan = planOf(renderer, { subtotals: false, rowFieldSubtotals: [true, true, true] });
+
+  assert.deepEqual(typesAtLevel(plan, 0), ["group"]);
+  assert.deepEqual(typesAtLevel(plan, 1), ["group"]);
+});
+
+test("an undeclared rowFieldSubtotals leaves every level totalling", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+
+  const plan = planOf(renderer, { rowFieldSubtotals: null });
+
+  assert.deepEqual(typesAtLevel(plan, 0), ["subtotal"]);
+  assert.deepEqual(typesAtLevel(plan, 1), ["subtotal"]);
+});
+
+test("a row field declared collapsed seeds the collapse set once", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const settings = { subtotals: true, sortState: null, rowFieldExpanded: [true, false, true] };
+  renderer.collapsedRows = new Set();
+
+  renderer.applyInitialCollapse(threeLevelHeaders, 3, settings);
+  const seeded = [...renderer.collapsedRows];
+
+  // Only the declared level, and only its groups.
+  assert.equal(seeded.length, planOf(renderer, {}).filter(row => row.level === 1).length);
+  assert.ok(seeded.length > 0);
+
+  // Opening one and rendering again must not undo the user's decision.
+  renderer.collapsedRows.delete(seeded[0]);
+  renderer.applyInitialCollapse(threeLevelHeaders, 3, settings);
+  assert.equal(renderer.collapsedRows.has(seeded[0]), false);
+});
+
+test("declaring nothing collapsed leaves the grid fully expanded", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  renderer.collapsedRows = new Set();
+
+  renderer.applyInitialCollapse(
+    threeLevelHeaders, 3, { subtotals: true, sortState: null, rowFieldExpanded: null });
+
+  assert.equal(renderer.collapsedRows.size, 0);
+});
+
+test("a restored view state is not overwritten by the declared initial state", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  renderer.rerenderLast = () => {};
+  renderer.notifyViewStateChanged = () => {};
+
+  renderer.applyViewState({ collapsedGroups: [], columnWidths: [] });
+  renderer.applyInitialCollapse(
+    threeLevelHeaders, 3, { subtotals: true, sortState: null, rowFieldExpanded: [false, false, false] });
+
+  // The user already decided everything was open; a reload must not re-collapse.
+  assert.equal(renderer.collapsedRows.size, 0);
+});
+
+test("only an explicit false collapses, and only where there are groups to collapse", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const seed = rowFieldExpanded => {
+    renderer.collapsedRows = new Set();
+    renderer.initialCollapseApplied = false;
+    renderer.applyInitialCollapse(
+      threeLevelHeaders, 3, { subtotals: true, sortState: null, rowFieldExpanded });
+    return [...renderer.collapsedRows];
+  };
+
+  // The deepest row field has no groups — its rows are the detail rows. Adding
+  // their keys would put junk into getViewState().collapsedGroups, which is
+  // what state-storing persists.
+  assert.deepEqual(seed([true, true, false]), []);
+
+  // A short array means the remaining levels were never declared, and an
+  // undeclared level is expanded — not collapsed by omission. A gap in the
+  // middle is the same thing: the renderer is a public entry point, so a
+  // consumer building this array by hand can leave holes in it.
+  assert.deepEqual(seed([true]), []);
+  assert.deepEqual(seed([]), []);
+  assert.deepEqual(seed([undefined, true, true]), []);
+});

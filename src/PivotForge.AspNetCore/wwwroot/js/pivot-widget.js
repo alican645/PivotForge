@@ -335,6 +335,8 @@
       return new Renderer(this.container, {
         rowFields: rowFields.map(field => field.dataField),
         rowFieldLabels: rowFields.map(field => field.caption),
+        rowFieldExpanded: rowFields.map(field => field.expanded),
+        rowFieldSubtotals: rowFields.map(field => field.showTotals),
         onSortRequested: this.options.allowSorting
           ? request => { this.sortBy(request); }
           : null,

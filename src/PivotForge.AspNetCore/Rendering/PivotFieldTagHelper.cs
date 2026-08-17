@@ -63,6 +63,16 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("visible")]
     public bool? Visible { get; set; }
 
+    /// <summary>Gets or sets whether this row field's groups start expanded.</summary>
+    /// <remarks>Applied at the first render only; valid on <c>Row</c> fields.</remarks>
+    [HtmlAttributeName("expanded")]
+    public bool? Expanded { get; set; }
+
+    /// <summary>Gets or sets whether this row field's groups carry a total row.</summary>
+    /// <remarks>Valid on <c>Row</c> fields, and only when the grid's subtotals are on.</remarks>
+    [HtmlAttributeName("show-totals")]
+    public bool? ShowTotals { get; set; }
+
     /// <summary>The attribute names the view author actually wrote on this element.</summary>
     private HashSet<string> _writtenAttributes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -153,6 +163,16 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (Visible is { } visible)
         {
             builder.Visible(visible);
+        }
+
+        if (Expanded is { } expanded)
+        {
+            builder.Expanded(expanded);
+        }
+
+        if (ShowTotals is { } showTotals)
+        {
+            builder.ShowTotals(showTotals);
         }
     }
 }

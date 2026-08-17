@@ -43,6 +43,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       ariaLabel: "Pivot tablosu",
       rowFields: [],
       rowFieldLabels: [],
+      // Parallel to rowFields, following rowFieldLabels' shape. A false entry
+      // means that row field starts collapsed, or produces no total.
+      rowFieldExpanded: null,
+      rowFieldSubtotals: null,
       subtotals: true,
       valueKey: null,
       values: null,
@@ -108,6 +112,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const rowDepth = settings.layoutMode === "compact" ? 1 : actualRowDepth;
     const lookup = this.createCellLookup(cells);
     this.collapsedRows ??= new Set();
+    this.applyInitialCollapse(rowHeaders, actualRowDepth, settings);
     this.selectionMetadata = new WeakMap();
     const table = document.createElement("table");
     table.className = `pivot-table__table is-${settings.layoutMode}`;
@@ -149,6 +154,35 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     if (settings.restoreSelectionFocus) {
       this.restoreSelectedCellFocus(table);
     }
+  }
+
+  // Applied once per renderer, at its first render. After that the collapse set
+  // belongs to the user: re-applying it on every render would make a declared
+  // level impossible to open. A field change rebuilds the renderer, which is
+  // the right moment to honour the declaration again -- the hierarchy is new.
+  applyInitialCollapse(rowHeaders, rowDepth, settings) {
+    if (this.initialCollapseApplied) {
+      return;
+    }
+
+    this.initialCollapseApplied = true;
+
+    const declared = settings.rowFieldExpanded;
+    if (!Array.isArray(declared) || rowDepth < 2) {
+      return;
+    }
+
+    const collapsed = new Set(declared
+      .map((expanded, level) => (expanded === false ? level : -1))
+      .filter(level => level >= 0));
+
+    if (collapsed.size === 0) {
+      return;
+    }
+
+    this.createRowPlan(rowHeaders, rowDepth, settings)
+      .filter(row => row.type !== "detail" && collapsed.has(row.level))
+      .forEach(row => this.collapsedRows.add(row.key));
   }
 
   expandAll() {
@@ -295,6 +329,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       .filter(entry => Array.isArray(entry) && Number.isInteger(entry[0]) && Number.isFinite(entry[1]))
       .map(([columnIndex, width]) => [columnIndex, width]));
     this.collapsedRows = new Set(collapsedGroups.filter(key => typeof key === "string"));
+    // A restored view state is a decision the user already made, so the declared
+    // initial state must not overwrite it on the render that follows.
+    this.initialCollapseApplied = true;
 
     if (rerender) {
       this.rerenderLast();
@@ -769,10 +806,6 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   }
 
   createRowPlan(rowHeaders, rowDepth, settings) {
-    if (settings.subtotals && rowDepth > 1) {
-      return this.createSubtotalRowPlan(rowHeaders, settings);
-    }
-
     const items = rowHeaders.map((rowHeader, rowIndex) => ({ rowHeader, rowIndex }));
 
     if (!settings.sortState) {
@@ -781,7 +814,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     if (rowDepth > 1) {
       const plan = [];
-      this.appendGroupRows(plan, items, 0, rowDepth);
+      this.appendGroupRows(plan, items, 0, rowDepth, settings);
       return plan;
     }
 
@@ -794,7 +827,21 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }));
   }
 
-  appendGroupRows(plan, items, level, rowDepth) {
+  // Whether the groups at `level` carry a total. A "subtotal" row is a group
+  // header that also sums its rows; a "group" row is the same header without
+  // the sums. They already differed only in that, so a row field opting out of
+  // its totals is the same shape the grid uses when totals are off entirely --
+  // and both keep the same key, so collapse state survives the distinction.
+  subtotalsAt(level, settings) {
+    if (settings.subtotals === false) {
+      return false;
+    }
+
+    const perField = settings.rowFieldSubtotals;
+    return !Array.isArray(perField) || perField[level] !== false;
+  }
+
+  appendGroupRows(plan, items, level, rowDepth, settings) {
     if (level >= rowDepth - 1) {
       for (const item of items) {
         plan.push({
@@ -809,63 +856,20 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       return;
     }
 
+    const type = this.subtotalsAt(level, settings) ? "subtotal" : "group";
+
     for (const group of this.groupItemsByLevel(items, level)) {
       const groupHeader = group.items[0].rowHeader.slice(0, level + 1);
 
       plan.push({
-        type: "group",
+        type,
         key: this.createSubtotalKey(groupHeader),
         rowHeader: groupHeader,
         rowIndexes: group.items.map(item => item.rowIndex),
         level
       });
 
-      this.appendGroupRows(plan, group.items, level + 1, rowDepth);
-    }
-  }
-
-  createSubtotalRowPlan(rowHeaders, settings) {
-    const plan = [];
-    const rowDepth = Math.max(1, ...rowHeaders.map(header => header.length));
-    const items = rowHeaders.map((rowHeader, rowIndex) => ({ rowHeader, rowIndex }));
-
-    if (!settings.sortState) {
-      items.sort((left, right) => this.compareRowHeaders(left.rowHeader, right.rowHeader, rowDepth));
-    }
-
-    this.appendSubtotalGroups(plan, items, 0, rowDepth);
-
-    return plan;
-  }
-
-  appendSubtotalGroups(plan, items, level, rowDepth) {
-    if (level >= rowDepth - 1) {
-      for (const item of items) {
-        plan.push({
-          type: "detail",
-          key: `detail:${item.rowIndex}`,
-          rowHeader: item.rowHeader,
-          rowIndexes: [item.rowIndex],
-          level: rowDepth - 1
-        });
-      }
-
-      return;
-    }
-
-    for (const group of this.groupItemsByLevel(items, level)) {
-      const subtotalHeader = group.items[0].rowHeader.slice(0, level + 1);
-      const key = this.createSubtotalKey(subtotalHeader);
-
-      plan.push({
-        type: "subtotal",
-        key,
-        rowHeader: subtotalHeader,
-        rowIndexes: group.items.map(item => item.rowIndex),
-        level
-      });
-
-      this.appendSubtotalGroups(plan, group.items, level + 1, rowDepth);
+      this.appendGroupRows(plan, group.items, level + 1, rowDepth, settings);
     }
   }
 

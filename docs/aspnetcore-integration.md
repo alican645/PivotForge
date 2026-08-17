@@ -171,8 +171,10 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | `role` | inferred from `area` | One of `dimension`, `measure`. **Required** when `area` is `available`, because there is no placement to infer it from. Elsewhere it is inferred (`data` → `measure`, everything else → `dimension`); an explicit `role` that contradicts its `area` — e.g., `measure` outside `data` — is a validation error. See [role rules](#field-designer). |
 | `aggregation` | `"sum"` (only on `data` fields) | One of `sum`, `count`, `average`, `min`, `max`. Setting `aggregation` on a non-`data` field is a validation error. |
 | `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`. Setting `showAs` on a non-`data` field is a validation error. |
-| `format` | `null` | Number formatting for a `data` field's values: `{ type, decimals, useGrouping, currency }`, where `type` is `"number"` (default), `"currency"`, or `"percent"`, `decimals` is the fraction-digit count from 0 to 6 (default `2`), `useGrouping` toggles the thousands separator (default `true`), and `currency` is an ISO code used when `type` is `"currency"` (default `"TRY"`). Values are rendered with `Intl.NumberFormat` in the `tr-TR` locale. Declared from C# with `FormatType`/`FormatDecimals`/`FormatGrouping`/`FormatCurrency`, or from markup with `format-type`/`format-decimals`/`format-grouping`/`format-currency`. Setting a format on a non-`data` field is a validation error. |
+| `format` | `null` | Number formatting for a `data` field's values: `{ type, decimals, useGrouping, currency }`, where `type` is `"number"` (default), `"currency"`, or `"percent"`, `decimals` is the fraction-digit count from 0 to 6 (default `2`), `useGrouping` toggles the thousands separator (default `true`), and `currency` is an ISO code used when `type` is `"currency"` (default `"TRY"`). Values are rendered with `Intl.NumberFormat` in the reader's own locale unless the grid declares a `culture` — see [Localization](#localization). Declared from C# with `FormatType`/`FormatDecimals`/`FormatGrouping`/`FormatCurrency`, or from markup with `format-type`/`format-decimals`/`format-grouping`/`format-currency`. Setting a format on a non-`data` field is a validation error. |
 | `visible` | `true` | `false` configures a field without including it in the rendered request. |
+| `expanded` | `true` | Only on `row` fields. `false` collapses this level's groups at the grid's **first** render; after that the state belongs to the user, and a restored `state-storing` view wins. Declaring it on the deepest row field does nothing — that level's rows are the detail rows and have no groups. |
+| `showTotals` | `true` | Only on `row` fields. `false` leaves the group header in place without its sums, which is the same shape the grid uses when `subtotals` is off entirely — so a deep hierarchy can total the levels worth totalling and nowhere else. The grid-wide `subtotals="false"` still wins. |
 
 ### `PivotGridBuilder` (Razor)
 
@@ -373,8 +375,9 @@ Anything not listed here still needs `rendererOptions` through
 
 
 `<pivot-field>` attributes are `field` (the source column, required),
-`caption`, `area`, `role`, `aggregation`, `show-as`, `format`, and `visible`.
-`area` defaults to `Data`, matching `PivotFieldBuilder`.
+`caption`, `area`, `role`, `aggregation`, `show-as`, the four `format-*`
+attributes, `visible`, and — on `Row` fields only — `expanded` and
+`show-totals`. `area` defaults to `Data`, matching `PivotFieldBuilder`.
 
 `area`, `role`, `aggregation`, and `show-as` bind to the `PivotArea`,
 `PivotFieldRole`, `PivotAggregation`, and `PivotShowAs` enums, so a misspelled

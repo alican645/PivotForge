@@ -24,7 +24,9 @@ public class PivotTagHelperTests
         int? FormatDecimals = null,
         bool? FormatGrouping = null,
         string? FormatCurrency = null,
-        bool? Visible = null);
+        bool? Visible = null,
+        bool? Expanded = null,
+        bool? ShowTotals = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -90,6 +92,18 @@ public class PivotTagHelperTests
         {
             helper.Visible = visible;
             attributes.Add(new TagHelperAttribute("visible", visible));
+        }
+
+        if (spec.Expanded is { } expanded)
+        {
+            helper.Expanded = expanded;
+            attributes.Add(new TagHelperAttribute("expanded", expanded));
+        }
+
+        if (spec.ShowTotals is { } showTotals)
+        {
+            helper.ShowTotals = showTotals;
+            attributes.Add(new TagHelperAttribute("show-totals", showTotals));
         }
 
         return (helper, attributes);
@@ -640,6 +654,39 @@ public class PivotTagHelperTests
         // own locale instead of one the page picked for them.
         Assert.False(ambient.TryGetProperty("rendererOptions", out var renderer) &&
             renderer.TryGetProperty("culture", out _));
+    }
+
+    [Fact]
+    public async Task WritesExpandedAndShowTotalsOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge", Expanded: false, ShowTotals: false),
+            new FieldSpec("Category", PivotArea.Row, "Kategori"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var fields = declared.GetProperty("fields");
+        Assert.False(fields[0].GetProperty("expanded").GetBoolean());
+        Assert.False(fields[0].GetProperty("showTotals").GetBoolean());
+
+        // Omitted rather than written as true, so the browser's own default
+        // applies and the payload does not grow for every undeclared field.
+        Assert.False(fields[1].TryGetProperty("expanded", out _));
+        Assert.False(fields[1].TryGetProperty("showTotals", out _));
+    }
+
+    [Fact]
+    public void RefusesExpandedAndShowTotalsOutsideTheRowArea()
+    {
+        // Subtotals and collapsible groups are drawn on the row axis only.
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Year").Area(PivotArea.Column).Expanded(false).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build());
+
+        // The row area accepts both.
+        new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
+            .Expanded(false).ShowTotals(false).Build();
     }
 
     [Fact]

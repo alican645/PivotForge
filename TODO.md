@@ -81,8 +81,9 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `areaIndex` | ✅ | ❌ | Sıra bildirim sırasından geliyor, açıkça verilemiyor |
 | `sortOrder`, `sortBy` | ⚠️ | ❌ | Alan başına sıralama yok; yalnızca tablo geneli |
 | `sortBySummaryField` / `Path` | ⚠️ | ⚠️ | `RowTotalValue` var ama sütun yoluna göre değil |
-| `expanded` | ⚠️ | ❌ | `expandAll`/`collapseAll` var, alan başına başlangıç durumu yok |
-| `showTotals` / `showGrandTotals` (alan başına) | ❌ | ❌ | Yalnızca tablo geneli |
+| `expanded` | ✅ | ✅ | Alan başına başlangıç durumu; yalnızca ilk çizimde |
+| `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
+| `showGrandTotals` (alan başına) | ❌ | ❌ | Yalnızca tablo geneli |
 | `dataType` | ❌ | ❌ | Tür dönüşümü yok |
 | `groupInterval` (yıl/çeyrek/ay/gün) | ❌ | ❌ | **Önemli** — tarih gruplaması için ayrı alan açmak gerekiyor |
 | `selector` / `sortingMethod` | ❌ | ❌ | Özel gruplama/sıralama fonksiyonu |
@@ -98,8 +99,15 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 
 - [ ] `area-index` ile açık sıra
 - [ ] Alan başına `sort-order` / `sort-by`
-- [ ] `expanded` başlangıç durumu
-- [ ] Alan başına `show-totals` / `show-grand-totals`
+- [x] `expanded` başlangıç durumu — `Row` alanında `expanded="false"` o seviyenin
+      gruplarını **ilk** çizimde kapatıyor; sonrası kullanıcıya ait ve geri
+      yüklenen `state-storing` görünümü ona üstün geliyor
+- [x] Alan başına `show-totals` — `false` grup başlığını yerinde bırakıp
+      toplamlarını kaldırıyor; bu, ara toplamlar tümüyle kapalıyken zaten
+      kullanılan satır şeklinin aynısı, yani derin bir hiyerarşi yalnızca
+      toplanmaya değer seviyelerde toplam gösterebiliyor
+- [ ] Alan başına `show-grand-totals` — DevExpress'te sütun yönünde de anlamı
+      var, renderer'da karşılığı yok; ayrı bir tasarım kararı gerektiriyor
 - [ ] `group-interval` — tarih alanlarını yıl/çeyrek/ay/gün olarak gruplama
 - [ ] `data-type` ve tür dönüşümü
 - [ ] `width`, `word-wrap`

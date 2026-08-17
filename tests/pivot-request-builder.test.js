@@ -247,3 +247,46 @@ test("a list with no available fields and no roles builds the same request as be
     rowSort: null
   });
 });
+
+test("expanded and showTotals default to true on a row field", () => {
+  const [field] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Region", area: "row" }
+  ]);
+
+  assert.equal(field.expanded, true);
+  assert.equal(field.showTotals, true);
+});
+
+test("expanded and showTotals are carried through as declared", () => {
+  const [field] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Region", area: "row", expanded: false, showTotals: false }
+  ]);
+
+  assert.equal(field.expanded, false);
+  assert.equal(field.showTotals, false);
+});
+
+test("expanded and showTotals are refused outside the row area", () => {
+  // Subtotals and collapsible groups are drawn on the row axis only, so
+  // declaring either elsewhere would silently do nothing.
+  ["column", "filter", "data"].forEach(area => {
+    ["expanded", "showTotals"].forEach(member => {
+      assert.throws(
+        () => PivotForge.PivotRequestBuilder.normalizeFields([
+          { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension",
+            [member]: false }
+        ]),
+        new RegExp(`"${member}" is only valid on a "row" field`),
+        `${member} on ${area}`);
+    });
+  });
+});
+
+test("a non-row field that declares neither is untouched", () => {
+  const [field] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Year", area: "column" }
+  ]);
+
+  assert.equal(field.expanded, null);
+  assert.equal(field.showTotals, null);
+});

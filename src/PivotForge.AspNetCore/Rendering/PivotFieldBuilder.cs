@@ -16,6 +16,8 @@ public sealed class PivotFieldBuilder
     private bool? _formatGrouping;
     private string? _formatCurrency;
     private bool _visible = true;
+    private bool? _expanded;
+    private bool? _showTotals;
 
     /// <summary>Sets the source field name.</summary>
     /// <param name="dataField">The source field name.</param>
@@ -131,6 +133,35 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Sets whether this row field's groups start expanded.</summary>
+    /// <remarks>
+    /// Applied at the grid's first render only; after that the expansion state belongs to the
+    /// user. A restored <c>state-storing</c> view also wins, because it is a decision the user
+    /// already made. Valid on <see cref="PivotArea.Row"/> fields only.
+    /// </remarks>
+    /// <param name="expanded">False to collapse this level's groups initially.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder Expanded(bool expanded)
+    {
+        _expanded = expanded;
+        return this;
+    }
+
+    /// <summary>Sets whether this row field's groups carry a total row.</summary>
+    /// <remarks>
+    /// False leaves the group header in place without its sums, which is the same shape the grid
+    /// uses when subtotals are switched off entirely — so a deep hierarchy can show totals at the
+    /// levels worth totalling and nowhere else. Valid on <see cref="PivotArea.Row"/> fields only,
+    /// and only when the grid's own <c>subtotals</c> option is on.
+    /// </remarks>
+    /// <param name="showTotals">False to suppress this level's subtotal rows.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder ShowTotals(bool showTotals)
+    {
+        _showTotals = showTotals;
+        return this;
+    }
+
     /// <summary>Builds the browser field configuration.</summary>
     /// <returns>A dictionary matching the JavaScript field model.</returns>
     /// <exception cref="InvalidOperationException">
@@ -172,6 +203,15 @@ public sealed class PivotFieldBuilder
                 "Aggregation and ShowAs are only valid on fields whose Area is Data.");
         }
 
+        // Subtotals and collapsible groups are drawn on the row axis only, so
+        // declaring either elsewhere is a mistake rather than a no-op.
+        if (_area != PivotArea.Row && (_expanded is not null || _showTotals is not null))
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets Expanded or ShowTotals, but its Area is \"{_area}\". " +
+                "Expanded and ShowTotals are only valid on fields whose Area is Row.");
+        }
+
         // Only a data field produces the numbers the renderer formats.
         if (_area != PivotArea.Data && HasFormat)
         {
@@ -200,6 +240,16 @@ public sealed class PivotFieldBuilder
         if (_showAs is { } showAs)
         {
             field["showAs"] = ToCamelCase(showAs.ToString());
+        }
+
+        if (_expanded is { } expanded)
+        {
+            field["expanded"] = expanded;
+        }
+
+        if (_showTotals is { } showTotals)
+        {
+            field["showTotals"] = showTotals;
         }
 
         if (HasFormat)
