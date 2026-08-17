@@ -600,6 +600,34 @@ public class PivotTagHelperTests
         new PivotGridBuilder().EmptyText("");
     }
 
+    [Fact]
+    public async Task WritesTheDeclaredAccessibleNameAndOmitsItOtherwise()
+    {
+        var named = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", AriaLabel = "Bölge satışları" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(
+            "Bölge satışları",
+            named.GetProperty("rendererOptions").GetProperty("ariaLabel").GetString());
+
+        var unnamed = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        // Left out entirely rather than written as null, so the renderer keeps
+        // its own default instead of naming the grid "null".
+        Assert.False(unnamed.TryGetProperty("rendererOptions", out var renderer) &&
+            renderer.TryGetProperty("ariaLabel", out _));
+    }
+
+    [Fact]
+    public void RefusesABlankAccessibleName()
+    {
+        // A grid named " " is worse than an unnamed one: it silences the default.
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().AriaLabel("  "));
+    }
+
     // --- Declarative events ---------------------------------------------------
 
     [Fact]

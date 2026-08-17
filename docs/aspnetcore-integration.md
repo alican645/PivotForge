@@ -239,6 +239,7 @@ the renderer keeps its own default.
 | `max-column-width` | `MaxColumnWidth(int)` | `420` | Widest a column may be, in pixels. Must be positive. |
 | `empty-text` | `EmptyText(string)` | `-` | Shown in a cell with no value. May be empty to render nothing. |
 | `total-text` | `TotalText(string)` | `Toplam` | Caption for total rows and columns. Must not be blank. |
+| `aria-label` | `AriaLabel(string)` | `Pivot tablosu` | Accessible name announced for the grid. Must not be blank. Give two pivots on one page two different names, or a screen reader cannot tell them apart. |
 
 `selection-mode` and `layout-mode` are non-nullable enums so Razor accepts the
 unqualified member name; whether the attribute was written is recovered from
@@ -642,6 +643,45 @@ your own detail UI overrides the packaged one rather than fighting it. Setting
 Labels default to Turkish and are overridable through
 `drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
 `summary`, and `columnFilter` are substituted positionally.
+
+### Accessibility
+
+The rendered table declares **`role="grid"`**, which is a claim about behaviour
+as much as about markup: a grid promises arrow-key navigation, `Enter` to
+activate, and a single tab stop, and the renderer has shipped all of that since
+before the role was declared (`pivot-table.js`). Declaring it is what makes the
+behaviour discoverable — and what makes the `aria-selected` written on rows and
+cells mean anything. On a plain table `aria-selected` is an unsupported
+attribute that screen readers drop, so selection used to be visible and nothing
+more.
+
+Because the role **replaces** native table semantics rather than adding to them,
+every row and cell carries its own role: `rowgroup` on `thead`/`tbody`, `row` on
+`tr`, `columnheader` on head cells, `rowheader` on row labels, and `gridcell` on
+values. A cell left without one is a hole in the accessibility tree, not a
+fallback — which is why they are all built through one factory (`createCell`).
+
+- **Name the grid.** `aria-label` defaults to `Pivot tablosu`; a page with two
+  pivots needs two different names.
+- **`aria-rowcount` / `aria-rowindex` state the real size.** A screen reader
+  otherwise counts the rows in the DOM, which under virtual scrolling is a page:
+  "row 3 of 12" for a five-thousand-row pivot. Spacer rows claim no position,
+  and the grand total is indexed against the whole table rather than the page it
+  trails.
+- **`aria-sort`** on a sortable header, because the `▲`/`▼` glyph is
+  `aria-hidden`.
+- **Collapse toggles carry `aria-expanded` and a name.** Their entire content is
+  a `▸`/`▾` glyph, so without a name a screen reader announces "button" and
+  stops there.
+- **Designer zones are named groups.** Each zone body is a `role="group"`
+  labelled by its heading, so a chip is announced as "Satırlar, Bölge, düğme"
+  rather than "Bölge, düğme" — the zone is the only part that says where the
+  field currently is. Heading ids are namespaced per designer, so two panels on
+  one page do not collide.
+
+Still open: an **adaptive mobile layout**. The packaged `@media (max-width:
+720px)` rules cover the demo's page layout, not the designer zones or the filter
+picker.
 
 ### Known limitations
 

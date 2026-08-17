@@ -198,6 +198,20 @@ public sealed class PivotGridBuilder : IHtmlContent
         return SetRenderer("totalText", text);
     }
 
+    /// <summary>Sets the accessible name announced for the grid.</summary>
+    /// <remarks>
+    /// The rendered table declares <c>role="grid"</c>, which needs a name; a page carrying
+    /// two pivots needs two different ones, or a screen reader cannot tell them apart.
+    /// </remarks>
+    /// <param name="label">The accessible name.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The label is null or blank.</exception>
+    public PivotGridBuilder AriaLabel(string label)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        return SetRenderer("ariaLabel", label);
+    }
+
     /// <summary>Names a page function called before each data request.</summary>
     /// <param name="handler">The function name, optionally a dotted path.</param>
     /// <returns>This builder.</returns>

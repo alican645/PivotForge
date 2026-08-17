@@ -223,7 +223,8 @@ aralarında geçmesi için — kendi durum şeması demoya ait, bildirimsel yol 
 ## Bölüm 8 — Erişilebilirlik ve platform
 
 Sürükleme Pointer Events'e taşındı; fare, dokunmatik, kalem ve klavye aynı
-taşıma işlemini paylaşıyor. Kalan açık ARIA ve mobil düzen tarafında.
+taşıma işlemini paylaşıyor. Tablo `role="grid"` ilan ediyor. Kalan tek açık
+uyarlanabilir mobil düzen.
 
 - [x] Dokunmatik sürükle-bırak — çipteki tutamaç (`⠿`) `touch-action: none`
       taşıyor, gövdesi taşımıyor: parmakla liste kaydırılabiliyor, tutamaçtan
@@ -236,8 +237,18 @@ taşıma işlemini paylaşıyor. Kalan açık ARIA ve mobil düzen tarafında.
       birlikte gidiyor.
 - [x] ~~Tablo içinde klavye gezinme~~ — **zaten vardı:** ok tuşları, Enter/Space,
       Ctrl+C, ContextMenu/Shift+F10 ve gezinen `tabIndex` (`pivot-table.js:931-1010`)
-- [ ] ARIA rolleri ve ekran okuyucu desteği (WCAG)
-- [ ] Uyarlanabilir (adaptive) mobil düzen
+- [x] ARIA rolleri ve ekran okuyucu desteği — tablo `role="grid"` ilan ediyor;
+      `rowgroup`/`row`/`columnheader`/`rowheader`/`gridcell` rolleri tek bir
+      hücre fabrikasından geçiyor, böylece unutulabilecek bir yer kalmıyor.
+      `aria-selected` artık gerçekten işliyor (düz tabloda ekran okuyucu onu
+      atıyordu). Ayrıca: `aria-label` niteliğiyle bildirilebilen erişilebilir
+      ad, sanallaştırmada doğru sayıyı veren `aria-rowcount`/`aria-rowindex`,
+      sıralanabilir başlıkta `aria-sort`, daralt/genişlet düğmelerinde
+      `aria-expanded` + ad, tasarımcı bölgelerinde başlığıyla adlandırılmış
+      `role="group"`
+- [ ] Uyarlanabilir (adaptive) mobil düzen — mevcut `@media (max-width: 720px)`
+      yalnızca demo düzenini kapsıyor; tasarımcı bölgeleri ve filtre seçici
+      kapsam dışı
 
 ---
 
@@ -260,7 +271,7 @@ Sizin önceliğiniz "az kodla çok iş" olduğu için sıralama işlevsel büyü
 2. **Bölüm 1'in ucuz kalemleri** — `show-as`, `area-index`, `expanded`, alan başına toplamlar.
 3. **Bölüm 2** — filtre değer seçici. Tasarımcının Filtreler bölgesi bugün işlevsiz;
    bu onu tamamlayan parça.
-4. **Bölüm 8** — ~~dokunmatik + klavye~~ ikisi de tamam; kalan ARIA ve mobil düzen.
+4. **Bölüm 8** — ~~dokunmatik + klavye + ARIA~~ tamam; kalan yalnızca mobil düzen.
 5. **Bölüm 3** — hesaplanmış alanlar. En büyük tasarım işi, en sona.
 
 ---

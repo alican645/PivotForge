@@ -157,6 +157,13 @@
       this.render();
     }
 
+    // aria-labelledby needs an id, and two designers on one page must not both
+    // claim it. The host's own id is the natural namespace when it has one.
+    zoneHeadingId(area) {
+      this.instanceId ??= this.host.id || `pivotforge-designer-${++PivotFieldDesigner.instances}`;
+      return `${this.instanceId}-${area}-heading`;
+    }
+
     createChip(name, area) {
       const document = root.document;
       const field = this.state.field(name);
@@ -992,11 +999,17 @@
 
       const head = document.createElement("div");
       head.className = "pivot-zone__head";
+      head.id = this.zoneHeadingId(area);
       head.textContent = this.labels[area];
       zone.appendChild(head);
 
       const body = document.createElement("div");
       body.className = "pivot-zone__body";
+      // Without this the chips are announced as bare buttons: "Bölge, düğme"
+      // rather than "Satırlar, Bölge, düğme", which is the only part that says
+      // where the field currently is.
+      body.setAttribute("role", "group");
+      body.setAttribute("aria-labelledby", head.id);
       zone.appendChild(body);
       this.zoneBodies.push(body);
       this.zoneElements.push(zone);
@@ -1037,6 +1050,7 @@
 
       const head = document.createElement("div");
       head.className = "pivot-section__head";
+      head.id = this.zoneHeadingId("available");
       head.textContent = this.labels.available;
       section.appendChild(head);
 
@@ -1051,6 +1065,8 @@
       search.dataset.action = "search";
       search.value = this.searchTerm;
       search.setAttribute("placeholder", this.labels.search);
+      // A placeholder is not a label: it disappears as soon as the user types.
+      search.setAttribute("aria-label", this.labels.search);
       // Search is a pure display filter over the already-loaded available list:
       // it must never touch the state and must never trigger widget.update(),
       // so it re-renders only the chip body directly, bypassing apply().
@@ -1063,6 +1079,8 @@
 
       const body = document.createElement("div");
       body.className = "pivot-field-list";
+      body.setAttribute("role", "group");
+      body.setAttribute("aria-labelledby", head.id);
       section.appendChild(body);
       this.zones.set("available", { zone: section, body, area: "available" });
       this.zoneBodies.push(body);
@@ -1211,6 +1229,8 @@
       this.host.replaceChildren();
     }
   }
+
+  PivotFieldDesigner.instances = 0;
 
   PivotForge.PivotFieldDesigner = PivotFieldDesigner;
 

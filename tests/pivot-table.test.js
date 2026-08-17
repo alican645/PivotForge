@@ -349,3 +349,62 @@ test("cell copy uses displayed text and reports success", async () => {
   assert.deepEqual(callback, { text: "₺1.250", succeeded: true });
   assert.equal(classes.has("is-cell-copied"), true);
 });
+
+// --- Grid row indexing -------------------------------------------------------
+
+// applyGridIndexes only reads a table's shape, so it can be exercised without a
+// DOM — which matters, because the arithmetic it does is precisely the part a
+// browser test cannot reach: the demo page is not virtualized.
+function fakeRow({ spacer = false, key = null } = {}) {
+  return {
+    attributes: {},
+    dataset: key ? { selectionRowKey: key } : {},
+    classList: { contains: name => spacer && name === "pivot-table__virtual-spacer" },
+    setAttribute(name, value) { this.attributes[name] = value; }
+  };
+}
+
+function fakeTable(headRows, bodyRows) {
+  return {
+    attributes: {},
+    tHead: { rows: headRows },
+    tBodies: [{ rows: bodyRows }],
+    setAttribute(name, value) { this.attributes[name] = value; }
+  };
+}
+
+test("a virtual page states its real position and the table's real size", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const head = [fakeRow(), fakeRow()];
+  const top = fakeRow({ spacer: true });
+  const data = [fakeRow(), fakeRow(), fakeRow()];
+  const bottom = fakeRow({ spacer: true });
+  const grandTotal = fakeRow({ key: "grand-total" });
+
+  const table = fakeTable(head, [top, ...data, bottom, grandTotal]);
+  renderer.applyGridIndexes(table, { offset: 40, totalRowCount: 5000 });
+
+  // Otherwise a screen reader announces "row 3 of 12" for a 5000-row pivot.
+  assert.equal(table.attributes["aria-rowcount"], "5002");
+  // The window starts at offset 40, so its first row is the 41st data row —
+  // the 43rd row of the grid once the two header rows are counted.
+  assert.deepEqual(data.map(row => row.attributes["aria-rowindex"]), ["43", "44", "45"]);
+  // Spacers stand in for rows that are not there; they must claim no position.
+  assert.equal(top.attributes["aria-rowindex"], undefined);
+  assert.equal(bottom.attributes["aria-rowindex"], undefined);
+  // The grand total follows the whole table, not the page it happens to trail.
+  assert.equal(grandTotal.attributes["aria-rowindex"], "5002");
+});
+
+test("without virtualization the indexes are simply the rows that are there", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const head = [fakeRow()];
+  const data = [fakeRow(), fakeRow()];
+
+  const table = fakeTable(head, data);
+  renderer.applyGridIndexes(table, null);
+
+  assert.equal(table.attributes["aria-rowcount"], "3");
+  assert.equal(head[0].attributes["aria-rowindex"], "1");
+  assert.deepEqual(data.map(row => row.attributes["aria-rowindex"]), ["2", "3"]);
+});

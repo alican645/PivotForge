@@ -1782,3 +1782,19 @@ test("a key pressed on a chip control belongs to that control, not to the chip",
 
   assert.equal(designer.grab, null);
 });
+
+test("two designers on one page do not claim the same heading ids", () => {
+  const first = build();
+  const second = build();
+
+  const ids = area => [first.designer.zoneHeadingId(area), second.designer.zoneHeadingId(area)];
+
+  ["available", "row", "column", "data", "filter"].forEach(area => {
+    const [left, right] = ids(area);
+    assert.notEqual(left, right, area);
+  });
+
+  // Stable across calls, or aria-labelledby would point at a heading that has
+  // since been renamed out from under it.
+  assert.equal(first.designer.zoneHeadingId("row"), ids("row")[0]);
+});

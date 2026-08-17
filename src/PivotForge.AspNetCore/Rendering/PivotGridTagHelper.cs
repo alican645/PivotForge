@@ -126,6 +126,10 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("total-text")]
     public string? TotalText { get; set; }
 
+    /// <summary>Gets or sets the accessible name announced for the grid.</summary>
+    [HtmlAttributeName("aria-label")]
+    public string? AriaLabel { get; set; }
+
     /// <summary>Gets or sets the page function called before each data request.</summary>
     /// <remarks>
     /// Every event attribute names a function on the page, optionally as a dotted path
@@ -289,6 +293,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (EmptyText is { } emptyText)
         {
             builder.EmptyText(emptyText);
+        }
+
+        if (AriaLabel is { } ariaLabel)
+        {
+            builder.AriaLabel(ariaLabel);
         }
 
         if (TotalText is { } totalText)

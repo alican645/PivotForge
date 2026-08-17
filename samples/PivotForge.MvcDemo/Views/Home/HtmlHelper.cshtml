@@ -55,6 +55,7 @@
                     .RepeatRowLabels(true)
                     .MinColumnWidth(96)
                     .TotalText("Genel Toplam")
+                    .AriaLabel("Bölge ve kategori bazında satışlar")
                     .OnSelectionChanged("pivotSelectionChanged")
                     .RowSort(PivotSort.RowTotal("Amount_sum", PivotSortDirection.Descending))
                     .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual,
@@ -102,6 +103,7 @@
     .RepeatRowLabels(true)
     .MinColumnWidth(96)
     .TotalText("Genel Toplam")
+    .AriaLabel("Bölge ve kategori bazında satışlar")
     .OnSelectionChanged("pivotSelectionChanged")
     .RowSort(PivotSort.RowTotal("Amount_sum", PivotSortDirection.Descending))
     .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual,
