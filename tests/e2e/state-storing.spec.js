@@ -71,7 +71,7 @@ test("a filter selection survives a reload and still filters", async ({ page }) 
     .toHaveText("(3)");
   const state = await storedState(page);
   expect(state.filters).toEqual([
-    { field: "Quarter", values: expect.arrayContaining(["Ç1"]) }
+    { field: "Quarter", values: expect.arrayContaining(["Ç1"]), mode: "Include" }
   ]);
 });
 
