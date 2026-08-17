@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using PivotForge.Core;
 using PivotForge.Core.Records;
 
@@ -6,6 +7,106 @@ namespace PivotForge.Core.Tests;
 
 public sealed class PivotEngineTests
 {
+    // In Turkish Ç is a letter of its own, sorting after every word that starts
+    // with C. Elsewhere it is a variant of C, so the letters after it decide.
+    // "Cx" and "Ça" therefore swap places between the two — which is exactly the
+    // difference a hard-coded tr-TR hid from every other consumer.
+    private static readonly Order[] TurkishLabels =
+    [
+        new Order("Zonguldak", 2026, "A", 1m),
+        new Order("Çanakkale", 2026, "A", 2m),
+        new Order("Corum", 2026, "A", 3m)
+    ];
+
+    private static readonly PivotRequest LabelRequest = new()
+    {
+        Rows = ["Region"],
+        Values = [PivotValueDefinition.Sum("Amount")]
+    };
+
+    private static string[] RowLabels(PivotResult result)
+        => result.RowHeaders.Select(header => header[0]!).ToArray();
+
+    [Fact]
+    public void Execute_CollatesRowLabels_WithTheCultureItWasGiven()
+    {
+        var turkish = new PivotEngine(CultureInfo.GetCultureInfo("tr-TR"))
+            .Execute(TurkishLabels, LabelRequest);
+        var english = new PivotEngine(CultureInfo.GetCultureInfo("en-US"))
+            .Execute(TurkishLabels, LabelRequest);
+
+        Assert.Equal(["Corum", "Çanakkale", "Zonguldak"], RowLabels(turkish));
+        Assert.Equal(["Çanakkale", "Corum", "Zonguldak"], RowLabels(english));
+    }
+
+    [Fact]
+    public void Execute_CollatesRowLabels_WithTheAmbientCultureByDefault()
+    {
+        var original = CultureInfo.CurrentCulture;
+
+        try
+        {
+            // Resolved per call rather than cached, so a request-scoped culture —
+            // which is what ASP.NET's request localization sets — is honoured.
+            var engine = new PivotEngine();
+
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("tr-TR");
+            Assert.Equal(
+                ["Corum", "Çanakkale", "Zonguldak"],
+                RowLabels(engine.Execute(TurkishLabels, LabelRequest)));
+
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            Assert.Equal(
+                ["Çanakkale", "Corum", "Zonguldak"],
+                RowLabels(engine.Execute(TurkishLabels, LabelRequest)));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Fact]
+    public void Execute_CollatesAnExplicitLabelSort_WithTheSameCulture()
+    {
+        // A declared RowLabel sort takes a different path through the engine than
+        // the default ordering does, and used to carry its own hard-coded tr-TR.
+        var request = new PivotRequest
+        {
+            Rows = ["Region"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            RowSort = PivotSort.RowLabel("Region", PivotSortDirection.Ascending)
+        };
+
+        var turkish = new PivotEngine(CultureInfo.GetCultureInfo("tr-TR"))
+            .Execute(TurkishLabels, request);
+        var english = new PivotEngine(CultureInfo.GetCultureInfo("en-US"))
+            .Execute(TurkishLabels, request);
+
+        Assert.Equal(["Corum", "Çanakkale", "Zonguldak"], RowLabels(turkish));
+        Assert.Equal(["Çanakkale", "Corum", "Zonguldak"], RowLabels(english));
+    }
+
+    [Fact]
+    public void Execute_RefusesANullCulture()
+    {
+        Assert.Throws<ArgumentNullException>(() => new PivotEngine(null!));
+    }
+
+    [Fact]
+    public void DistinctValues_OrdersThePickerListInTheReadersCulture()
+    {
+        var turkish = new PivotEngine(CultureInfo.GetCultureInfo("tr-TR"))
+            .DistinctValues(TurkishLabels, "Region");
+        var english = new PivotEngine(CultureInfo.GetCultureInfo("en-US"))
+            .DistinctValues(TurkishLabels, "Region");
+
+        // The picker shows this list to a person, so it is sorted the way that
+        // person reads rather than by code point.
+        Assert.Equal(["Corum", "Çanakkale", "Zonguldak"], turkish);
+        Assert.Equal(["Çanakkale", "Corum", "Zonguldak"], english);
+    }
+
     [Fact]
     public void Execute_GroupsRowsAndColumns_WithSum()
     {

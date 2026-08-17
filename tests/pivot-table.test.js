@@ -408,3 +408,89 @@ test("without virtualization the indexes are simply the rows that are there", ()
   assert.equal(head[0].attributes["aria-rowindex"], "1");
   assert.deepEqual(data.map(row => row.attributes["aria-rowindex"]), ["2", "3"]);
 });
+
+// --- Culture and texts -------------------------------------------------------
+
+test("numbers are formatted in the reader's own locale unless a culture is pinned", () => {
+  const value = { key: "amount", format: { type: "number", decimals: 2, useGrouping: true } };
+  const settings = culture => ({ culture, formatter: null });
+
+  assert.equal(
+    new window.PivotForge.PivotTableRenderer({}).formatValue(1234.5, settings("tr-TR"), value),
+    "1.234,50");
+  assert.equal(
+    new window.PivotForge.PivotTableRenderer({}).formatValue(1234.5, settings("en-US"), value),
+    "1,234.50");
+
+  // No culture hands the decision to Intl, which is the reader's own locale —
+  // a package that hard-codes one gives everyone else the wrong separator.
+  assert.equal(
+    new window.PivotForge.PivotTableRenderer({}).formatValue(1234.5, settings(null), value),
+    new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true
+    }).format(1234.5));
+});
+
+test("a declared culture reaches the default formatter too", () => {
+  const german = new window.PivotForge.PivotTableRenderer({}, { culture: "de-DE" });
+
+  assert.equal(german.options.formatter.format(1234.5), "1.234,5");
+});
+
+test("a declared currency is rendered in the declared culture", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const value = { key: "amount", format: { type: "currency", decimals: 0, currency: "EUR" } };
+
+  // Currency takes its own branch through formatValue, and carried its own
+  // hard-coded tr-TR: a German page showed euros with Turkish separators.
+  assert.match(renderer.formatValue(1500, { culture: "de-DE" }, value), /1\.500/);
+  assert.match(renderer.formatValue(1500, { culture: "en-US" }, value), /1,500/);
+});
+
+test("a percent is rendered in the declared culture too", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const value = { key: "share", format: { type: "percent", decimals: 1 } };
+
+  assert.match(renderer.formatValue(12.5, { culture: "tr-TR" }, value), /12,5/);
+  assert.match(renderer.formatValue(12.5, { culture: "en-US" }, value), /12\.5/);
+});
+
+test("overriding one text keeps every other default", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({}, { texts: { noData: "No data" } });
+
+  const resolved = renderer.resolveTexts();
+
+  // Spreading the override over the whole map instead of merging would leave
+  // every key the caller did not think to repeat rendering as undefined.
+  assert.equal(resolved.noData, "No data");
+  assert.equal(resolved.cellActions, "Hücre işlemleri");
+  assert.equal(resolved.sortByValue, "Bu değere göre sırala");
+});
+
+test("a per-render text override layers over the constructor's, not under it", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer(
+    {}, { texts: { noData: "No data", copyCell: "Copy cell" } });
+
+  const resolved = renderer.resolveTexts({ texts: { noData: "Keine Daten" } });
+
+  assert.equal(resolved.noData, "Keine Daten");
+  assert.equal(resolved.copyCell, "Copy cell");
+  assert.equal(resolved.cellActions, "Hücre işlemleri");
+});
+
+test("context menu labels come from the supplied text map", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const english = {
+    openDetails: "Open details",
+    copyCell: "Copy cell",
+    copyRow: "Copy row",
+    sortByValue: "Sort by this value",
+    filterByValue: "Filter by this value",
+    addConditionalFormat: "Add conditional format"
+  };
+
+  const items = renderer.createContextMenuItems(
+    { value: 1, rowHeader: ["x"], columnHeader: [], valueKey: "amount" }, english);
+
+  assert.deepEqual(items.map(item => item.label), Object.values(english));
+});

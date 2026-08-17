@@ -1,6 +1,33 @@
 (function (root) {
 const PivotForge = root.PivotForge ??= {};
 
+// Every string the renderer puts on screen. Declared here rather than inline so
+// a non-Turkish consumer can replace them without forking the file; a key left
+// out of `texts` keeps its default, exactly as the designer's `labels` work.
+// `{0}` is substituted positionally.
+const TEXTS = {
+  rowLabels: "Satır Etiketleri",
+  rowsHeading: "Rows",
+  rowHeading: "Row {0}",
+  noData: "Veri yok",
+  cellActions: "Hücre işlemleri",
+  openDetails: "Detayı aç",
+  copyCell: "Hücreyi kopyala",
+  copyRow: "Satırı kopyala",
+  sortByValue: "Bu değere göre sırala",
+  filterByValue: "Bu değere göre filtrele",
+  addConditionalFormat: "Koşullu biçimlendirme ekle",
+  resizeColumn: "Sütun genişliğini değiştir",
+  sortField: "{0} alanını sırala",
+  sortActive: "{0} sıralaması aktif"
+};
+
+function formatText(template, ...values) {
+  return values.reduce(
+    (result, value, index) => result.replaceAll(`{${index}}`, String(value)),
+    String(template));
+}
+
 PivotForge.PivotTableRenderer = class PivotTableRenderer {
   constructor(container, options = {}) {
     if (!container) {
@@ -38,7 +65,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       repeatRowLabels: false,
       minColumnWidth: 72,
       maxColumnWidth: 420,
-      formatter: new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }),
+      // Left null so Intl falls back to the reader's own locale: a package that
+      // hard-codes one gives every other reader the wrong decimal separator.
+      culture: null,
+      texts: null,
+      formatter: new Intl.NumberFormat(
+        options.culture ?? undefined, { maximumFractionDigits: 2 }),
       ...options
     };
     this.columnWidths = new Map();
@@ -47,7 +79,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   }
 
   render(result, options = {}) {
-    const settings = { ...this.options, ...options };
+    const settings = { ...this.options, ...options, texts: this.resolveTexts(options) };
     this.lastResult = result;
     this.lastOptions = options;
     this.lastSettings = settings;
@@ -336,8 +368,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       if (level === 0) {
         for (let rowLevel = 0; rowLevel < rowDepth; rowLevel++) {
-          const label = settings.rowFieldLabels[rowLevel] ?? (rowDepth === 1 ? "Rows" : `Row ${rowLevel + 1}`);
-          const displayLabel = settings.layoutMode === "compact" ? "Satır Etiketleri" : label;
+          const label = settings.rowFieldLabels[rowLevel] ?? (rowDepth === 1
+            ? settings.texts.rowsHeading
+            : formatText(settings.texts.rowHeading, rowLevel + 1));
+          const displayLabel = settings.layoutMode === "compact"
+            ? settings.texts.rowLabels
+            : label;
           const corner = this.createCell("th", displayLabel, "pivot-table__corner");
           corner.rowSpan = columnDepth + measureDepth;
           corner.dataset.stickyColumn = String(rowLevel);
@@ -475,7 +511,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     if (rowHeaders.length === 0) {
       const row = this.createRow();
-      const empty = this.createCell("td", "Veri yok", "pivot-table__empty");
+      const empty = this.createCell("td", settings.texts.noData, "pivot-table__empty");
       empty.colSpan = rowDepth + Math.max(1, columnHeaders.length) * values.length + values.length;
       row.appendChild(empty);
       tbody.appendChild(row);
@@ -1236,9 +1272,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const menu = document.createElement("div");
     menu.className = "pivot-cell-menu";
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "Hücre işlemleri");
+    menu.setAttribute("aria-label", (settings.texts ?? TEXTS).cellActions);
 
-    this.createContextMenuItems(selection).forEach(item => {
+    this.createContextMenuItems(selection, settings.texts ?? TEXTS).forEach(item => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "pivot-cell-menu__item";
@@ -1264,18 +1300,22 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     return menu;
   }
 
-  createContextMenuItems(selection) {
+  createContextMenuItems(selection, texts = TEXTS) {
     const isNumeric = typeof selection?.value === "number";
     const hasDimensionPath = (selection?.rowHeader?.length ?? 0) + (selection?.columnHeader?.length ?? 0) > 0;
     const canSort = isNumeric && selection?.rowType !== "grandTotal" && selection?.rowType !== "group";
 
     return [
-      { action: "details", label: "Detayı aç", disabled: selection?.drillDownEnabled === false },
-      { action: "copy-cell", label: "Hücreyi kopyala", disabled: false },
-      { action: "copy-row", label: "Satırı kopyala", disabled: false },
-      { action: "sort", label: "Bu değere göre sırala", disabled: !canSort },
-      { action: "filter", label: "Bu değere göre filtrele", disabled: !hasDimensionPath },
-      { action: "conditional", label: "Koşullu biçimlendirme ekle", disabled: !isNumeric || !selection?.valueKey }
+      { action: "details", label: texts.openDetails, disabled: selection?.drillDownEnabled === false },
+      { action: "copy-cell", label: texts.copyCell, disabled: false },
+      { action: "copy-row", label: texts.copyRow, disabled: false },
+      { action: "sort", label: texts.sortByValue, disabled: !canSort },
+      { action: "filter", label: texts.filterByValue, disabled: !hasDimensionPath },
+      {
+        action: "conditional",
+        label: texts.addConditionalFormat,
+        disabled: !isNumeric || !selection?.valueKey
+      }
     ];
   }
 
@@ -1510,7 +1550,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       handle.className = "pivot-table__resize-handle";
       handle.setAttribute("role", "separator");
       handle.setAttribute("aria-orientation", "vertical");
-      handle.title = "Sütun genişliğini değiştir";
+      handle.title = (settings.texts ?? TEXTS).resizeColumn;
       header.appendChild(handle);
 
       handle.addEventListener("click", event => {
@@ -1755,6 +1795,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     return cell;
   }
 
+  // Merged rather than spread, or a caller overriding one string would drop
+  // every other default along with it — and the renderer would render blanks
+  // for every key they did not think to repeat.
+  resolveTexts(options = {}) {
+    return { ...TEXTS, ...(this.options.texts ?? {}), ...(options.texts ?? {}) };
+  }
+
   createRow(className = null) {
     const row = document.createElement("tr");
     row.setAttribute("role", "row");
@@ -1815,7 +1862,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const button = document.createElement("button");
     button.className = "pivot-table__sort-button";
     button.type = "button";
-    button.title = `${label} alanını sırala`;
+    button.title = formatText(settings.texts.sortField, label);
 
     const text = document.createElement("span");
     text.className = "pivot-table__sort-label";
@@ -1833,7 +1880,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       const descending = settings.sortState.direction === "Descending";
       indicator.textContent = descending ? "▼" : "▲";
       button.classList.add("is-active");
-      button.title = `${label} sıralaması aktif`;
+      button.title = formatText(settings.texts.sortActive, label);
       cell.setAttribute("aria-sort", descending ? "descending" : "ascending");
     } else {
       indicator.textContent = "↕";
@@ -1919,16 +1966,16 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     if (format.type === "currency") {
       options.style = "currency";
       options.currency = format.currency || "TRY";
-      return new Intl.NumberFormat("tr-TR", options).format(value);
+      return new Intl.NumberFormat(settings.culture ?? undefined, options).format(value);
     }
 
     if (format.type === "percent") {
       options.style = "percent";
       const normalizedValue = this.isPercentShowAs(valueDefinition?.showAs) ? value : value / 100;
-      return new Intl.NumberFormat("tr-TR", options).format(normalizedValue);
+      return new Intl.NumberFormat(settings.culture ?? undefined, options).format(normalizedValue);
     }
 
-    return new Intl.NumberFormat("tr-TR", options).format(value);
+    return new Intl.NumberFormat(settings.culture ?? undefined, options).format(value);
   }
 
   summarizeValues(values, valueDefinition) {

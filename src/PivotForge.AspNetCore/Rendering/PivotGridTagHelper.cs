@@ -130,6 +130,14 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("aria-label")]
     public string? AriaLabel { get; set; }
 
+    /// <summary>Gets or sets the culture used to format numbers in the browser.</summary>
+    /// <remarks>
+    /// Left unset, numbers are formatted in the reader's own locale. Server-side collation
+    /// is separate and follows the request's culture.
+    /// </remarks>
+    [HtmlAttributeName("culture")]
+    public string? Culture { get; set; }
+
     /// <summary>Gets or sets the page function called before each data request.</summary>
     /// <remarks>
     /// Every event attribute names a function on the page, optionally as a dotted path
@@ -298,6 +306,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (AriaLabel is { } ariaLabel)
         {
             builder.AriaLabel(ariaLabel);
+        }
+
+        if (Culture is { } culture)
+        {
+            builder.Culture(culture);
         }
 
         if (TotalText is { } totalText)

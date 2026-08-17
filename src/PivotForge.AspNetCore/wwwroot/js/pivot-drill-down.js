@@ -46,8 +46,10 @@
     // Turns a declared value format into a column formatter, so a detail table
     // renders its numbers exactly as the pivot cells above it do. Mirrors
     // PivotTableRenderer.formatValue; returns null when nothing was declared,
-    // which leaves formatValue falling back to plain String().
-    createFormatter(format) {
+    // which leaves formatValue falling back to plain String(). A null culture
+    // means the reader's own locale, which is also the renderer's default —
+    // the two must agree or the modal contradicts the table it came from.
+    createFormatter(format, culture = null) {
       if (!format) {
         return null;
       }
@@ -66,7 +68,7 @@
         options.style = "percent";
       }
 
-      const formatter = new Intl.NumberFormat("tr-TR", options);
+      const formatter = new Intl.NumberFormat(culture ?? undefined, options);
 
       return value => {
         if (value === null || value === undefined) {

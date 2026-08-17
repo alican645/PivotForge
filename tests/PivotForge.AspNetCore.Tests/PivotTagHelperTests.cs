@@ -622,6 +622,33 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesTheDeclaredCultureAndOmitsItOtherwise()
+    {
+        var pinned = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", Culture = "de-DE" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(
+            "de-DE",
+            pinned.GetProperty("rendererOptions").GetProperty("culture").GetString());
+
+        var ambient = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        // Omitted rather than defaulted, so the browser formats in the reader's
+        // own locale instead of one the page picked for them.
+        Assert.False(ambient.TryGetProperty("rendererOptions", out var renderer) &&
+            renderer.TryGetProperty("culture", out _));
+    }
+
+    [Fact]
+    public void RefusesABlankCulture()
+    {
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().Culture("  "));
+    }
+
+    [Fact]
     public void RefusesABlankAccessibleName()
     {
         // A grid named " " is worse than an unnamed one: it silences the default.

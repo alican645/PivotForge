@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using PivotForge.Core.Aggregation;
 using PivotForge.Core.Records;
 
@@ -7,6 +8,30 @@ namespace PivotForge.Core;
 /// <summary>Builds pivot results and resolves source records behind pivot coordinates.</summary>
 public sealed class PivotEngine
 {
+    private readonly CultureInfo? culture;
+
+    /// <summary>Creates an engine that collates row labels with the ambient culture.</summary>
+    /// <remarks>
+    /// Collation is resolved per call from <see cref="CultureInfo.CurrentCulture"/>, so an
+    /// ASP.NET application with request localization configured sorts each request in that
+    /// request's culture without wiring anything up.
+    /// </remarks>
+    public PivotEngine()
+    {
+    }
+
+    /// <summary>Creates an engine that collates row labels with a fixed culture.</summary>
+    /// <param name="culture">The culture used to compare row labels.</param>
+    /// <exception cref="ArgumentNullException">The culture is null.</exception>
+    public PivotEngine(CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(culture);
+        this.culture = culture;
+    }
+
+    // Read per call rather than cached, because CurrentCulture is per request.
+    private CultureInfo Culture => this.culture ?? CultureInfo.CurrentCulture;
+
     /// <summary>Builds a pivot result from strongly typed records.</summary>
     /// <typeparam name="T">The source record type.</typeparam>
     /// <param name="records">The source records.</param>
@@ -27,7 +52,7 @@ public sealed class PivotEngine
         ArgumentNullException.ThrowIfNull(request);
 
         var materialized = Materialize(records, cancellationToken);
-        return ExecuteCore(materialized, request, new ObjectRecordReader<T>(), cancellationToken);
+        return ExecuteCore(materialized, request, new ObjectRecordReader<T>(), Culture, cancellationToken);
     }
 
     /// <summary>Builds a pivot result from a data table.</summary>
@@ -47,7 +72,12 @@ public sealed class PivotEngine
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(request);
 
-        return ExecuteCore(table.Rows.Cast<DataRow>().Cast<object>(), request, new DataTableRecordReader(table), cancellationToken);
+        return ExecuteCore(
+            table.Rows.Cast<DataRow>().Cast<object>(),
+            request,
+            new DataTableRecordReader(table),
+            Culture,
+            cancellationToken);
     }
 
     /// <summary>Builds a pivot result from dictionary-backed records.</summary>
@@ -77,7 +107,7 @@ public sealed class PivotEngine
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return ExecuteCore(materialized, request, new DictionaryRecordReader(fields), cancellationToken);
+        return ExecuteCore(materialized, request, new DictionaryRecordReader(fields), Culture, cancellationToken);
     }
 
     /// <summary>Returns strongly typed records matching row and column paths.</summary>
@@ -163,7 +193,7 @@ public sealed class PivotEngine
     {
         ArgumentNullException.ThrowIfNull(records);
 
-        return DistinctValuesCore(records.Cast<object>(), field, new ObjectRecordReader<T>());
+        return DistinctValuesCore(records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture);
     }
 
     /// <summary>Returns the distinct display values of a data table column.</summary>
@@ -177,7 +207,8 @@ public sealed class PivotEngine
         return DistinctValuesCore(
             table.Rows.Cast<DataRow>().Cast<object>(),
             field,
-            new DataTableRecordReader(table));
+            new DataTableRecordReader(table),
+            Culture);
     }
 
     /// <summary>Returns the distinct display values of a field in dictionary-backed records.</summary>
@@ -199,13 +230,15 @@ public sealed class PivotEngine
         return DistinctValuesCore(
             materialized.Cast<object>(),
             field,
-            new DictionaryRecordReader(fields));
+            new DictionaryRecordReader(fields),
+            Culture);
     }
 
     private static IReadOnlyList<string?> DistinctValuesCore(
         IEnumerable<object> records,
         string field,
-        IRecordReader reader)
+        IRecordReader reader,
+        CultureInfo culture)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
 
@@ -237,7 +270,7 @@ public sealed class PivotEngine
             seen.TryAdd(text, value);
         }
 
-        var ordered = OrderDistinctValues(seen);
+        var ordered = OrderDistinctValues(seen, culture);
 
         // Blank leads the list rather than being sorted into it, the way every
         // spreadsheet filter presents it.
@@ -247,19 +280,30 @@ public sealed class PivotEngine
     // Ordinal text order would list 1, 10, 2 for a numeric field. When every
     // raw value shares one comparable type, order by the value itself; anything
     // mixed or non-comparable falls back to text.
-    private static IReadOnlyList<string?> OrderDistinctValues(Dictionary<string, object?> seen)
+    private static IReadOnlyList<string?> OrderDistinctValues(
+        Dictionary<string, object?> seen,
+        CultureInfo culture)
     {
         var values = seen.Values.ToArray();
         var comparable =
             values.Length > 0 &&
-            values[0] is IComparable &&
+            // Text is deliberately excluded: Comparer<object?>.Default resolves to
+            // string.CompareTo, which collates in the ambient culture rather than
+            // the one asked for — so a requested culture was quietly ignored for
+            // exactly the type this list is usually made of.
+            values[0] is IComparable and not string &&
             values.All(value => value is not null && value.GetType() == values[0]!.GetType());
 
         return comparable
             ? seen.OrderBy(entry => entry.Value, Comparer<object?>.Default)
                 .Select(entry => (string?)entry.Key)
                 .ToArray()
-            : seen.Keys.Order(StringComparer.Ordinal).Select(key => (string?)key).ToArray();
+            // The picker shows this list to a person, so it is sorted the way that
+            // person reads rather than by code point.
+            : seen.Keys
+                .Order(StringComparer.Create(culture, ignoreCase: false))
+                .Select(key => (string?)key)
+                .ToArray();
     }
 
     private static IReadOnlyList<object> DrillDownCore(
@@ -317,6 +361,7 @@ public sealed class PivotEngine
         IEnumerable<object> records,
         PivotRequest request,
         IRecordReader reader,
+        CultureInfo culture,
         CancellationToken cancellationToken)
     {
         ValidateRequest(request, reader);
@@ -430,7 +475,8 @@ public sealed class PivotEngine
             columnHeaders,
             transformed.Cells,
             transformed.RowTotals,
-            request);
+            request,
+            culture);
         cancellationToken.ThrowIfCancellationRequested();
 
         return new PivotResult
@@ -919,7 +965,8 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
         IReadOnlyList<PivotCell> cells,
         IReadOnlyList<PivotTotal> rowTotals,
-        PivotRequest request)
+        PivotRequest request,
+        CultureInfo culture)
     {
         if (rowHeaders.Count == 0)
         {
@@ -933,12 +980,14 @@ public sealed class PivotEngine
             ? rowOrder
                 .OrderBy(
                     row => rowHeaders[row],
-                    Comparer<IReadOnlyList<string?>>.Create(CompareRowHeaders))
+                    Comparer<IReadOnlyList<string?>>.Create(
+                        (left, right) => CompareRowHeaders(left, right, culture)))
                 .ToArray()
             : sort.Mode switch
         {
-            PivotSortMode.RowLabel => SortRowsByLabel(rowOrder, rowHeaders, request.Rows, sort),
-            PivotSortMode.RowTotalValue => SortRowsByTotal(rowOrder, rowHeaders, columnHeaders, cells, rowTotals, sort),
+            PivotSortMode.RowLabel => SortRowsByLabel(rowOrder, rowHeaders, request.Rows, sort, culture),
+            PivotSortMode.RowTotalValue =>
+                SortRowsByTotal(rowOrder, rowHeaders, columnHeaders, cells, rowTotals, sort, culture),
             _ => rowOrder
         };
 
@@ -970,11 +1019,12 @@ public sealed class PivotEngine
         return new SortedRows(sortedHeaders, sortedCells, sortedRowTotals);
     }
 
-    private static int CompareRowHeaders(IReadOnlyList<string?> left, IReadOnlyList<string?> right)
+    private static int CompareRowHeaders(
+        IReadOnlyList<string?> left,
+        IReadOnlyList<string?> right,
+        CultureInfo culture)
     {
-        var comparer = StringComparer.Create(
-            System.Globalization.CultureInfo.GetCultureInfo("tr-TR"),
-            ignoreCase: true);
+        var comparer = StringComparer.Create(culture, ignoreCase: true);
         var depth = Math.Max(left.Count, right.Count);
 
         for (var level = 0; level < depth; level++)
@@ -994,12 +1044,15 @@ public sealed class PivotEngine
         int[] rowOrder,
         IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
         IReadOnlyList<string> rowFields,
-        PivotSort sort)
+        PivotSort sort,
+        CultureInfo culture)
     {
         var level = ResolveRowFieldLevel(rowFields, sort.Field);
 
         return ApplyDirection(
-            rowOrder.OrderBy(row => rowHeaders[row].ElementAtOrDefault(level), StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("tr-TR"), ignoreCase: true)),
+            rowOrder.OrderBy(
+                row => rowHeaders[row].ElementAtOrDefault(level),
+                StringComparer.Create(culture, ignoreCase: true)),
             sort.Direction);
     }
 
@@ -1009,7 +1062,8 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
         IReadOnlyList<PivotCell> cells,
         IReadOnlyList<PivotTotal> rowTotals,
-        PivotSort sort)
+        PivotSort sort,
+        CultureInfo culture)
     {
         if (string.IsNullOrWhiteSpace(sort.ValueKey))
         {
@@ -1036,9 +1090,7 @@ public sealed class PivotEngine
                         .FirstOrDefault(value => value is not null));
         }
 
-        var labelComparer = StringComparer.Create(
-            System.Globalization.CultureInfo.GetCultureInfo("tr-TR"),
-            ignoreCase: true);
+        var labelComparer = StringComparer.Create(culture, ignoreCase: true);
         var ordered = sort.Direction == PivotSortDirection.Descending
             ? rowOrder
                 .OrderBy(row => values.GetValueOrDefault(row) is null ? 1 : 0)

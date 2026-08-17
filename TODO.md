@@ -254,10 +254,23 @@ uyarlanabilir mobil düzen.
 
 ## Bölüm 9 — Yerelleştirme
 
-- [ ] `"tr-TR"` beş yerde koda gömülü — kültür bir seçenek olmalı
-- [ ] `texts` benzeri merkezî metin sözlüğü (tasarımcı etiketleri kısmen özelleştirilebiliyor,
-      renderer metinleri değil)
-- [ ] `.NET` tarafında `IStringLocalizer` entegrasyonu
+- [x] ~~`"tr-TR"` koda gömülü~~ — **sekiz yerdeydi.** Sunucuda harmanlama artık
+      `CultureInfo.CurrentCulture`'dan çözülüyor (istek başına, yani ASP.NET'in
+      request localization'ı doğrudan işliyor) ve `new PivotEngine(culture)` ile
+      sabitlenebiliyor; tarayıcıda sayı biçimlendirme okuyucunun kendi yerelini
+      izliyor, `culture` niteliğiyle sabitlenebiliyor. Bunlar kozmetik değildi:
+      Türkçe'de Ç ayrı bir harf, başka yerlerde C'nin varyantı — `Corum` ile
+      `Çanakkale` iki kültürde yer değiştiriyor. Filtre seçicinin değer listesi
+      de aynı harmanlamayı kullanıyor.
+      İstemcinin bildirdiği kültür sunucuya **geçirilmiyor**: tarayıcının bir
+      kültür iddia ederek sunucunun sıralamasını değiştirebilmesi istenmeyen
+      bir şey.
+- [x] `texts` merkezî metin sözlüğü — renderer'ın ekrana koyduğu her metin
+      (`Veri yok`, `Satır Etiketleri`, bağlam menüsü, sütun genişletme ve
+      sıralama ipuçları) `rendererOptions.texts` üzerinden değiştirilebiliyor;
+      bildirilmeyen anahtar gömülü Türkçe varsayılanını koruyor
+- [ ] `.NET` tarafında `IStringLocalizer` entegrasyonu — metinler JavaScript'te
+      elden verilmek yerine kaynak dosyalarından gelsin
 
 ---
 

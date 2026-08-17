@@ -198,6 +198,23 @@ public sealed class PivotGridBuilder : IHtmlContent
         return SetRenderer("totalText", text);
     }
 
+    /// <summary>Sets the culture used to format numbers in the browser.</summary>
+    /// <remarks>
+    /// Left unset the renderer formats in the reader's own locale, which is what a package
+    /// with readers in more than one country wants. Pin it only when the page must show the
+    /// same separators to everyone. Server-side collation is separate: it follows
+    /// <see cref="System.Globalization.CultureInfo.CurrentCulture"/>, which ASP.NET's request
+    /// localization sets per request.
+    /// </remarks>
+    /// <param name="culture">A BCP 47 language tag, such as <c>tr-TR</c>.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The culture is null or blank.</exception>
+    public PivotGridBuilder Culture(string culture)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(culture);
+        return SetRenderer("culture", culture);
+    }
+
     /// <summary>Sets the accessible name announced for the grid.</summary>
     /// <remarks>
     /// The rendered table declares <c>role="grid"</c>, which needs a name; a page carrying

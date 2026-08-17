@@ -240,6 +240,7 @@ the renderer keeps its own default.
 | `empty-text` | `EmptyText(string)` | `-` | Shown in a cell with no value. May be empty to render nothing. |
 | `total-text` | `TotalText(string)` | `Toplam` | Caption for total rows and columns. Must not be blank. |
 | `aria-label` | `AriaLabel(string)` | `Pivot tablosu` | Accessible name announced for the grid. Must not be blank. Give two pivots on one page two different names, or a screen reader cannot tell them apart. |
+| `culture` | `Culture(string)` | the reader's own locale | BCP 47 tag used to format numbers in the browser. Must not be blank. Server-side collation is separate — see [Localization](#localization). |
 
 `selection-mode` and `layout-mode` are non-nullable enums so Razor accepts the
 unqualified member name; whether the attribute was written is recovered from
@@ -643,6 +644,54 @@ your own detail UI overrides the packaged one rather than fighting it. Setting
 Labels default to Turkish and are overridable through
 `drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
 `summary`, and `columnFilter` are substituted positionally.
+
+### Localization
+
+Culture is resolved separately on each side, because the two answer different
+questions.
+
+**Server-side collation** follows `CultureInfo.CurrentCulture`, resolved per
+call rather than cached — so an ASP.NET application with request localization
+configured sorts each request in that request's culture without wiring anything
+up. For a direct `PivotForge.Core` consumer, `new PivotEngine(culture)` pins it.
+This is not cosmetic: in Turkish `Ç` is a letter of its own that sorts after
+every word starting with `C`, while elsewhere it is a variant of `C` and the
+following letters decide — so `Corum` and `Çanakkale` swap places between the
+two. The same collation orders the filter picker's value list, which is shown
+to a person and therefore sorted the way that person reads.
+
+Deliberately **not** taken from the request payload: a browser claiming a
+culture must not be able to change how the server sorts.
+
+**Browser-side number formatting** follows the reader's own locale unless
+`culture` is declared. Pin it only when the page must show the same separators
+to everyone:
+
+```html
+<pivot-grid id="pivotGrid" culture="tr-TR" ...>
+```
+
+The detail modal inherits the grid's culture, so it cannot contradict the cell
+it was opened from; `drillDownModalOptions.culture` overrides that on purpose.
+
+**Renderer texts.** Every string the renderer puts on screen — `Veri yok`,
+`Satır Etiketleri`, the cell context menu, the column-resize and sort tooltips —
+comes from a `texts` map passed through `rendererOptions`. A key left out keeps
+its built-in Turkish default, exactly as the designer's `labels` and the detail
+modal's own labels already work. `{0}` placeholders are substituted
+positionally.
+
+```js
+PivotForge.create("#pivotGrid", {
+  rendererOptions: {
+    culture: "en-GB",
+    texts: { noData: "No data", sortField: "Sort by {0}" }
+  }
+});
+```
+
+Still open: `IStringLocalizer` integration on the .NET side, so the texts can
+come from resource files rather than being handed over in JavaScript.
 
 ### Accessibility
 

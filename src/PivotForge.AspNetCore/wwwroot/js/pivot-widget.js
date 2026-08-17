@@ -392,6 +392,9 @@
     openDrillDown(selection) {
       this.drillDownModal ??= new PivotForge.PivotDrillDownModal({
         widget: this,
+        // Spread first, so a page that pins the modal's culture on purpose wins
+        // over the renderer's — but by default the two cannot drift apart.
+        culture: this.options.rendererOptions?.culture ?? null,
         ...(this.options.drillDownModalOptions ?? {})
       });
 
