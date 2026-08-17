@@ -909,6 +909,15 @@ test("a filter placed in the designer starts out including", () => {
   assert.equal(state.getState().filters[0].mode, "Include");
 });
 
+test("a field declared in the filter area starts out including", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Quarter" ? { ...field, area: "filter" } : field));
+
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Quarter", values: [], mode: "Include" }]);
+});
+
 test("setFilterMode switches which side of the list is stored", () => {
   const state = create();
   state.move("Quarter", "filter");

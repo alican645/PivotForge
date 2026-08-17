@@ -682,9 +682,11 @@
         (this.filterPicker !== null || typeof PivotForge.PivotFilterPicker === "function");
     }
 
+    // Both callers ask about a field seated in the filter area, and the layout
+    // state gives every one of those an entry carrying values and a mode, so
+    // there is nothing here to default.
     filterEntryOf(name) {
-      const entry = this.state.getState().filters.find(filter => filter.field === name);
-      return { values: entry?.values ?? [], mode: entry?.mode ?? "Include" };
+      return this.state.getState().filters.find(filter => filter.field === name);
     }
 
     openFilterPicker(name) {

@@ -1815,6 +1815,23 @@ test("an excluding filter chip counts what it drops, not what it accepts", async
   assert.equal(count.classList.contains("is-excluding"), true);
 });
 
+test("a chip reads its own filter entry, not the first one in the zone", async () => {
+  const { designer, host, state } = buildWithFilter();
+  // Year lands ahead of Quarter, so a chip that read the zone's first entry
+  // would show Year's filter on Quarter's chip.
+  state.move("Year", "filter", 0);
+  state.setFilterValues("Year", ["Q2"]);
+  state.setFilterValues("Quarter", ["Q1", "Q3"]);
+  state.setFilterMode("Quarter", "Exclude");
+  designer.render();
+
+  const count = findByClassName(filterChip(host), "pivot-chip__filter-count");
+  assert.equal(count.textContent, "(2 hariç)");
+
+  await designer.openFilterPicker("Quarter");
+  assert.deepEqual(pickerByAction("filter-value").map(box => box.checked), [false, true, false]);
+});
+
 test("the picker opens on the mode the filter already carries", async () => {
   const { designer, state } = buildWithFilter();
   state.setFilterValues("Quarter", ["Q2"]);

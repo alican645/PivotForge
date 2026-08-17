@@ -402,10 +402,10 @@
         this.selected.has(value) === (this.mode !== "Exclude"));
       // Every value checked means no restriction at all, which is stored as an
       // empty list. Freezing the full set under Include instead would silently
-      // exclude values that appear in the source later; under Exclude the empty
-      // list falls out on its own.
+      // exclude values that appear in the source later. Under Exclude the same
+      // case already produces an empty list on its own, so this rule does not
+      // need to ask which mode it is in.
       const everything =
-        this.mode !== "Exclude" &&
         this.hiddenValues.length === 0 &&
         this.selected.size === this.values.length;
       const values = everything ? [] : [...this.hiddenValues, ...listed];
