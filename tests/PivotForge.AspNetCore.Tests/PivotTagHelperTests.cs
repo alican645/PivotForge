@@ -858,6 +858,64 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesAnExcludingFilterMode()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotFilterTagHelper
+            {
+                Field = "Region",
+                Values = "Marmara, Ege",
+                Type = PivotFilterMode.Exclude
+            }],
+            MinimalFields));
+
+        Assert.Equal("Exclude", config.GetProperty("filters")[0].GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task OmitsTheFilterModeWhenItIsTheDefault()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotFilterTagHelper { Field = "Region", Values = "Marmara" }],
+            MinimalFields));
+
+        // Omitted rather than written as Include, so a payload only carries the
+        // mode of a filter that actually declared one.
+        Assert.False(config.GetProperty("filters")[0].TryGetProperty("mode", out _));
+    }
+
+    /// <summary>The builder equivalent of <see cref="MinimalFields"/>.</summary>
+    private static void FillMinimalFields(PivotFieldCollectionBuilder fields) =>
+        fields.Add().DataField("Amount").Area(PivotArea.Data).Caption("Tutar")
+            .Aggregation(PivotAggregation.Sum);
+
+    [Fact]
+    public void TheFilterOverloadsAgreeOnTheDefaultMode()
+    {
+        var withoutMode = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid").Filter("Region", "Marmara").Fields(FillMinimalFields));
+        var withMode = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid").Filter("Region", PivotFilterMode.Include, "Marmara")
+            .Fields(FillMinimalFields));
+
+        Assert.Equal(withoutMode, withMode);
+    }
+
+    [Fact]
+    public void TheBuilderWritesAnExcludingFilter()
+    {
+        var html = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid").Filter("Region", PivotFilterMode.Exclude, "Marmara")
+            .Fields(FillMinimalFields));
+
+        Assert.Equal(
+            "Exclude",
+            ConfigOf(html).GetProperty("filters")[0].GetProperty("mode").GetString());
+    }
+
+    [Fact]
     public async Task OmitsFiltersWhenNoneAreDeclared()
     {
         var config = ConfigOf(await RenderAsync(
