@@ -54,6 +54,9 @@
   };
 
   const ZONES = ["filter", "column", "row", "data"];
+  // Left-to-right order of the panels on screen, which is the order a keyboard
+  // move steps through with the arrow keys.
+  const KEYBOARD_AREAS = ["available", "filter", "column", "row", "data"];
   const SHOW_AS = [
     "normal",
     "percentOfRowTotal",
@@ -124,6 +127,14 @@
       // and pen.
       this.drag = null;
       this.draggedField = null;
+      // A keyboard move in flight: which field was picked up and where it would
+      // land. Nothing is written to the state until it is dropped, so Escape
+      // costs nothing to honour -- the same bargain a drag released outside
+      // every zone makes.
+      this.grab = null;
+      // Which chip carries its zone's tab stop, and the chip focus returns to
+      // after the re-render every edit triggers.
+      this.focusField = null;
       // Bound once so the same reference can be removed again; a fresh arrow
       // per drag would leak a listener on every press.
       this.pointerMove = event => this.handlePointerMove(event);
@@ -153,7 +164,18 @@
 
       chip.className = "pivot-chip";
       chip.dataset.field = name;
+      // The chip -- not its controls -- is what a keyboard user operates, so it
+      // is the thing that takes focus. refreshTabStops() decides afterwards
+      // which one chip per zone is reachable with Tab.
+      chip.tabIndex = -1;
+      chip.setAttribute("role", "button");
+      chip.setAttribute("aria-grabbed", "false");
       chip.addEventListener("pointerdown", event => this.beginDrag(event, chip, name));
+      chip.addEventListener("keydown", event => this.handleKeydown(event, name, chip));
+      chip.addEventListener("focus", () => {
+        this.focusField = name;
+        this.refreshTabStops();
+      });
 
       // Controls come first so they line up down the left edge of a zone,
       // independent of how long each caption is.
@@ -161,6 +183,10 @@
         const remove = document.createElement("button");
         remove.className = "pivot-chip__remove";
         remove.dataset.action = "remove";
+        // Chip controls are taken out of the tab sequence: leaving them in
+        // would multiply every field by three tab stops. Delete on the focused
+        // chip removes it, and the settings modal carries the rest.
+        remove.tabIndex = -1;
         remove.textContent = "\u00d7";
         remove.setAttribute("aria-label", `${field.caption} \u2014 ${this.labels.remove}`);
 
@@ -182,6 +208,7 @@
         const settings = document.createElement("button");
         settings.className = "pivot-chip__settings";
         settings.dataset.action = "settings";
+        settings.tabIndex = -1;
         settings.textContent = "\u22ef";
         settings.setAttribute("aria-label", `${field.caption} \u2014 ${this.labels.settings}`);
         settings.addEventListener("click", () => this.openSettings(name));
@@ -195,6 +222,7 @@
         const funnel = document.createElement("button");
         funnel.className = "pivot-chip__filter";
         funnel.dataset.action = "filter";
+        funnel.tabIndex = -1;
         funnel.textContent = "▼";
         funnel.setAttribute("aria-label", `${field.caption} — ${this.labels.filterValues}`);
         funnel.addEventListener("click", () => this.openFilterPicker(name));
@@ -248,6 +276,10 @@
       if (event.button !== undefined && event.button !== 0) {
         return;
       }
+
+      // Reaching for the mouse abandons a keyboard move rather than running two
+      // moves at once over the same drop marks.
+      this.endGrab();
 
       this.drag = {
         name,
@@ -405,6 +437,231 @@
       const element = root.document?.elementFromPoint?.(clientX, clientY);
       const zone = element?.closest?.("[data-zone]");
       return zone ? this.zones.get(zone.dataset.zone) ?? null : null;
+    }
+
+    // --- Keyboard --------------------------------------------------------
+    // A drag is a pointer gesture and had no keyboard equivalent at all: chips
+    // were not even focusable. The move itself is the same operation the drop
+    // handler performs, so only the gesture is new here, not the rules.
+
+    handleKeydown(event, name, chip) {
+      // Chip controls sit outside the tab sequence but a click still focuses
+      // them, and their keys belong to them rather than to the chip.
+      if (event.target && event.target !== chip) {
+        return;
+      }
+
+      const handled = this.grab
+        ? this.grabbedKey(event.key)
+        : this.idleKey(event.key, name);
+
+      if (handled) {
+        // Arrow keys would otherwise scroll the panel out from under the chip
+        // the user is aiming with, and Space would scroll the page.
+        event.preventDefault?.();
+      }
+    }
+
+    idleKey(key, name) {
+      switch (key) {
+        case "ArrowUp": return this.focusSibling(name, -1);
+        case "ArrowDown": return this.focusSibling(name, 1);
+        case " ":
+        case "Spacebar":
+          this.beginGrab(name);
+          return true;
+        case "Enter":
+          if (this.state.areaOf(name) === "available") {
+            return false;
+          }
+          this.openSettings(name);
+          return true;
+        case "Delete":
+          if (!this.canReturn(name)) {
+            return false;
+          }
+          this.focusField = name;
+          this.apply(() => this.state.remove(name));
+          return true;
+        default: return false;
+      }
+    }
+
+    grabbedKey(key) {
+      switch (key) {
+        case "ArrowUp": return this.moveGrab(-1);
+        case "ArrowDown": return this.moveGrab(1);
+        case "ArrowLeft": return this.shiftGrabArea(-1);
+        case "ArrowRight": return this.shiftGrabArea(1);
+        case " ":
+        case "Spacebar":
+        case "Enter":
+          this.dropGrab();
+          return true;
+        case "Escape":
+          // Nothing was written, so backing out is simply forgetting.
+          this.endGrab();
+          return true;
+        default: return false;
+      }
+    }
+
+    beginGrab(name) {
+      const area = this.state.areaOf(name);
+      this.grab = { name, area, index: Math.max(this.namesIn(area).indexOf(name), 0) };
+
+      const chip = this.chipFor(name);
+      chip?.classList.add("is-keyboard-moving");
+      chip?.setAttribute("aria-grabbed", "true");
+      this.showGrabFeedback();
+      return true;
+    }
+
+    endGrab() {
+      const grab = this.grab;
+      this.grab = null;
+
+      if (!grab) {
+        return;
+      }
+
+      const chip = this.chipFor(grab.name);
+      chip?.classList.remove("is-keyboard-moving");
+      chip?.setAttribute("aria-grabbed", "false");
+      this.clearDropMarks();
+    }
+
+    // Steps the landing slot within the candidate zone.
+    moveGrab(step) {
+      const grab = this.grab;
+      const names = this.namesIn(grab.area);
+      // A field already in this zone can only occupy the slots that exist; one
+      // arriving from elsewhere may also land past the last chip.
+      const last = grab.area === this.state.areaOf(grab.name) ? names.length - 1 : names.length;
+      grab.index = Math.min(Math.max(grab.index + step, 0), Math.max(last, 0));
+      this.showGrabFeedback();
+      return true;
+    }
+
+    shiftGrabArea(step) {
+      const grab = this.grab;
+      const next = KEYBOARD_AREAS[KEYBOARD_AREAS.indexOf(grab.area) + step];
+      if (!next) {
+        return false;
+      }
+
+      grab.area = next;
+      const names = this.namesIn(next);
+      // Arriving in a zone lands at its end, which is where a field dropped
+      // into a zone with a mouse most often goes.
+      grab.index = next === this.state.areaOf(grab.name)
+        ? Math.max(names.length - 1, 0)
+        : names.length;
+      this.showGrabFeedback();
+      return true;
+    }
+
+    // Mirrors the drag's drop rules exactly, so the two gestures cannot
+    // disagree about what is allowed.
+    grabAllowed(grab) {
+      return grab.area === "available"
+        ? this.canReturn(grab.name)
+        : this.state.canDrop(grab.name, grab.area);
+    }
+
+    showGrabFeedback() {
+      this.clearDropMarks();
+
+      const grab = this.grab;
+      const target = this.zones.get(grab.area);
+      if (!target) {
+        return;
+      }
+
+      if (!this.grabAllowed(grab)) {
+        target.zone.classList.add("is-drop-refused");
+        return;
+      }
+
+      if (grab.area === "available" || target.body.children.length === 0) {
+        target.zone.classList.add("is-empty-drop-target");
+        return;
+      }
+
+      this.markDropSlot(target.body, this.markerIndex(grab));
+    }
+
+    // markDropSlot draws against the zone as it looks now, which still holds
+    // the grabbed chip when the move stays inside its own zone -- so a slot
+    // past that chip is one further along on screen than it is in the result.
+    markerIndex(grab) {
+      const from = grab.area === this.state.areaOf(grab.name)
+        ? this.namesIn(grab.area).indexOf(grab.name)
+        : -1;
+      return from >= 0 && grab.index > from ? grab.index + 1 : grab.index;
+    }
+
+    dropGrab() {
+      const grab = this.grab;
+      if (!this.grabAllowed(grab)) {
+        return;
+      }
+
+      this.endGrab();
+      // The field keeps focus through the re-render, wherever it lands.
+      this.focusField = grab.name;
+
+      if (grab.area === "available") {
+        this.apply(() => this.state.remove(grab.name));
+        return;
+      }
+
+      if (grab.area !== this.state.areaOf(grab.name)) {
+        this.apply(() => this.state.move(grab.name, grab.area, grab.index));
+        return;
+      }
+
+      // Within one zone the index is a final position, which is what reorder
+      // takes -- and dropping a field back on its own slot changes nothing, so
+      // it must not cost a request.
+      const from = this.namesIn(grab.area).indexOf(grab.name);
+      if (from !== grab.index) {
+        this.apply(() => this.state.reorder(grab.area, from, grab.index));
+      }
+    }
+
+    chipFor(name) {
+      for (const { body } of this.zones.values()) {
+        const found = Array.from(body.children).find(chip => chip.dataset.field === name);
+        if (found) {
+          return found;
+        }
+      }
+
+      return null;
+    }
+
+    focusSibling(name, step) {
+      const body = this.zones.get(this.state.areaOf(name))?.body;
+      if (!body) {
+        return false;
+      }
+
+      const chips = Array.from(body.children);
+      const next = chips[chips.findIndex(chip => chip.dataset.field === name) + step];
+      next?.focus?.();
+      return Boolean(next);
+    }
+
+    // Roving tabindex: one tab stop per zone, on the chip the user last focused
+    // there. Making every chip tabbable would bury the rest of the page behind
+    // a tab stop per field.
+    refreshTabStops() {
+      this.zones.forEach(({ body }) => {
+        const chips = Array.from(body.children);
+        const stop = chips.find(chip => chip.dataset.field === this.focusField) ?? chips[0];
+        chips.forEach(chip => { chip.tabIndex = chip === stop ? 0 : -1; });
+      });
     }
 
     canPickFilterValues() {
@@ -616,6 +873,24 @@
       step("move-down", this.labels.moveDown, index + 2, index < names.length - 1);
       position.appendChild(positionRow);
       settings.body.appendChild(position);
+
+      // --- Filter values --------------------------------------------------
+      // The chip's ▼ is out of the tab sequence, so this is the keyboard's way
+      // in to the picker. Offered only where there are values to pick.
+      if (area === "filter" && this.canPickFilterValues()) {
+        const filtering = this.settingsSection(this.labels.filterValues);
+        const open = document.createElement("button");
+        open.className = "pivot-value-settings__choice";
+        open.setAttribute("type", "button");
+        open.dataset.action = "filter-values";
+        open.textContent = this.labels.filterValues;
+        open.addEventListener("click", () => {
+          this.closeSettings();
+          this.openFilterPicker(name);
+        });
+        filtering.appendChild(open);
+        settings.body.appendChild(filtering);
+      }
 
       if (area === "data") {
         // --- Aggregation --------------------------------------------------
@@ -868,9 +1143,22 @@
       this.zones = new Map();
       const grid = document.createElement("div");
       grid.className = "pivot-layout-grid";
+
+      // Every render throws the chips away and builds new ones, so focus is
+      // about to land on the document body. Asked before the swap, because
+      // afterwards the focused element is already detached.
+      const held = this.holdsFocus();
+
       ZONES.forEach(area => grid.appendChild(this.createZone(area)));
 
       this.host.replaceChildren(this.createAvailable(), grid);
+      this.refreshTabStops();
+
+      // Only give focus back if the designer had it: a mutation driven from
+      // elsewhere on the page must not pull focus into the panel.
+      if (held) {
+        this.chipFor(this.focusField)?.focus?.();
+      }
 
       // Every edit re-renders; the modal lives outside the host and so must be
       // refreshed by hand, or its selected states would show the value from
@@ -883,6 +1171,13 @@
           this.renderSettings(this.settingsFor);
         }
       }
+    }
+
+    // Whether focus currently sits inside the panel. A chip removed by its own
+    // × button counts: the button is inside the host too.
+    holdsFocus() {
+      const active = root.document?.activeElement;
+      return Boolean(active && this.host.contains?.(active));
     }
 
     async apply(mutation) {
@@ -901,6 +1196,7 @@
       // A drag in flight holds pointer capture and three listeners on a chip
       // that is about to be thrown away.
       this.endDrag();
+      this.endGrab();
       this.closeSettings();
 
       if (this.settingsKeydown) {

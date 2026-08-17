@@ -64,6 +64,22 @@ function createElement(tagName) {
       return child;
     },
     remove() { this.removed = true; },
+    // Focus is real state in a keyboard-operable panel: the designer both reads
+    // it (to decide whether it may take focus back after a re-render) and
+    // moves it, so the stub has to model it rather than swallow the calls.
+    tabIndex: -1,
+    focus() {
+      globalThis.document.activeElement = this;
+      this.dispatch("focus", { target: this });
+    },
+    contains(node) {
+      for (let entry = node; entry; entry = entry.parentNode) {
+        if (entry === this) {
+          return true;
+        }
+      }
+      return false;
+    },
     replaceChildren(...nodes) {
       nodes.forEach(node => { node.parentNode = this; });
       this._children = nodes;
@@ -109,6 +125,7 @@ const documentListeners = new Map();
 globalThis.document = {
   createElement,
   body: documentBody,
+  activeElement: null,
   addEventListener(name, handler) {
     const handlers = documentListeners.get(name) ?? [];
     handlers.push(handler);
@@ -1404,4 +1421,364 @@ test("HTML5 drag-and-drop is gone: no chip is draggable and no drag listeners re
     assert.equal(target.listeners.has("dragover"), false, area);
     assert.equal(target.listeners.has("drop"), false, area);
   });
+});
+
+// --- Keyboard field movement -------------------------------------------------
+
+// Presses a key on a field's chip, as a keyboard user would after tabbing to
+// it. The chip is looked up fresh every time because every mutation rebuilds it.
+function pressOn(host, fieldName, key) {
+  const chip = chips(host).find(entry => entry.dataset.field === fieldName);
+  let prevented = false;
+  chip.dispatch("keydown", { key, target: chip, preventDefault() { prevented = true; } });
+  return { chip, prevented };
+}
+
+test("chips are focusable, with exactly one tab stop per zone", () => {
+  const { host } = build();
+
+  const all = chips(host);
+  assert.ok(all.length > 0);
+  all.forEach(chip => {
+    assert.ok(chip.tabIndex === 0 || chip.tabIndex === -1, chip.dataset.field);
+  });
+
+  ["row", "column", "data", "filter", "available"].forEach(area => {
+    const inZone = chips(zone(host, area));
+    if (inZone.length > 0) {
+      assert.equal(
+        inZone.filter(chip => chip.tabIndex === 0).length, 1,
+        `${area} should have exactly one tab stop`);
+    }
+  });
+});
+
+test("chip controls are out of the tab sequence, so a field costs one stop not four", () => {
+  const { host } = build();
+
+  chips(host).forEach(chip => {
+    Array.from(chip.children)
+      .filter(child => child.tagName === "BUTTON")
+      .forEach(button => {
+        assert.equal(button.tabIndex, -1, `${chip.dataset.field}/${button.dataset.action}`);
+      });
+  });
+});
+
+test("arrow keys move focus between the chips of a zone, and stop at its ends", () => {
+  const { host, designer } = build();
+  const [first, second] = chips(zone(host, "available"));
+  first.focus();
+
+  pressOn(host, first.dataset.field, "ArrowDown");
+  assert.equal(designer.focusField, second.dataset.field);
+  assert.equal(globalThis.document.activeElement, second);
+
+  pressOn(host, second.dataset.field, "ArrowUp");
+  assert.equal(globalThis.document.activeElement, first);
+
+  // Nothing above the first chip, so the key is left to the page.
+  const { prevented } = pressOn(host, first.dataset.field, "ArrowUp");
+  assert.equal(prevented, false);
+  assert.equal(globalThis.document.activeElement, first);
+});
+
+test("focusing a chip moves its zone's tab stop onto it", () => {
+  const { host } = build();
+  const inZone = chips(zone(host, "available"));
+  assert.equal(inZone[0].tabIndex, 0);
+
+  inZone[1].focus();
+
+  assert.equal(inZone[0].tabIndex, -1);
+  assert.equal(inZone[1].tabIndex, 0);
+});
+
+test("Space picks a field up and marks it, without touching the state", () => {
+  const { host, state, updates, designer } = build();
+
+  const { chip, prevented } = pressOn(host, "Region", " ");
+
+  assert.equal(prevented, true, "Space must not scroll the page");
+  assert.equal(chip.classList.contains("is-keyboard-moving"), true);
+  assert.equal(chip.attributes["aria-grabbed"], "true");
+  assert.deepEqual(designer.grab, { name: "Region", area: "row", index: 0 });
+  assert.equal(state.areaOf("Region"), "row");
+  assert.equal(updates.length, 0);
+});
+
+test("Escape cancels a pick-up and leaves the layout exactly as it was", async () => {
+  const { host, state, updates, designer } = build();
+  const before = state.getState().rows.join();
+
+  pressOn(host, "Region", " ");
+  pressOn(host, "Region", "ArrowDown");
+  pressOn(host, "Region", "Escape");
+  await Promise.resolve();
+
+  assert.equal(designer.grab, null);
+  assert.equal(state.getState().rows.join(), before);
+  assert.equal(updates.length, 0);
+  const chip = chips(host).find(entry => entry.dataset.field === "Region");
+  assert.equal(chip.classList.contains("is-keyboard-moving"), false);
+  assert.equal(chip.attributes["aria-grabbed"], "false");
+});
+
+test("Space, ArrowDown, Space reorders a field within its own zone", async () => {
+  const { host, state, updates, designer } = build();
+  state.move("Quarter", "row", 1);
+  designer.render();
+  assert.deepEqual(state.getState().rows, ["Region", "Quarter"]);
+
+  pressOn(host, "Region", " ");
+  pressOn(host, "Region", "ArrowDown");
+  pressOn(host, "Region", " ");
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Quarter", "Region"]);
+  assert.equal(updates.length, 1);
+});
+
+test("dropping a field back on its own slot costs no request", async () => {
+  const { host, updates } = build();
+
+  pressOn(host, "Region", " ");
+  pressOn(host, "Region", " ");
+  await Promise.resolve();
+
+  assert.equal(updates.length, 0);
+});
+
+test("ArrowRight carries a pick-up into the next zone and Space places it there", async () => {
+  const { host, state, updates } = build();
+  assert.equal(state.areaOf("Quarter"), "available");
+
+  // available -> filter -> column
+  pressOn(host, "Quarter", " ");
+  pressOn(host, "Quarter", "ArrowRight");
+  pressOn(host, "Quarter", "ArrowRight");
+  pressOn(host, "Quarter", " ");
+  await Promise.resolve();
+
+  assert.equal(state.areaOf("Quarter"), "column");
+  assert.equal(updates.length, 1);
+});
+
+test("a keyboard move into a zone the field's role forbids is refused, as a drag is", async () => {
+  const { host, state, updates } = build();
+
+  // Quantity is a measure: it belongs in the data zone and nowhere else.
+  pressOn(host, "Quantity", " ");
+  pressOn(host, "Quantity", "ArrowRight");
+  assert.equal(zone(host, "filter").classList.contains("is-drop-refused"), true);
+
+  pressOn(host, "Quantity", " ");
+  await Promise.resolve();
+
+  assert.equal(state.areaOf("Quantity"), "available");
+  assert.equal(updates.length, 0);
+});
+
+test("ArrowLeft out of the first zone is refused rather than wrapping around", () => {
+  const { host, designer } = build();
+
+  pressOn(host, "Quarter", " ");
+  const { prevented } = pressOn(host, "Quarter", "ArrowLeft");
+
+  assert.equal(prevented, false);
+  assert.equal(designer.grab.area, "available");
+});
+
+test("carrying a placed field to the available list removes it", async () => {
+  const { host, state, updates } = build();
+  assert.equal(state.areaOf("Region"), "row");
+
+  // row -> column -> filter -> available
+  pressOn(host, "Region", " ");
+  pressOn(host, "Region", "ArrowLeft");
+  pressOn(host, "Region", "ArrowLeft");
+  pressOn(host, "Region", "ArrowLeft");
+  pressOn(host, "Region", " ");
+  await Promise.resolve();
+
+  assert.equal(state.areaOf("Region"), "available");
+  assert.equal(updates.length, 1);
+});
+
+test("the last value field cannot be carried out with the keyboard either", async () => {
+  const { host, state, updates } = build();
+
+  pressOn(host, "Amount", " ");
+  ["ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft"].forEach(
+    key => pressOn(host, "Amount", key));
+  assert.equal(zone(host, "available").classList.contains("is-drop-refused"), true);
+
+  pressOn(host, "Amount", " ");
+  await Promise.resolve();
+
+  assert.equal(state.areaOf("Amount"), "data");
+  assert.equal(updates.length, 0);
+});
+
+test("Delete removes a placed field, and refuses the last value field", async () => {
+  const { host, state, updates } = build();
+
+  pressOn(host, "Region", "Delete");
+  await Promise.resolve();
+  assert.equal(state.areaOf("Region"), "available");
+
+  const taken = updates.length;
+  pressOn(host, "Amount", "Delete");
+  await Promise.resolve();
+  assert.equal(state.areaOf("Amount"), "data");
+  assert.equal(updates.length, taken);
+});
+
+test("Enter opens the settings modal for a placed field and does nothing for an available one", () => {
+  const { host, designer } = build();
+
+  pressOn(host, "Region", "Enter");
+  assert.equal(designer.settingsFor, "Region");
+
+  designer.closeSettings();
+  const { prevented } = pressOn(host, "Quarter", "Enter");
+  assert.equal(prevented, false);
+  assert.equal(designer.settingsFor, null);
+});
+
+test("a field keeps focus across the re-render its own move triggers", async () => {
+  const { host, designer } = build();
+  chips(host).find(entry => entry.dataset.field === "Quarter").focus();
+
+  pressOn(host, "Quarter", " ");
+  pressOn(host, "Quarter", "ArrowRight");
+  pressOn(host, "Quarter", " ");
+  await Promise.resolve();
+
+  assert.equal(designer.focusField, "Quarter");
+  assert.equal(globalThis.document.activeElement.dataset.field, "Quarter");
+  assert.equal(globalThis.document.activeElement.tabIndex, 0);
+});
+
+test("a render nobody in the panel asked for does not steal focus", async () => {
+  const { host, designer } = build();
+  const outside = createElement("input");
+  documentBody.appendChild(outside);
+  outside.focus();
+
+  designer.focusField = "Region";
+  designer.render();
+  await Promise.resolve();
+
+  assert.equal(globalThis.document.activeElement, outside);
+  void host;
+});
+
+test("reaching for the mouse abandons a keyboard move in flight", () => {
+  const { host, designer } = build();
+
+  pressOn(host, "Quarter", " ");
+  assert.notEqual(designer.grab, null);
+
+  const source = chips(host).find(entry => entry.dataset.field === "Quarter");
+  source.dispatch("pointerdown", {
+    target: source, pointerId: 1, button: 0, pointerType: "mouse", clientX: 0, clientY: 0
+  });
+
+  assert.equal(designer.grab, null);
+  assert.equal(source.classList.contains("is-keyboard-moving"), false);
+});
+
+test("disposing during a keyboard move clears it", () => {
+  const { host, designer } = build();
+
+  pressOn(host, "Region", " ");
+  designer.dispose();
+
+  assert.equal(designer.grab, null);
+});
+
+test("a filter field can reach its value picker without a pointer", () => {
+  const { host, designer } = build();
+  const opened = [];
+  designer.filterPicker = { open: request => opened.push(request.field), dispose() {} };
+  designer.widget.fieldValues = async () => ({ values: [] });
+
+  designer.state.move("Quarter", "filter", 0);
+  designer.render();
+  pressOn(host, "Quarter", "Enter");
+  findByAction(designer.settings.body, "filter-values").dispatch("click", {});
+
+  assert.deepEqual(opened, ["Quarter"]);
+});
+
+// Which chip currently carries the insertion marker, and on which edge.
+function dropMark(host, area) {
+  const marked = chips(zone(host, area)).find(chip =>
+    chip.classList.contains("is-drop-before") || chip.classList.contains("is-drop-after"));
+
+  return marked
+    ? {
+      field: marked.dataset.field,
+      edge: marked.classList.contains("is-drop-before") ? "before" : "after"
+    }
+    : null;
+}
+
+// Puts two fields in the row zone, which a reorder needs and the catalog's
+// declared layout does not have.
+function buildWithTwoRows() {
+  const panel = build();
+  panel.state.move("Quarter", "row", 1);
+  panel.designer.render();
+  assert.deepEqual(panel.state.getState().rows, ["Region", "Quarter"]);
+  return panel;
+}
+
+test("the drop marker tracks where a keyboard move would land in its own zone", () => {
+  const { host } = buildWithTwoRows();
+
+  pressOn(host, "Region", " ");
+  // Not moved yet: it would land back exactly where it already is.
+  assert.deepEqual(dropMark(host, "row"), { field: "Region", edge: "before" });
+
+  pressOn(host, "Region", "ArrowDown");
+  // Past Quarter now — which on screen is the far edge of the last chip, not
+  // the near edge of it.
+  assert.deepEqual(dropMark(host, "row"), { field: "Quarter", edge: "after" });
+});
+
+test("a pick-up cannot be pushed past the last slot of its own zone", async () => {
+  const { host, state, updates } = buildWithTwoRows();
+
+  pressOn(host, "Region", " ");
+  ["ArrowDown", "ArrowDown", "ArrowDown"].forEach(key => pressOn(host, "Region", key));
+  pressOn(host, "Region", " ");
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Quarter", "Region"]);
+  assert.equal(updates.length, 1);
+});
+
+test("leaving a zone and coming back lands on its last slot, not past it", async () => {
+  const { host, state, updates } = buildWithTwoRows();
+
+  pressOn(host, "Region", " ");
+  pressOn(host, "Region", "ArrowRight");
+  pressOn(host, "Region", "ArrowLeft");
+  pressOn(host, "Region", " ");
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().rows, ["Quarter", "Region"]);
+  assert.equal(updates.length, 1);
+});
+
+test("a key pressed on a chip control belongs to that control, not to the chip", () => {
+  const { host, designer } = build();
+  const chip = chips(host).find(entry => entry.dataset.field === "Region");
+  const remove = findByAction(chip, "remove");
+
+  chip.dispatch("keydown", { key: " ", target: remove, preventDefault() {} });
+
+  assert.equal(designer.grab, null);
 });

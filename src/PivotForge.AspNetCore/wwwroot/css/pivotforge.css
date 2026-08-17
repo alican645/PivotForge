@@ -2280,6 +2280,22 @@ select {
   cursor: grabbing;
 }
 
+/* The chip is what a keyboard user operates, so it has to be visibly the thing
+   focus is on -- without this the panel is navigable but not usable. */
+.pivot-chip:focus-visible {
+  outline: 2px solid var(--pt-accent);
+  outline-offset: 1px;
+}
+
+/* A field picked up with Space. The drop marks already show where it would
+   land; this shows what is being moved, which the pointer does with the
+   cursor and the keyboard has no other way to say. */
+.pivot-chip.is-keyboard-moving {
+  border-color: var(--pt-accent);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.25);
+  opacity: 0.75;
+}
+
 /* The one element that takes the gesture away from the browser, which is what
    makes a touch drag possible at all. Applying this to the whole chip would
    make a long available-field list impossible to scroll with a finger. */

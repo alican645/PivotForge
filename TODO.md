@@ -222,13 +222,18 @@ aralarında geçmesi için — kendi durum şeması demoya ait, bildirimsel yol 
 
 ## Bölüm 8 — Erişilebilirlik ve platform
 
-Sürükleme Pointer Events'e taşındı; fare, dokunmatik ve kalem tek mekanizmayla
-çalışıyor. Kalan açık klavye ve ARIA tarafında.
+Sürükleme Pointer Events'e taşındı; fare, dokunmatik, kalem ve klavye aynı
+taşıma işlemini paylaşıyor. Kalan açık ARIA ve mobil düzen tarafında.
 
 - [x] Dokunmatik sürükle-bırak — çipteki tutamaç (`⠿`) `touch-action: none`
       taşıyor, gövdesi taşımıyor: parmakla liste kaydırılabiliyor, tutamaçtan
       sürüklenebiliyor
-- [ ] Klavye ile alan taşıma — çipler **odaklanabilir bile değil** (`tabIndex` yok)
+- [x] Klavye ile alan taşıma — çipler gezinen `tabIndex` ile odaklanabilir
+      (bölge başına bir durak), `Space` alır, oklar taşır, `Space`/`Enter`
+      bırakır, `Esc` iptal eder, `Delete` kaldırır, `Enter` ayarlar modalini
+      açar. Bırakılana kadar duruma hiçbir şey yazılmıyor, bu yüzden iptal
+      bedava. Odak, taşımanın tetiklediği yeniden çizimin ardından alanla
+      birlikte gidiyor.
 - [x] ~~Tablo içinde klavye gezinme~~ — **zaten vardı:** ok tuşları, Enter/Space,
       Ctrl+C, ContextMenu/Shift+F10 ve gezinen `tabIndex` (`pivot-table.js:931-1010`)
 - [ ] ARIA rolleri ve ekran okuyucu desteği (WCAG)
@@ -255,7 +260,7 @@ Sizin önceliğiniz "az kodla çok iş" olduğu için sıralama işlevsel büyü
 2. **Bölüm 1'in ucuz kalemleri** — `show-as`, `area-index`, `expanded`, alan başına toplamlar.
 3. **Bölüm 2** — filtre değer seçici. Tasarımcının Filtreler bölgesi bugün işlevsiz;
    bu onu tamamlayan parça.
-4. **Bölüm 8** — dokunmatik + klavye. Erişilebilirlik borcu ve mobil kullanımın önkoşulu.
+4. **Bölüm 8** — ~~dokunmatik + klavye~~ ikisi de tamam; kalan ARIA ve mobil düzen.
 5. **Bölüm 3** — hesaplanmış alanlar. En büyük tasarım işi, en sona.
 
 ---

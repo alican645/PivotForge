@@ -465,7 +465,7 @@ When a `fieldDesigner` is configured, `PivotWidget`'s constructor builds a `Pivo
 
 #### Dragging
 
-Chips are dragged with the mouse, using the HTML5 drag-and-drop API. A drop is **positional**: while dragging over a zone the designer compares the pointer against each chip's midpoint and draws an insertion line at the slot the chip would land in, and the release places the field exactly there rather than appending it. Releasing outside every zone cancels the move rather than removing the field. This works both when a field enters a zone from elsewhere and when a chip is dragged **within its own zone**, which is how row and column order — the pivot's grouping hierarchy — is rearranged. Repositioning a value keeps its aggregation, and repositioning a filter keeps its selected values.
+Chips are moved by pointer or by keyboard. A drop is **positional**: while dragging over a zone the designer compares the pointer against each chip's midpoint and draws an insertion line at the slot the chip would land in, and the release places the field exactly there rather than appending it. Releasing outside every zone cancels the move rather than removing the field. This works both when a field enters a zone from elsewhere and when a chip is dragged **within its own zone**, which is how row and column order — the pivot's grouping hierarchy — is rearranged. Repositioning a value keeps its aggregation, and repositioning a filter keeps its selected values.
 
 The available-field list is a catalog rather than an ordered layout, so it is not reorderable; fields leave a zone through the chip's remove (`×`) button.
 
@@ -525,15 +525,38 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
   be stated explicitly for a field declared `area="Available"`. Dragging a field
   where its role forbids marks the zone as refused; the drop is rejected.
 - **A placed field can be dragged back to the Fields list to remove it**, which does the same thing as its × button and obeys the same rule: the last remaining Values field cannot be removed either way.
-- **Mouse, touch and pen all work; keyboard does not yet.** Drag runs on pointer
-  events rather than the HTML5 drag-and-drop API, which never fires on a touch
-  device. A mouse drags from anywhere on a chip. A finger or a pen drags from
-  the chip's grip (`⠿`) only — the grip is the sole element carrying
+- **Mouse, touch, pen and keyboard all work.** Drag runs on pointer events
+  rather than the HTML5 drag-and-drop API, which never fires on a touch device.
+  A mouse drags from anywhere on a chip. A finger or a pen drags from the
+  chip's grip (`⠿`) only — the grip is the sole element carrying
   `touch-action: none`, so a touch anywhere else still scrolls the panel, which
   a long available-field list needs. A press becomes a drag only after it has
   travelled 5px, so a tap or a click on a chip control still reaches that
-  control. There is still no keyboard equivalent: chips are not focusable and
-  cannot be moved without a pointer.
+  control.
+
+  The keyboard path is a **pick up / drop** gesture rather than a set of
+  shortcuts, so it has the drag's cancel: nothing is written to the state until
+  the field is dropped, and Escape simply forgets the move. Chips use a roving
+  `tabindex` — one tab stop per zone, on the chip focus last visited there — and
+  the chip's own controls (`×`, `⋯`, `▼`) are taken out of the tab sequence, so
+  a ten-field panel costs five tab stops rather than forty.
+
+  | Key | On a focused chip | While a chip is picked up |
+  |---|---|---|
+  | `Space` | pick the field up | drop it where the marker is |
+  | `Enter` | open the settings modal | drop it |
+  | `↑` / `↓` | move focus within the zone | move the landing slot |
+  | `←` / `→` | — | move to the previous / next zone |
+  | `Escape` | — | cancel; nothing changes |
+  | `Delete` | remove the field | — |
+
+  Zones step in screen order: **Alanlar → Filtreler → Sütunlar → Satırlar →
+  Değerler**. Dropping onto Alanlar unplaces the field, exactly as dragging it
+  back there does; a zone the field's role forbids is marked refused and the
+  drop does nothing. Focus follows the field through the re-render its own move
+  triggers, so a second move needs no reach for the mouse. Because `▼` is out
+  of the tab sequence, the settings modal carries a **Filtre değerleri** button
+  that opens the same picker.
 - **No sort panel from the designer.** The settings modal covers naming, position, aggregation, show-as, number format and removal; sorting is still driven through the widget's `sortBy`, outside the designer.
 - **Named saved views are not wired up automatically.** `state-storing` persists one current state per key, automatically. Letting a user keep *several* named views and switch between them is a different feature, built on `PivotViewStore` — see the MVC demo for one approach.
 - **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.
