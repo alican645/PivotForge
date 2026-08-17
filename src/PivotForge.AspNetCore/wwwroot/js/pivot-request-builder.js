@@ -6,6 +6,7 @@
   const AGGREGATIONS = ["sum", "count", "average", "min", "max"];
   const FORMAT_TYPES = ["number", "currency", "percent"];
   const SORT_ORDERS = ["Ascending", "Descending"];
+  const FILTER_MODES = ["Include", "Exclude"];
   const SHOW_AS = [
     "normal",
     "percentOfRowTotal",
@@ -175,6 +176,38 @@
     return applyAreaIndex(fields.map(normalizeField));
   }
 
+  // The one place the filter vocabulary is spelled out, so the designer, the
+  // widget's own setFilter, and a restored view all agree on what a filter is.
+  function normalizeFilter(filter, index) {
+    if (!filter || typeof filter !== "object") {
+      throw new Error(`Filter at index ${index} must be an object.`);
+    }
+
+    const field = filter.field;
+    if (typeof field !== "string" || field.trim() === "") {
+      throw new Error(`Filter at index ${index} requires a non-empty "field".`);
+    }
+
+    if (!Array.isArray(filter.values)) {
+      throw new Error(`Filter on field "${field}" requires a "values" array.`);
+    }
+
+    const mode = filter.mode ?? "Include";
+    if (!FILTER_MODES.includes(mode)) {
+      throw new Error(
+        `Unknown filter mode "${mode}" on field "${field}". Expected one of: ${FILTER_MODES.join(", ")}.`
+      );
+    }
+
+    return {
+      field,
+      // A null source value is compared as the empty string all the way down to
+      // the engine, so that is what a blank is carried as.
+      values: filter.values.map(value => (value == null ? "" : String(value))),
+      mode
+    };
+  }
+
   function valueKey(field) {
     return `${field.dataField}_${String(field.aggregation).toLowerCase()}`;
   }
@@ -196,7 +229,7 @@
         aggregation: field.aggregation,
         showAs: field.showAs
       })),
-      filters: extras.filters ?? [],
+      filters: (extras.filters ?? []).map(normalizeFilter),
       rowSort: extras.rowSort ?? null,
       // Named rather than positional so the list survives a field moving to
       // another area, and so a later per-field sortBy has somewhere to live.
@@ -207,7 +240,8 @@
   }
 
   PivotForge.PivotRequestBuilder = {
-    normalizeFields, buildRequest, valueKey, AGGREGATIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS
+    normalizeFields, normalizeFilter, buildRequest, valueKey,
+    AGGREGATIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS, FILTER_MODES
   };
 
   if (typeof module !== "undefined" && module.exports) {

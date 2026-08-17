@@ -385,7 +385,8 @@ test("update applies fields, filters, and sort in a single refresh", async () =>
   assert.deepEqual(calls[0].body.values, [
     { field: "tutar", aggregation: "average", showAs: "normal" }
   ]);
-  assert.deepEqual(calls[0].body.filters, [{ field: "bolge", values: ["Kuzey"] }]);
+  assert.deepEqual(
+    calls[0].body.filters, [{ field: "bolge", values: ["Kuzey"], mode: "Include" }]);
   assert.equal(calls[0].body.rowSort.direction, "descending");
   widget.dispose();
 });
@@ -396,7 +397,8 @@ test("update leaves omitted members untouched", async () => {
   await widget.setFilter("urun", ["Lokum"]);
   await widget.update({ rowSort: { mode: "rowLabel", direction: "ascending", field: "urun" } });
 
-  assert.deepEqual(calls[1].body.filters, [{ field: "urun", values: ["Lokum"] }]);
+  assert.deepEqual(
+    calls[1].body.filters, [{ field: "urun", values: ["Lokum"], mode: "Include" }]);
   assert.deepEqual(calls[1].body.rows, ["urun"]);
   widget.dispose();
 });

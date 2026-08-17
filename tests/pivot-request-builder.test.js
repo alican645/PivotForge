@@ -81,7 +81,7 @@ test("passes through supplied filters and row sort", () => {
     rowSort
   });
 
-  assert.deepEqual(request.filters, [{ field: "bolge", values: ["Kuzey"] }]);
+  assert.deepEqual(request.filters, [{ field: "bolge", values: ["Kuzey"], mode: "Include" }]);
   assert.deepEqual(request.rowSort, rowSort);
 });
 
@@ -392,4 +392,44 @@ test("an unknown sortOrder is refused rather than passed through", () => {
       { dataField: "Region", area: "row", sortOrder: "descending" }
     ]),
     /Unknown sortOrder "descending"/);
+});
+
+test("a filter with no declared mode is sent as including", () => {
+  const request = PivotRequestBuilder.buildRequest(salesFields, {
+    filters: [{ field: "bolge", values: ["Kuzey"] }]
+  });
+
+  assert.deepEqual(request.filters, [{ field: "bolge", values: ["Kuzey"], mode: "Include" }]);
+});
+
+test("an excluding filter is carried through as declared", () => {
+  const request = PivotRequestBuilder.buildRequest(salesFields, {
+    filters: [{ field: "bolge", values: ["Kuzey"], mode: "Exclude" }]
+  });
+
+  assert.deepEqual(request.filters, [{ field: "bolge", values: ["Kuzey"], mode: "Exclude" }]);
+});
+
+test("an unknown filter mode is refused rather than sent", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest(salesFields, {
+      filters: [{ field: "bolge", values: ["Kuzey"], mode: "exclude" }]
+    }),
+    /Unknown filter mode "exclude" on field "bolge"/);
+});
+
+test("a filter without a values array is refused", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest(salesFields, {
+      filters: [{ field: "bolge" }]
+    }),
+    /requires a "values" array/);
+});
+
+test("filter values are stringified, with blank standing in for null", () => {
+  const request = PivotRequestBuilder.buildRequest(salesFields, {
+    filters: [{ field: "bolge", values: [2025, null, "Ege"] }]
+  });
+
+  assert.deepEqual(request.filters[0].values, ["2025", "", "Ege"]);
 });

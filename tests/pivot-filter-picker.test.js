@@ -429,3 +429,94 @@ test("a disposed picker refuses to open again", async () => {
 
   assert.deepEqual(widget.calls, []);
 });
+
+// --- Include / exclude ------------------------------------------------------
+// A checkbox means "shown" in both modes; the mode picks which side of the list
+// is stored, and therefore what happens to a value the source gains later.
+
+const modeButtons = host => byAction(host, "filter-mode");
+const activeMode = host =>
+  modeButtons(host).find(button => button.classList.contains("is-active"))?.dataset.mode ?? null;
+
+async function openCapturing(host, picker, request = {}) {
+  const applied = [];
+  await picker.open({
+    field: "Region",
+    caption: "Bölge",
+    onApply: (values, mode) => applied.push({ values, mode }),
+    ...request
+  });
+  return applied;
+}
+
+test("an excluding filter checks everything except the values it lists", async () => {
+  const { picker, host } = build();
+  await openCapturing(host, picker, { selected: ["Ege"], mode: "Exclude" });
+
+  assert.deepEqual(
+    checkboxesOf(host).map(box => box.checked),
+    [false, true, true]);
+  assert.equal(activeMode(host), "Exclude");
+});
+
+test("applying an excluding filter stores the unchecked values", async () => {
+  const { picker, host } = build();
+  const applied = await openCapturing(host, picker, { selected: [], mode: "Exclude" });
+
+  toggle(host, "Marmara", false);
+  byAction(host, "filter-apply")[0].dispatch("click");
+
+  assert.deepEqual(applied, [{ values: ["Marmara"], mode: "Exclude" }]);
+});
+
+test("an excluding filter with nothing unchecked restricts nothing", async () => {
+  const { picker, host } = build();
+  const applied = await openCapturing(host, picker, { selected: ["Ege"], mode: "Exclude" });
+
+  toggle(host, "Ege", true);
+  byAction(host, "filter-apply")[0].dispatch("click");
+
+  assert.deepEqual(applied, [{ values: [], mode: "Exclude" }]);
+});
+
+test("switching the mode leaves the visible selection exactly as it was", async () => {
+  const { picker, host } = build();
+  const applied = await openCapturing(host, picker, { selected: ["Ege"] });
+
+  const before = checkboxesOf(host).map(box => box.checked);
+  modeButtons(host).find(button => button.dataset.mode === "Exclude").dispatch("click");
+
+  // The rows on screen are the same rows under either mode -- Include keeps the
+  // checked ones, Exclude drops the unchecked ones, which is the same set. What
+  // changes is a value that is not in the source yet.
+  assert.deepEqual(checkboxesOf(host).map(box => box.checked), before);
+  assert.equal(activeMode(host), "Exclude");
+
+  byAction(host, "filter-apply")[0].dispatch("click");
+  assert.deepEqual(applied, [{ values: ["İç Anadolu", "Marmara"], mode: "Exclude" }]);
+});
+
+test("an undeclared mode opens as including", async () => {
+  const { picker, host } = build();
+  const applied = await openCapturing(host, picker, { selected: ["Ege"] });
+
+  assert.equal(activeMode(host), "Include");
+
+  byAction(host, "filter-apply")[0].dispatch("click");
+  assert.deepEqual(applied, [{ values: ["Ege"], mode: "Include" }]);
+});
+
+test("an excluding filter keeps listed values the truncated response omitted", async () => {
+  const { picker, host } = build();
+  const applied = await openCapturing(host, picker, {
+    selected: ["Karadeniz"],
+    mode: "Exclude"
+  });
+
+  // Karadeniz is excluded but was not listed; applying must not quietly bring
+  // it back, the same way an including filter keeps its unlisted selections.
+  toggle(host, "Marmara", false);
+  byAction(host, "filter-apply")[0].dispatch("click");
+
+  assert.deepEqual(applied, [{ values: ["Karadeniz", "Marmara"], mode: "Exclude" }]);
+});

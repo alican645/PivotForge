@@ -849,11 +849,15 @@ public sealed class PivotEngine
 
     private static IReadOnlyList<CompiledFilter> CompileFilters(IReadOnlyList<PivotFilter> filters)
     {
+        // An empty list restricts nothing in either mode: an empty set to keep is
+        // how "no filter" is spelled all the way down from the browser, and an
+        // empty set to drop says the same thing from the other side.
         return filters
             .Where(filter => filter.Values.Count > 0)
             .Select(filter => new CompiledFilter(
                 filter.Field,
-                new HashSet<string?>(filter.Values, StringComparer.Ordinal)))
+                new HashSet<string?>(filter.Values, StringComparer.Ordinal),
+                filter.Mode == PivotFilterMode.Exclude))
             .ToArray();
     }
 
@@ -868,7 +872,7 @@ public sealed class PivotEngine
         {
             var value = Convert.ToString(reader.GetValue(record, filter.Field), System.Globalization.CultureInfo.InvariantCulture);
 
-            if (!filter.Values.Contains(value))
+            if (filter.Values.Contains(value) == filter.Excludes)
             {
                 return false;
             }
@@ -1224,7 +1228,7 @@ public sealed class PivotEngine
         return rows;
     }
 
-    private sealed record CompiledFilter(string Field, HashSet<string?> Values);
+    private sealed record CompiledFilter(string Field, HashSet<string?> Values, bool Excludes);
 
     private sealed record SortedRows(
         IReadOnlyList<IReadOnlyList<string?>> Headers,

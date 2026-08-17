@@ -543,6 +543,99 @@ public sealed class PivotEngineTests
     }
 
     [Fact]
+    public void Execute_ExcludesTheListedValues()
+    {
+        var result = new PivotEngine(CultureInfo.InvariantCulture).Execute(NestedOrders, new PivotRequest
+        {
+            Rows = ["Region"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            Filters = [new PivotFilter("Region", ["West"], PivotFilterMode.Exclude)]
+        });
+
+        Assert.Equal(["East"], RowPaths(result));
+    }
+
+    [Fact]
+    public void Execute_TreatsAnEmptyListAsNoRestriction_InBothModes()
+    {
+        PivotResult Execute(PivotFilterMode mode) =>
+            new PivotEngine(CultureInfo.InvariantCulture).Execute(NestedOrders, new PivotRequest
+            {
+                Rows = ["Region"],
+                Values = [PivotValueDefinition.Sum("Amount")],
+                Filters = [new PivotFilter("Region", [], mode)]
+            });
+
+        // An empty set to keep is how "no filter" is spelled from the browser;
+        // an empty set to drop says the same thing from the other side.
+        Assert.Equal(["East", "West"], RowPaths(Execute(PivotFilterMode.Include)));
+        Assert.Equal(["East", "West"], RowPaths(Execute(PivotFilterMode.Exclude)));
+    }
+
+    [Fact]
+    public void Execute_DescribesTheSameRows_WhenTheTwoModesListComplements()
+    {
+        PivotResult Execute(PivotFilter filter) =>
+            new PivotEngine(CultureInfo.InvariantCulture).Execute(NestedOrders, new PivotRequest
+            {
+                Rows = ["Region", "Category"],
+                Values = [PivotValueDefinition.Sum("Amount")],
+                Filters = [filter]
+            });
+
+        // The property the picker's mode switch relies on: keeping A and dropping
+        // everything-but-A select the same rows today, and differ only over a
+        // value the source does not have yet.
+        var kept = Execute(new PivotFilter("Category", ["Alpha"]));
+        var dropped = Execute(new PivotFilter("Category", ["Beta"], PivotFilterMode.Exclude));
+
+        Assert.Equal(RowPaths(kept), RowPaths(dropped));
+        Assert.Equal(
+            kept.GrandTotals["Amount_sum"], dropped.GrandTotals["Amount_sum"]);
+    }
+
+    [Fact]
+    public void Execute_ExcludesBlanksThroughTheEmptyString()
+    {
+        var orders = new[]
+        {
+            new Order("East", 2026, "Alpha", 1m),
+            new Order(null!, 2026, "Alpha", 2m)
+        };
+
+        var result = new PivotEngine(CultureInfo.InvariantCulture).Execute(orders, new PivotRequest
+        {
+            Rows = ["Region"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            Filters = [new PivotFilter("Region", [""], PivotFilterMode.Exclude)]
+        });
+
+        Assert.Equal(["East"], RowPaths(result));
+    }
+
+    [Fact]
+    public void DrillDown_HonoursAnExcludingFilter()
+    {
+        var orders = CreateDrillDownOrders();
+        var records = new PivotEngine().DrillDown(
+            orders,
+            new PivotRequest
+            {
+                Rows = ["Region", "Category"],
+                Columns = ["Year"],
+                Values = [PivotValueDefinition.Sum("Amount")],
+                Filters = [new PivotFilter("Category", ["A"], PivotFilterMode.Exclude)]
+            },
+            [],
+            []);
+
+        // The detail list must match the cell it was opened from, so it goes
+        // through the same filter compilation the pivot did.
+        Assert.NotEmpty(records);
+        Assert.All(records, record => Assert.NotEqual("A", record.Category));
+    }
+
+    [Fact]
     public void Execute_ReturnsEmptyResultForEmptyData()
     {
         var result = new PivotEngine().Execute(Array.Empty<Order>(), new PivotRequest

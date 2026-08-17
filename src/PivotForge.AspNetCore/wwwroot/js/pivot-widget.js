@@ -251,12 +251,22 @@
         layout: payload.layout ?? null,
         captions: payload.captions ?? null,
         // A filter naming a field the catalog dropped would be rejected by the
-        // server, so it is discarded here rather than sent.
+        // server, so it is discarded here rather than sent. A mode the vocabulary
+        // does not know is discarded the same way rather than thrown on: a view
+        // stored by an older or a tampered-with client should still open.
         filters: Array.isArray(payload.filters)
           ? payload.filters.filter(filter =>
             this.fields.some(field => field.dataField === filter?.field) &&
-            Array.isArray(filter.values))
-            .map(filter => ({ field: filter.field, values: [...filter.values] }))
+            Array.isArray(filter.values) &&
+            (filter.mode === undefined ||
+              PivotForge.PivotRequestBuilder.FILTER_MODES.includes(filter.mode)))
+            .map(filter => ({
+              field: filter.field,
+              values: [...filter.values],
+              // A view stored before modes existed is an including filter, which
+              // is what it did when it was saved.
+              mode: filter.mode ?? "Include"
+            }))
           : null,
         rowSort: payload.rowSort ?? null
       };
@@ -601,7 +611,8 @@
       }
 
       if (filters !== undefined) {
-        this.filters = filters.map(filter => ({ field: filter.field, values: [...filter.values] }));
+        this.filters = filters.map(filter =>
+          ({ field: filter.field, values: [...filter.values], mode: filter.mode }));
       }
 
       if (rowSort !== undefined) {
@@ -771,14 +782,17 @@
       await this.refresh();
     }
 
-    async setFilter(field, values) {
+    async setFilter(field, values, mode = "Include") {
       if (!this.options.allowFiltering) {
         throw new Error("Cannot filter because allowFiltering is disabled.");
       }
 
       this.filters = this.filters.filter(filter => filter.field !== field);
+      // An empty list restricts nothing whichever mode it is in, so it is stored
+      // as no filter at all rather than as an empty one.
       if (Array.isArray(values) && values.length > 0) {
-        this.filters.push({ field, values });
+        this.filters.push(
+          PivotForge.PivotRequestBuilder.normalizeFilter({ field, values, mode }, 0));
       }
 
       this.saveState();

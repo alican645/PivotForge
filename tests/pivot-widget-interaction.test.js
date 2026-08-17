@@ -78,7 +78,8 @@ test("setFilter adds a filter to the request", async () => {
 
   await widget.setFilter("urun", ["Lokum", "Helva"]);
 
-  assert.deepEqual(calls[0].filters, [{ field: "urun", values: ["Lokum", "Helva"] }]);
+  assert.deepEqual(
+    calls[0].filters, [{ field: "urun", values: ["Lokum", "Helva"], mode: "Include" }]);
   widget.dispose();
 });
 
@@ -88,7 +89,7 @@ test("setFilter replaces an existing filter on the same field", async () => {
   await widget.setFilter("urun", ["Lokum"]);
   await widget.setFilter("urun", ["Helva"]);
 
-  assert.deepEqual(calls[1].filters, [{ field: "urun", values: ["Helva"] }]);
+  assert.deepEqual(calls[1].filters, [{ field: "urun", values: ["Helva"], mode: "Include" }]);
   widget.dispose();
 });
 

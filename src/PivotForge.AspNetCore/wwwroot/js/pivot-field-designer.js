@@ -14,8 +14,11 @@
     format: "Biçim",
     settings: "Alan ayarları",
     filterValues: "Filtre değerleri",
-    // {0} is replaced with the number of selected values.
+    // {0} is replaced with the number of listed values.
     filterCount: "({0})",
+    // The same count means the opposite thing under an excluding filter, so it
+    // cannot share the label.
+    filterCountExcluded: "({0} hariç)",
     aggregation: "Değer ayarları",
     showAs: "Değerleri farklı göster",
     formatting: "Biçimlendirme",
@@ -243,11 +246,14 @@
 
       // A filter whose zone shows only the field name gives no clue that it is
       // restricting anything, so an active one carries its selection count.
-      const selectedCount = area === "filter" ? this.filterValuesOf(name).length : 0;
-      if (selectedCount > 0) {
+      const filter = area === "filter" ? this.filterEntryOf(name) : null;
+      if (filter && filter.values.length > 0) {
         const count = document.createElement("span");
         count.className = "pivot-chip__filter-count";
-        count.textContent = format(this.labels.filterCount, selectedCount);
+        count.classList.toggle("is-excluding", filter.mode === "Exclude");
+        count.textContent = format(
+          filter.mode === "Exclude" ? this.labels.filterCountExcluded : this.labels.filterCount,
+          filter.values.length);
         chip.appendChild(count);
       }
 
@@ -676,8 +682,9 @@
         (this.filterPicker !== null || typeof PivotForge.PivotFilterPicker === "function");
     }
 
-    filterValuesOf(name) {
-      return this.state.getState().filters.find(entry => entry.field === name)?.values ?? [];
+    filterEntryOf(name) {
+      const entry = this.state.getState().filters.find(filter => filter.field === name);
+      return { values: entry?.values ?? [], mode: entry?.mode ?? "Include" };
     }
 
     openFilterPicker(name) {
@@ -686,11 +693,18 @@
         labels: this.labels.filterPicker
       });
 
+      const filter = this.filterEntryOf(name);
+
       return this.filterPicker.open({
         field: name,
         caption: this.state.field(name).caption,
-        selected: this.filterValuesOf(name),
-        onApply: values => this.apply(() => this.state.setFilterValues(name, values))
+        selected: filter.values,
+        mode: filter.mode,
+        // One apply(), so a picker that changed both produces a single refresh.
+        onApply: (values, mode) => this.apply(() => {
+          this.state.setFilterMode(name, mode);
+          this.state.setFilterValues(name, values);
+        })
       });
     }
 

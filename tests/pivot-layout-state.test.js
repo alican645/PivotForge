@@ -324,7 +324,8 @@ test("toRequestState keeps a filter with selected values but drops one with none
     ]
   });
 
-  assert.deepEqual(state.toRequestState().filters, [{ field: "Quarter", values: ["Q1"] }]);
+  assert.deepEqual(
+    state.toRequestState().filters, [{ field: "Quarter", values: ["Q1"], mode: "Include" }]);
 });
 
 test("each mutation emits exactly one change event", () => {
@@ -715,8 +716,10 @@ test("filter values are written to the filter entry and reach the request", () =
 
   state.setFilterValues("Quarter", ["Q1", "Q3"]);
 
-  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
-  assert.deepEqual(state.toRequestState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"], mode: "Include" }]);
+  assert.deepEqual(
+    state.toRequestState().filters, [{ field: "Quarter", values: ["Q1", "Q3"], mode: "Include" }]);
 });
 
 test("an empty filter selection is dropped from the request rather than sent", () => {
@@ -726,7 +729,7 @@ test("an empty filter selection is dropped from the request rather than sent", (
 
   state.setFilterValues("Quarter", []);
 
-  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: [] }]);
+  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: [], mode: "Include" }]);
   assert.deepEqual(state.toRequestState().filters, []);
 });
 
@@ -760,7 +763,7 @@ test("setting filter values notifies change subscribers", () => {
 
   state.setFilterValues("Quarter", ["Q1"]);
 
-  assert.deepEqual(seen.filters, [{ field: "Quarter", values: ["Q1"] }]);
+  assert.deepEqual(seen.filters, [{ field: "Quarter", values: ["Q1"], mode: "Include" }]);
 });
 
 // --- Caption round-trip -----------------------------------------------------
@@ -897,4 +900,68 @@ test("areaIndex decides the opening layout", () => {
         : field.dataField === "Category" ? { ...field, areaIndex: 0 } : field));
 
   assert.deepEqual(state.getState().rows, ["Category", "Region"]);
+});
+
+test("a filter placed in the designer starts out including", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+
+  assert.equal(state.getState().filters[0].mode, "Include");
+});
+
+test("setFilterMode switches which side of the list is stored", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  state.setFilterValues("Quarter", ["Q1"]);
+
+  state.setFilterMode("Quarter", "Exclude");
+
+  assert.deepEqual(
+    state.toRequestState().filters,
+    [{ field: "Quarter", values: ["Q1"], mode: "Exclude" }]);
+});
+
+test("setFilterMode refuses a mode the engine has never heard of", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+
+  assert.throws(() => state.setFilterMode("Quarter", "exclude"), /Unknown filter mode/);
+});
+
+test("setFilterMode refuses a field outside the filter area", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterMode("Region", "Exclude"), /not in the filter area/);
+});
+
+test("a filter's mode survives a reorder of the filter zone", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  state.move("Year", "filter");
+  state.setFilterMode("Quarter", "Exclude");
+
+  state.move("Quarter", "filter", 1);
+
+  assert.equal(
+    state.getState().filters.find(filter => filter.field === "Quarter").mode, "Exclude");
+});
+
+test("an adopted layout carrying an excluding filter keeps it", () => {
+  const state = new PivotForge.PivotLayoutState(catalog, {
+    rows: ["Region"],
+    columns: [],
+    values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+    filters: [{ field: "Quarter", values: ["Q1"], mode: "Exclude" }]
+  });
+
+  assert.equal(state.getState().filters[0].mode, "Exclude");
+});
+
+test("an adopted layout carrying an unknown filter mode is refused at construction", () => {
+  assert.throws(() => new PivotForge.PivotLayoutState(catalog, {
+    rows: ["Region"],
+    columns: [],
+    values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+    filters: [{ field: "Quarter", values: ["Q1"], mode: "exclude" }]
+  }), /Unknown filter mode/);
 });

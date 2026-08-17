@@ -202,7 +202,8 @@ test("the payload carries the layout, captions, filters and sort", async () => {
   const payload = saved(store);
   assert.equal(payload.version, 1);
   assert.deepEqual(payload.layout.rows, ["Region"]);
-  assert.deepEqual(payload.layout.filters, [{ field: "Quarter", values: ["Ç1"] }]);
+  assert.deepEqual(
+    payload.layout.filters, [{ field: "Quarter", values: ["Ç1"], mode: "Include" }]);
   assert.deepEqual(payload.captions, { Region: "Satış Bölgesi" });
   assert.equal(payload.rowSort.field, "Region");
   // available is derived from the catalog, so storing it would only let a stale
@@ -219,11 +220,13 @@ test("a filter picked in the designer round-trips through the payload", () => {
   widget.layoutState.move("Quarter", "filter");
   widget.layoutState.setFilterValues("Quarter", ["Ç1", "Ç3"]);
 
-  assert.deepEqual(saved(store).filters, [{ field: "Quarter", values: ["Ç1", "Ç3"] }]);
+  assert.deepEqual(
+    saved(store).filters, [{ field: "Quarter", values: ["Ç1", "Ç3"], mode: "Include" }]);
   widget.dispose();
 
   const reopened = build({ designer: true, storage: store }).widget;
-  assert.deepEqual(reopened.getState().filters, [{ field: "Quarter", values: ["Ç1", "Ç3"] }]);
+  assert.deepEqual(
+    reopened.getState().filters, [{ field: "Quarter", values: ["Ç1", "Ç3"], mode: "Include" }]);
   reopened.dispose();
 });
 
@@ -233,7 +236,8 @@ test("a filter accepting everything is not written as a restriction", () => {
   widget.layoutState.move("Quarter", "filter");
 
   assert.deepEqual(saved(store).filters, []);
-  assert.deepEqual(saved(store).layout.filters, [{ field: "Quarter", values: [] }]);
+  assert.deepEqual(
+    saved(store).layout.filters, [{ field: "Quarter", values: [], mode: "Include" }]);
   widget.dispose();
 });
 
@@ -243,7 +247,7 @@ test("a widget without a designer persists only what it owns", async () => {
   await widget.setFilter("Region", ["Ege"]);
 
   const payload = saved(store);
-  assert.deepEqual(payload.filters, [{ field: "Region", values: ["Ege"] }]);
+  assert.deepEqual(payload.filters, [{ field: "Region", values: ["Ege"], mode: "Include" }]);
   assert.equal(payload.layout, undefined);
   assert.equal(payload.captions, undefined);
   widget.dispose();
@@ -253,7 +257,7 @@ test("every mutating path writes, not just the first", async () => {
   const { widget, store } = build();
 
   await widget.setFilter("Region", ["Ege"]);
-  assert.deepEqual(saved(store).filters, [{ field: "Region", values: ["Ege"] }]);
+  assert.deepEqual(saved(store).filters, [{ field: "Region", values: ["Ege"], mode: "Include" }]);
 
   await widget.sortBy({ mode: "RowLabel", direction: "Descending", field: "Region" });
   assert.equal(saved(store).rowSort.direction, "Descending");
@@ -306,7 +310,10 @@ test("stored filters and sort are adopted with no designer in play", () => {
     })
   });
 
-  assert.deepEqual(widget.getState().filters, [{ field: "Region", values: ["Ege"] }]);
+  // Stored before modes existed, so it is adopted as the including filter it
+  // was when it was saved.
+  assert.deepEqual(
+    widget.getState().filters, [{ field: "Region", values: ["Ege"], mode: "Include" }]);
   assert.equal(widget.getState().rowSort.direction, "Descending");
   widget.dispose();
 });
@@ -316,7 +323,21 @@ test("a stored filter on a field the catalog no longer has is dropped", () => {
     seed: seedWith({ filters: [{ field: "Gone", values: ["x"] }, { field: "Region", values: ["Ege"] }] })
   });
 
-  assert.deepEqual(widget.getState().filters, [{ field: "Region", values: ["Ege"] }]);
+  assert.deepEqual(
+    widget.getState().filters, [{ field: "Region", values: ["Ege"], mode: "Include" }]);
+  widget.dispose();
+});
+
+test("a stored filter carrying a mode the vocabulary does not know is dropped", () => {
+  const { widget } = build({
+    seed: seedWith({
+      filters: [{ field: "Region", values: ["Ege"], mode: "exclude" }]
+    })
+  });
+
+  // Dropped rather than thrown on, like every other unusable stored entry: a
+  // view saved by a tampered-with or newer client must still open the page.
+  assert.deepEqual(widget.getState().filters, []);
   widget.dispose();
 });
 

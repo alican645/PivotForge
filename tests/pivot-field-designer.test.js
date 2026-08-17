@@ -1162,8 +1162,10 @@ test("applying a selection writes it to the state and reaches the widget", async
   boxes[1].dispatch("change", {});
   pickerByAction("filter-apply")[0].dispatch("click", {});
 
-  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
-  assert.deepEqual(updates.at(-1).filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"], mode: "Include" }]);
+  assert.deepEqual(
+    updates.at(-1).filters, [{ field: "Quarter", values: ["Q1", "Q3"], mode: "Include" }]);
 });
 
 test("an active filter chip shows how many values it accepts", async () => {
@@ -1797,4 +1799,51 @@ test("two designers on one page do not claim the same heading ids", () => {
   // Stable across calls, or aria-labelledby would point at a heading that has
   // since been renamed out from under it.
   assert.equal(first.designer.zoneHeadingId("row"), ids("row")[0]);
+});
+
+test("an excluding filter chip counts what it drops, not what it accepts", async () => {
+  const { designer, host, state } = buildWithFilter();
+
+  state.setFilterValues("Quarter", ["Q1", "Q3"]);
+  state.setFilterMode("Quarter", "Exclude");
+  designer.render();
+
+  // "(2)" under an excluding filter would read as two values accepted, which is
+  // the opposite of what it does.
+  const count = findByClassName(filterChip(host), "pivot-chip__filter-count");
+  assert.equal(count.textContent, "(2 hariç)");
+  assert.equal(count.classList.contains("is-excluding"), true);
+});
+
+test("the picker opens on the mode the filter already carries", async () => {
+  const { designer, state } = buildWithFilter();
+  state.setFilterValues("Quarter", ["Q2"]);
+  state.setFilterMode("Quarter", "Exclude");
+
+  await designer.openFilterPicker("Quarter");
+
+  const active = pickerByAction("filter-mode")
+    .find(button => button.classList.contains("is-active"));
+  assert.equal(active.dataset.mode, "Exclude");
+  // Excluded values arrive unchecked; everything else is shown.
+  assert.deepEqual(pickerByAction("filter-value").map(box => box.checked), [true, false, true]);
+});
+
+test("applying writes the mode and the values in one widget update", async () => {
+  const { designer, state, updates } = buildWithFilter();
+
+  await designer.openFilterPicker("Quarter");
+  pickerByAction("filter-mode").find(button => button.dataset.mode === "Exclude")
+    .dispatch("click", {});
+  const boxes = pickerByAction("filter-value");
+  boxes[1].checked = false;
+  boxes[1].dispatch("change", {});
+  const before = updates.length;
+  pickerByAction("filter-apply")[0].dispatch("click", {});
+
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Quarter", values: ["Q2"], mode: "Exclude" }]);
+  // Two state mutations, one refresh: a picker that changed both must not cost
+  // the page two requests.
+  assert.equal(updates.length, before + 1);
 });

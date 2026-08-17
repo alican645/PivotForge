@@ -84,7 +84,8 @@
           showAs: field.showAs ?? "normal",
           ...(field.format ? { format: checkFormat(field.dataField, field.format) } : {})
         })),
-        filters: inArea("filter").map(field => ({ field: field.dataField, values: [] }))
+        filters: inArea("filter").map(field =>
+          ({ field: field.dataField, values: [], mode: "Include" }))
       };
     }
 
@@ -149,10 +150,11 @@
             ...(format ? { format } : {})
           };
         }),
-        filters: (layout.filters ?? []).map(filter => ({
-          field: filter.field,
-          values: [...(filter.values ?? [])]
-        }))
+        // Through the same normalizer buildRequest uses, so an adopted layout
+        // cannot carry a filter mode the engine has never heard of.
+        filters: (layout.filters ?? []).map((filter, index) =>
+          PivotForge.PivotRequestBuilder.normalizeFilter(
+            { ...filter, values: filter.values ?? [] }, index))
       };
     }
 
@@ -275,7 +277,7 @@
           ...(catalogFormat ? { format: checkFormat(name, catalogFormat) } : {})
         }
         : area === "filter"
-          ? { field: name, values: [] }
+          ? { field: name, values: [], mode: "Include" }
           : name);
 
       // detach() reassigns the area arrays, so the target has to be re-read.
@@ -398,6 +400,23 @@
       // Values reach the engine as strings; a null source value is compared as
       // the empty string, so that is what blank is stored as.
       filter.values = values.map(value => (value == null ? "" : String(value)));
+      this.emitChange();
+    }
+
+    // Whether the stored values are the ones kept or the ones dropped. It says
+    // nothing about the values themselves: what it decides is where a value the
+    // source gains later lands -- hidden under Include, visible under Exclude.
+    setFilterMode(name, mode) {
+      const filter = this.layout.filters.find(entry => entry.field === name);
+      if (!filter) {
+        throw new Error(`Field "${name}" is not in the filter area.`);
+      }
+
+      if (!PivotForge.PivotRequestBuilder.FILTER_MODES.includes(mode)) {
+        throw new Error(`Unknown filter mode "${mode}" for field "${name}".`);
+      }
+
+      filter.mode = mode;
       this.emitChange();
     }
 
