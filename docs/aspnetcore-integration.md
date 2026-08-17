@@ -260,6 +260,7 @@ Three child elements declare the state a grid starts in. Each has a
   <pivot-field field="Amount" area="Data" aggregation="Sum" />
 
   <pivot-filter field="Region" values="Marmara, Ege" />
+  <pivot-filter field="Year" type="Exclude" values="2019" />
   <pivot-sort mode="RowTotalValue" value-field="Amount" direction="Descending" />
   <pivot-conditional-rule value-field="Amount" operator="GreaterThanOrEqual"
                           threshold="900000" color="Green" id="high" />
@@ -268,7 +269,7 @@ Three child elements declare the state a grid starts in. Each has a
 
 | Element | Builder | Notes |
 | --- | --- | --- |
-| `pivot-filter` | `Filter(string, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. |
+| `pivot-filter` | `Filter(string, params string[])`, `Filter(string, PivotFilterMode, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. `type="Exclude"` turns the list into the values to drop; the default `Include` keeps only the listed ones. |
 | `pivot-sort` | `RowSort(PivotSort)` | At most one per grid — rows order one way, so a second is refused rather than merged. |
 | `pivot-conditional-rule` | `ConditionalRule(...)` | Repeatable. Later rules win over earlier ones on the same cell. |
 
@@ -432,7 +433,7 @@ emit identical markup.
 | `updateFields(fields)` | Validates and replaces the field set, rebuilds the renderer, and refreshes. |
 | `update({ fields, filters, rowSort })` | Applies whichever of `fields`, `filters`, and `rowSort` are given (each is left untouched when omitted) and refreshes exactly once, instead of once per piece the way calling `updateFields`, `setFilter`, and `sortBy` in sequence would. This is what `PivotFieldDesigner` calls after every drag-and-drop mutation. |
 | `sortBy(sort)` | Sets `rowSort` and refreshes. Throws if `allowSorting` is `false`. |
-| `setFilter(field, values)` | Replaces the filter for `field` (removes it when `values` is empty) and refreshes. Throws if `allowFiltering` is `false`. |
+| `setFilter(field, values, mode = "Include")` | Replaces the filter for `field` (removes it when `values` is empty, in either mode) and refreshes. Under `"Exclude"` the list names the values to drop instead of the ones to keep. Throws if `allowFiltering` is `false`. |
 | `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
 | `drillDown({ rowPath, columnPath, valueKey })` | Returns the source records behind a pivot coordinate. Throws if `allowDrillDown` is `false`. |
 | `saveState()` / `clearState()` / `readState()` | Write, forget, and read the persisted state by hand. All three return `false`/`null` rather than throwing when persistence is off or storage is unavailable. |
@@ -533,6 +534,8 @@ The catalog is fixed at construction — it is every field the grid declared, re
 The designer renders a **search input** above the available-field list that filters it case-insensitively by matching the field's **caption**, not its `dataField` name. Search is a display-only filter — it never touches `PivotLayoutState` and never triggers `widget.update()`.
 
 A chip in the **Filters** zone carries a third control, `▼`, which opens the packaged `PivotFilterPicker`. The button is rendered only when the widget exposes `fieldValues()` and `pivot-filter-picker.js` was loaded, so an older host gets no control rather than a broken one. Once a filter accepts fewer than all values, its chip shows the count — `Çeyrek (3)` — because a Filters zone that shows only field names gives no clue that anything is being restricted.
+
+The picker also carries the filter's **mode**. A checkbox always means "shown", in both modes; what the mode picks is which side of the list gets stored, and therefore what happens to a value the source gains later — under `Include` a new value is hidden, under `Exclude` it is shown. That is why the control is labelled by its outcome (*Sonradan eklenen değerler: Gizlensin / Gösterilsin*) rather than by the storage. Switching modes never changes what is currently checked, because both descriptions cover the same rows. An excluding chip counts what it drops — `Çeyrek (2 hariç)` — and with every value checked the filter is stored as an empty list in both modes, which means no restriction at all.
 
 Removing the last field from the data area is refused by `PivotLayoutState.remove`, and the designer reflects this in the UI: that chip's remove (`×`) button is rendered `disabled`, with a `title` explaining why.
 
