@@ -600,6 +600,61 @@ public class PivotTagHelperTests
         new PivotGridBuilder().EmptyText("");
     }
 
+    [Fact]
+    public async Task WritesTheDeclaredAccessibleNameAndOmitsItOtherwise()
+    {
+        var named = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", AriaLabel = "Bölge satışları" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(
+            "Bölge satışları",
+            named.GetProperty("rendererOptions").GetProperty("ariaLabel").GetString());
+
+        var unnamed = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        // Left out entirely rather than written as null, so the renderer keeps
+        // its own default instead of naming the grid "null".
+        Assert.False(unnamed.TryGetProperty("rendererOptions", out var renderer) &&
+            renderer.TryGetProperty("ariaLabel", out _));
+    }
+
+    [Fact]
+    public async Task WritesTheDeclaredCultureAndOmitsItOtherwise()
+    {
+        var pinned = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", Culture = "de-DE" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(
+            "de-DE",
+            pinned.GetProperty("rendererOptions").GetProperty("culture").GetString());
+
+        var ambient = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        // Omitted rather than defaulted, so the browser formats in the reader's
+        // own locale instead of one the page picked for them.
+        Assert.False(ambient.TryGetProperty("rendererOptions", out var renderer) &&
+            renderer.TryGetProperty("culture", out _));
+    }
+
+    [Fact]
+    public void RefusesABlankCulture()
+    {
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().Culture("  "));
+    }
+
+    [Fact]
+    public void RefusesABlankAccessibleName()
+    {
+        // A grid named " " is worse than an unnamed one: it silences the default.
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().AriaLabel("  "));
+    }
+
     // --- Declarative events ---------------------------------------------------
 
     [Fact]
@@ -868,6 +923,76 @@ public class PivotTagHelperTests
             .Filter("Region", "Marmara")
             .RowSort(PivotSort.RowTotal("Amount_sum", PivotSortDirection.Descending))
             .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThan, 1000, PivotConditionalColor.Blue)
+            .Fields(fields => fields.Add()
+                .DataField("Amount").Area(PivotArea.Data).Caption("Tutar")
+                .Aggregation(PivotAggregation.Sum)));
+
+        Assert.Equal(fromBuilder, fromTagHelper);
+    }
+
+    [Theory]
+    [InlineData(PivotStateStorage.Local, "local")]
+    [InlineData(PivotStateStorage.Session, "session")]
+    public async Task WritesStateStoringWhenItIsDeclared(PivotStateStorage storage, string expected)
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", StateStoring = storage, StateKey = "satis" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(expected, config.GetProperty("stateStoring").GetString());
+        Assert.Equal("satis", config.GetProperty("stateKey").GetString());
+    }
+
+    [Fact]
+    public async Task OmitsStateStoringWhenItIsNotDeclared()
+    {
+        // None is the CLR default, so a grid that never mentions state-storing must
+        // not carry the option at all -- persistence is opt-in.
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.TryGetProperty("stateStoring", out _));
+        Assert.False(config.TryGetProperty("stateKey", out _));
+    }
+
+    [Fact]
+    public async Task WritesStateStoringWithoutAKeySoTheContainerIdCanStandIn()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", StateStoring = PivotStateStorage.Local },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal("local", config.GetProperty("stateStoring").GetString());
+        Assert.False(config.TryGetProperty("stateKey", out _));
+    }
+
+    [Fact]
+    public async Task OmitsAStateKeyThatHasNowhereToStore()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", StateKey = "satis" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.TryGetProperty("stateKey", out _));
+    }
+
+    [Fact]
+    public async Task StateStoringMatchesTheEquivalentBuilderConfiguration()
+    {
+        var fromTagHelper = await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                StateStoring = PivotStateStorage.Session,
+                StateKey = "satis"
+            },
+            MinimalFields);
+
+        var fromBuilder = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid")
+            .StateStoring(PivotStateStorage.Session)
+            .StateKey("satis")
             .Fields(fields => fields.Add()
                 .DataField("Amount").Area(PivotArea.Data).Caption("Tutar")
                 .Aggregation(PivotAggregation.Sum)));

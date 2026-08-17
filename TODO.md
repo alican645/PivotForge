@@ -115,12 +115,12 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 public sealed record PivotFilter(string Field, IReadOnlyList<string?> Values);
 ```
 
-Operatör yok, `filterType` (include/exclude) yok, ve **paket tarafında hiçbir filtre
-arayüzü yok.** Tasarımcının Filtreler bölgesine alan sürüklenebiliyor ama hangi değerlerin
-seçileceğini belirleyecek UI yok — demo bunu kendi elle yazdığı menüyle çözüyor.
+Değer seçici artık pakette (`PivotFilterPicker`): motora `PivotEngine.DistinctValues`,
+uç noktalara `POST /pivotforge/field-values`, tasarımcı çipine `▼` düğmesi eklendi.
+Kalan açık operatörler ve include/exclude tarafında.
 
-- [ ] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim, "Tümü"
-      — tasarımcıdaki Filtreler bölgesini işlevsel hale getirir
+- [x] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim,
+      "Tümünü seç"/"Temizle", kesme uyarısı — tasarımcıdaki Filtreler bölgesi artık işlevsel
 - [ ] `filterType` — include / exclude
 - [ ] Excel benzeri başlık filtresi (`headerFilter`) — sütun/satır başlığından filtreleme
 - [ ] Filtre operatörleri: içerir, başlar, arasında, boş/boş değil, Top-N
@@ -180,7 +180,7 @@ DevExpress'in alan menüsüne yaklaştı.
 | Alan seçicide klasörleme (`displayFolder`) | ❌ |
 | Bağımsız (standalone) alan seçici | ❌ |
 | Tasarımcıdan sıralama paneli | ❌ |
-| Tasarımcıdan filtre seçimi | ❌ (Bölüm 2) |
+| Tasarımcıdan filtre seçimi | ✅ | çipteki `▼` düğmesi `PivotFilterPicker`'ı açar |
 
 - [ ] Sıralama paneli — tasarımcıdan `sortBy` sürmek
 - [ ] `display-folder` ile alan gruplama
@@ -205,33 +205,72 @@ DevExpress'in alan menüsüne yaklaştı.
 
 ## Bölüm 7 — Durum kalıcılığı
 
-`PivotViewStore` var ve çalışıyor, ama otomatik değil.
+`state-storing` ile otomatik kayıt/geri yükleme eklendi. `PivotViewStore` ayrı bir
+özellik olarak kalıyor: o, kullanıcının **adlandırılmış birden çok görünüm** tutup
+aralarında geçmesi için — kendi durum şeması demoya ait, bildirimsel yol onu kullanmıyor.
 
-- [ ] `state-storing="local|session"` niteliği ile otomatik kaydet/geri yükle
-- [ ] `adoptLayout` kaydedilmiş **başlıkları** (caption override) geri yüklemiyor —
-      `getState().captions` dışarı veriliyor ama geri okunmuyor
-- [ ] Kaydedilmiş görünümde koşullu biçimlendirme kurallarının taşınması
+- [x] `state-storing="Local|Session"` + `state-key` ile otomatik kaydet/geri yükle —
+      alan düzeni, başlıklar, filtre seçimleri, toplama, biçim ve sıralama
+- [x] `adoptLayout` kaydedilmiş **başlıkları** geri yüklüyor — `getState()` çıktısı
+      doğrudan yapıcıya geri verilebiliyor
+- [~] Kaydedilmiş görünümde koşullu biçimlendirme kurallarının taşınması —
+      **kapsam dışı bırakıldı:** kurallar `pivot-conditional-rule` ile bildiriliyor ve
+      tasarımcı onları düzenleyemiyor, yani kullanıcının değiştirdiği, kaybolabilecek
+      bir şey yok. Tasarımcıya kural düzenleme eklenirse bu madde geri açılmalı.
 
 ---
 
 ## Bölüm 8 — Erişilebilirlik ve platform
 
-**Bugün en zayıf alan.** Sürükle-bırakta **0 touch handler** var.
+Sürükleme Pointer Events'e taşındı; fare, dokunmatik, kalem ve klavye aynı
+taşıma işlemini paylaşıyor. Tablo `role="grid"` ilan ediyor. Kalan tek açık
+uyarlanabilir mobil düzen.
 
-- [ ] Dokunmatik sürükle-bırak — tablet/telefonda tasarımcı çalışmıyor
-- [ ] Klavye ile alan taşıma — çipler odaklanabilir ama işletilemiyor
-- [ ] Tablo içinde klavye gezinme (`tabIndex`, ok tuşları)
-- [ ] ARIA rolleri ve ekran okuyucu desteği (WCAG)
-- [ ] Uyarlanabilir (adaptive) mobil düzen
+- [x] Dokunmatik sürükle-bırak — çipteki tutamaç (`⠿`) `touch-action: none`
+      taşıyor, gövdesi taşımıyor: parmakla liste kaydırılabiliyor, tutamaçtan
+      sürüklenebiliyor
+- [x] Klavye ile alan taşıma — çipler gezinen `tabIndex` ile odaklanabilir
+      (bölge başına bir durak), `Space` alır, oklar taşır, `Space`/`Enter`
+      bırakır, `Esc` iptal eder, `Delete` kaldırır, `Enter` ayarlar modalini
+      açar. Bırakılana kadar duruma hiçbir şey yazılmıyor, bu yüzden iptal
+      bedava. Odak, taşımanın tetiklediği yeniden çizimin ardından alanla
+      birlikte gidiyor.
+- [x] ~~Tablo içinde klavye gezinme~~ — **zaten vardı:** ok tuşları, Enter/Space,
+      Ctrl+C, ContextMenu/Shift+F10 ve gezinen `tabIndex` (`pivot-table.js:931-1010`)
+- [x] ARIA rolleri ve ekran okuyucu desteği — tablo `role="grid"` ilan ediyor;
+      `rowgroup`/`row`/`columnheader`/`rowheader`/`gridcell` rolleri tek bir
+      hücre fabrikasından geçiyor, böylece unutulabilecek bir yer kalmıyor.
+      `aria-selected` artık gerçekten işliyor (düz tabloda ekran okuyucu onu
+      atıyordu). Ayrıca: `aria-label` niteliğiyle bildirilebilen erişilebilir
+      ad, sanallaştırmada doğru sayıyı veren `aria-rowcount`/`aria-rowindex`,
+      sıralanabilir başlıkta `aria-sort`, daralt/genişlet düğmelerinde
+      `aria-expanded` + ad, tasarımcı bölgelerinde başlığıyla adlandırılmış
+      `role="group"`
+- [ ] Uyarlanabilir (adaptive) mobil düzen — mevcut `@media (max-width: 720px)`
+      yalnızca demo düzenini kapsıyor; tasarımcı bölgeleri ve filtre seçici
+      kapsam dışı
 
 ---
 
 ## Bölüm 9 — Yerelleştirme
 
-- [ ] `"tr-TR"` beş yerde koda gömülü — kültür bir seçenek olmalı
-- [ ] `texts` benzeri merkezî metin sözlüğü (tasarımcı etiketleri kısmen özelleştirilebiliyor,
-      renderer metinleri değil)
-- [ ] `.NET` tarafında `IStringLocalizer` entegrasyonu
+- [x] ~~`"tr-TR"` koda gömülü~~ — **sekiz yerdeydi.** Sunucuda harmanlama artık
+      `CultureInfo.CurrentCulture`'dan çözülüyor (istek başına, yani ASP.NET'in
+      request localization'ı doğrudan işliyor) ve `new PivotEngine(culture)` ile
+      sabitlenebiliyor; tarayıcıda sayı biçimlendirme okuyucunun kendi yerelini
+      izliyor, `culture` niteliğiyle sabitlenebiliyor. Bunlar kozmetik değildi:
+      Türkçe'de Ç ayrı bir harf, başka yerlerde C'nin varyantı — `Corum` ile
+      `Çanakkale` iki kültürde yer değiştiriyor. Filtre seçicinin değer listesi
+      de aynı harmanlamayı kullanıyor.
+      İstemcinin bildirdiği kültür sunucuya **geçirilmiyor**: tarayıcının bir
+      kültür iddia ederek sunucunun sıralamasını değiştirebilmesi istenmeyen
+      bir şey.
+- [x] `texts` merkezî metin sözlüğü — renderer'ın ekrana koyduğu her metin
+      (`Veri yok`, `Satır Etiketleri`, bağlam menüsü, sütun genişletme ve
+      sıralama ipuçları) `rendererOptions.texts` üzerinden değiştirilebiliyor;
+      bildirilmeyen anahtar gömülü Türkçe varsayılanını koruyor
+- [ ] `.NET` tarafında `IStringLocalizer` entegrasyonu — metinler JavaScript'te
+      elden verilmek yerine kaynak dosyalarından gelsin
 
 ---
 
@@ -245,7 +284,7 @@ Sizin önceliğiniz "az kodla çok iş" olduğu için sıralama işlevsel büyü
 2. **Bölüm 1'in ucuz kalemleri** — `show-as`, `area-index`, `expanded`, alan başına toplamlar.
 3. **Bölüm 2** — filtre değer seçici. Tasarımcının Filtreler bölgesi bugün işlevsiz;
    bu onu tamamlayan parça.
-4. **Bölüm 8** — dokunmatik + klavye. Erişilebilirlik borcu ve mobil kullanımın önkoşulu.
+4. **Bölüm 8** — ~~dokunmatik + klavye + ARIA~~ tamam; kalan yalnızca mobil düzen.
 5. **Bölüm 3** — hesaplanmış alanlar. En büyük tasarım işi, en sona.
 
 ---

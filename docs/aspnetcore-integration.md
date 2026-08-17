@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.8
+dotnet add package PivotForge.AspNetCore --version 0.5.0-preview.1
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -95,6 +95,7 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-layout-state.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-filter-picker.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
@@ -110,6 +111,7 @@ The scripts add these members to `window.PivotForge`:
 - `PivotWidget`
 - `PivotLayoutState`
 - `PivotFieldDesigner`
+- `PivotFilterPicker`
 - `PivotViewStore`
 - `PivotDrillDownData`
 - `PivotDrillDownModal`
@@ -213,7 +215,8 @@ The same grid can be declared as markup. Register the tag helpers once, in
 `<pivot-grid>` attributes mirror the builder methods in kebab-case: `id`,
 `endpoint-prefix`, `allow-sorting`, `allow-filtering`, `allow-drill-down`,
 `allow-excel-export`, `auto-load`, `large-data`, `page-size`,
-`source-row-count`, `css-class`, and `field-designer`. An attribute you do not
+`source-row-count`, `css-class`, `field-designer`, `state-storing`, and
+`state-key`. An attribute you do not
 write is omitted from the configuration, so the browser default applies —
 writing `allow-sorting="false"` disables sorting, but omitting it leaves
 sorting on.
@@ -236,6 +239,8 @@ the renderer keeps its own default.
 | `max-column-width` | `MaxColumnWidth(int)` | `420` | Widest a column may be, in pixels. Must be positive. |
 | `empty-text` | `EmptyText(string)` | `-` | Shown in a cell with no value. May be empty to render nothing. |
 | `total-text` | `TotalText(string)` | `Toplam` | Caption for total rows and columns. Must not be blank. |
+| `aria-label` | `AriaLabel(string)` | `Pivot tablosu` | Accessible name announced for the grid. Must not be blank. Give two pivots on one page two different names, or a screen reader cannot tell them apart. |
+| `culture` | `Culture(string)` | the reader's own locale | BCP 47 tag used to format numbers in the browser. Must not be blank. Server-side collation is separate — see [Localization](#localization). |
 
 `selection-mode` and `layout-mode` are non-nullable enums so Razor accepts the
 unqualified member name; whether the attribute was written is recovered from
@@ -277,6 +282,41 @@ broken rather than incomplete. `color` accepts `Green`, `Amber`, `Red` and `Blue
 
 The emitted configuration is serialized in key order, so the same configuration
 produces the same bytes whichever API declared it and in whatever order.
+
+#### State persistence
+
+`state-storing="Local|Session"` (`StateStoring(PivotStateStorage)`) persists what
+the user arrives at — field layout, renamed captions, filter selections,
+aggregations, number formats and row sort — and restores it on the next load. It
+is off by default; persistence is something a page opts into.
+
+```cshtml
+<pivot-grid id="pivotGrid"
+            field-designer="#designerHost"
+            state-storing="Session"
+            state-key="satisRaporu">
+```
+
+`state-key` names the storage entry (`pivotforge:state:satisRaporu`). Leave it
+out and the grid's `id` stands in. With **neither**, nothing is persisted and the
+grid works from its declared configuration — a shared default key would let two
+grids on a page overwrite each other's layouts, which is worse than not saving.
+
+`Local` survives closing the browser; `Session` lasts for the tab.
+
+What is stored is a preference, never a contract. **A stored payload can never
+break the page:** unparseable JSON, a payload from another version, a layout the
+field catalog can no longer honour (a field that was removed, or one whose role
+no longer allows where it sat) and a filter naming a field that no longer exists
+are each discarded, and the grid falls back to what it declared. A stored layout
+that was rejected takes its filters down with it, rather than leaving the grid
+filtering by a layout it just refused.
+
+Persistence works without a field designer too — there is simply no layout to
+save, so only the filters and the sort are.
+
+`available` is deliberately not stored: it is derived from the catalog on every
+read, so a stale copy could only contradict it.
 
 #### Events
 
@@ -361,6 +401,8 @@ emit identical markup.
 | `fieldDesigner` | `null` | A CSS selector (or element) for a [field designer](#field-designer) host. When set, `PivotWidget` builds a `PivotLayoutState` from `fields` and a `PivotFieldDesigner` bound to it, exposed as `widget.layoutState` and `widget.designer`. Requires `pivot-layout-state.js` and `pivot-field-designer.js` to be loaded before `pivot-widget.js` runs; omitting either throws. |
 | `drillDownModal` | `true` | Wires cell activation to the packaged `PivotDrillDownModal`. Set to `false` to keep `drillDown()` available while supplying your own detail UI. Ignored when `allowDrillDown` is `false`, and silently inert when `pivot-drill-down-modal.js` was not loaded. |
 | `drillDownModalOptions` | `null` | Passed to the `PivotDrillDownModal` constructor: `columns`, `labels`, `host`. |
+| `stateStoring` | `null` | `"local"`, `"session"`, or `null`. See [State persistence](#state-persistence). Any other value throws. |
+| `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
 
 `create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
 
@@ -376,6 +418,8 @@ emit identical markup.
 | `setFilter(field, values)` | Replaces the filter for `field` (removes it when `values` is empty) and refreshes. Throws if `allowFiltering` is `false`. |
 | `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
 | `drillDown({ rowPath, columnPath, valueKey })` | Returns the source records behind a pivot coordinate. Throws if `allowDrillDown` is `false`. |
+| `saveState()` / `clearState()` / `readState()` | Write, forget, and read the persisted state by hand. All three return `false`/`null` rather than throwing when persistence is off or storage is unavailable. |
+| `fieldValues(field)` | Returns `{ field, values, totalCount, truncated, limit }`: the distinct values a filter on `field` can accept, in value order. Deliberately unaffected by the pivot layout and by the filters already applied — a list narrowed by the current filter could never offer back a value the user had excluded. Throws if `allowFiltering` is `false`. |
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
 | `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
 | `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, sessionId, totalRowCount }`. |
@@ -423,15 +467,15 @@ When a `fieldDesigner` is configured, `PivotWidget`'s constructor builds a `Pivo
 
 #### Dragging
 
-Chips are dragged with the mouse, using the HTML5 drag-and-drop API. A drop is **positional**: while dragging over a zone the designer compares the pointer against each chip's midpoint and draws an insertion line at the slot the chip would land in, and the drop places the field exactly there rather than appending it. This works both when a field enters a zone from elsewhere and when a chip is dragged **within its own zone**, which is how row and column order — the pivot's grouping hierarchy — is rearranged. Repositioning a value keeps its aggregation, and repositioning a filter keeps its selected values.
+Chips are moved by pointer or by keyboard. A drop is **positional**: while dragging over a zone the designer compares the pointer against each chip's midpoint and draws an insertion line at the slot the chip would land in, and the release places the field exactly there rather than appending it. Releasing outside every zone cancels the move rather than removing the field. This works both when a field enters a zone from elsewhere and when a chip is dragged **within its own zone**, which is how row and column order — the pivot's grouping hierarchy — is rearranged. Repositioning a value keeps its aggregation, and repositioning a filter keeps its selected values.
 
 The available-field list is a catalog rather than an ordered layout, so it is not reorderable; fields leave a zone through the chip's remove (`×`) button.
 
-#### Value formats
+#### Field settings
 
-A chip in the Values zone carries a `⋯` button that expands a format panel beneath it, with controls for the format type, the fraction-digit count, and the thousands separator. The panel writes through `PivotLayoutState.setFormat`, carrying the members it is not editing across, so changing the decimals never drops the currency. It opens showing the format actually in effect — a field that declared none shows the renderer's own defaults rather than empty controls.
+Every placed chip carries a `⋯` button that opens a settings modal. Naming (rename / reset) and position (move up / move down) apply to any field; a chip in the Values zone also gets aggregation, show-as, and number format. Controls used to expand inside the chip, but a chip that grows to hold them dwarfs its neighbours and makes a zone's drop geometry jump around mid-drag, so they live in a modal instead.
 
-The panel expands in flow rather than floating, so it needs no positioning or outside-click handling; the same `⋯` button closes it.
+The format controls write through `PivotLayoutState.setFormat`, carrying the members they are not editing across, so changing the decimals never drops the currency. The modal opens showing the format actually in effect — a field that declared none shows the renderer's own defaults rather than empty controls.
 
 #### Role
 
@@ -449,8 +493,9 @@ Pure state — no DOM access. Constructed with `new PivotLayoutState(catalog, la
 | `reorder(area, fromIndex, toIndex)` | Reorders a placed field within its own zone. |
 | `setFormat(name, format)` | Sets a data field's number format, or clears it with `null`. Validates `type`, `decimals` (0-6), `useGrouping`, and `currency`, throwing rather than coercing, and leaves the existing format untouched when it refuses. Throws if the field is not in the data area. |
 | `setAggregation(name, aggregation)` | Sets the aggregation (`"sum"`, `"count"`, `"average"`, `"min"`, `"max"`) of a field already in the data area. Throws otherwise. |
+| `setFilterValues(name, values)` | Sets the values a filter accepts, for a field already in the filter area. Values are stringified, with `null` stored as `""` — the form the engine compares a null source value as. An empty array means no restriction, which is also how an untouched filter starts, so clearing a filter and never setting one are the same state. Throws if the field is not in the filter area or `values` is not an array. |
 | `field(name)` | Returns the catalog entry for `name`. Throws if unknown. |
-| `getState()` | Returns `{ rows, columns, values, filters, available }` — `available` is every catalog field not currently placed. |
+| `getState()` | Returns `{ rows, columns, values, filters, available, captions }` — `available` is every catalog field not currently placed, and `captions` holds the renames applied through `setCaption`. The whole object can be passed straight back to the constructor to restore it. |
 | `toFields()` | Converts the current layout into the field-array shape `PivotForge.create`/`updateFields` accept. |
 | `toRequestState()` | Returns `{ fields, filters }` shaped for `widget.update(...)` — `filters` is pre-filtered to entries that actually have selected values. |
 | `on("change", handler)` | Subscribes to layout mutations; fires once per successful `move`/`remove`/`reorder`/`setAggregation` call, with the current `getState()` as the payload. Returns an unsubscribe function. `remove()` on a field already in `available` is a no-op — it does not fire `change`, because it did not actually move or remove anything. |
@@ -470,6 +515,8 @@ The catalog is fixed at construction — it is every field the grid declared, re
 
 The designer renders a **search input** above the available-field list that filters it case-insensitively by matching the field's **caption**, not its `dataField` name. Search is a display-only filter — it never touches `PivotLayoutState` and never triggers `widget.update()`.
 
+A chip in the **Filters** zone carries a third control, `▼`, which opens the packaged `PivotFilterPicker`. The button is rendered only when the widget exposes `fieldValues()` and `pivot-filter-picker.js` was loaded, so an older host gets no control rather than a broken one. Once a filter accepts fewer than all values, its chip shows the count — `Çeyrek (3)` — because a Filters zone that shows only field names gives no clue that anything is being restricted.
+
 Removing the last field from the data area is refused by `PivotLayoutState.remove`, and the designer reflects this in the UI: that chip's remove (`×`) button is rendered `disabled`, with a `title` explaining why.
 
 #### Limitations
@@ -478,14 +525,74 @@ Removing the last field from the data area is refused by `PivotLayoutState.remov
   rule comes from the field's `role`, which is inferred from its declared area
   (`data` implies `measure`, `row`/`column`/`filter` imply `dimension`) and must
   be stated explicitly for a field declared `area="Available"`. Dragging a field
-  where its role forbids marks the zone as refused and shows the platform's
-  no-drop cursor; the drop is rejected.
+  where its role forbids marks the zone as refused; the drop is rejected.
 - **A placed field can be dragged back to the Fields list to remove it**, which does the same thing as its × button and obeys the same rule: the last remaining Values field cannot be removed either way.
-- **Desktop only, mouse required.** The designer is built on the HTML5 drag-and-drop API, which does not fire on touch devices and has no keyboard equivalent — chips are focusable but not operable without a pointer. It does not work on tablets or phones in this version.
-- **No filter value picker.** A field can be dragged into the Filters zone, but there is no UI to choose which values to filter to. A filter with no selected values filters nothing — the same as an unset filter elsewhere in PivotForge — so the Filters zone alone does not yet do anything useful; a consumer must still add value selection.
+- **Mouse, touch, pen and keyboard all work.** Drag runs on pointer events
+  rather than the HTML5 drag-and-drop API, which never fires on a touch device.
+  A mouse drags from anywhere on a chip. A finger or a pen drags from the
+  chip's grip (`⠿`) only — the grip is the sole element carrying
+  `touch-action: none`, so a touch anywhere else still scrolls the panel, which
+  a long available-field list needs. A press becomes a drag only after it has
+  travelled 5px, so a tap or a click on a chip control still reaches that
+  control.
+
+  The keyboard path is a **pick up / drop** gesture rather than a set of
+  shortcuts, so it has the drag's cancel: nothing is written to the state until
+  the field is dropped, and Escape simply forgets the move. Chips use a roving
+  `tabindex` — one tab stop per zone, on the chip focus last visited there — and
+  the chip's own controls (`×`, `⋯`, `▼`) are taken out of the tab sequence, so
+  a ten-field panel costs five tab stops rather than forty.
+
+  | Key | On a focused chip | While a chip is picked up |
+  |---|---|---|
+  | `Space` | pick the field up | drop it where the marker is |
+  | `Enter` | open the settings modal | drop it |
+  | `↑` / `↓` | move focus within the zone | move the landing slot |
+  | `←` / `→` | — | move to the previous / next zone |
+  | `Escape` | — | cancel; nothing changes |
+  | `Delete` | remove the field | — |
+
+  Zones step in screen order: **Alanlar → Filtreler → Sütunlar → Satırlar →
+  Değerler**. Dropping onto Alanlar unplaces the field, exactly as dragging it
+  back there does; a zone the field's role forbids is marked refused and the
+  drop does nothing. Focus follows the field through the re-render its own move
+  triggers, so a second move needs no reach for the mouse. Because `▼` is out
+  of the tab sequence, the settings modal carries a **Filtre değerleri** button
+  that opens the same picker.
 - **No sort panel from the designer.** The settings modal covers naming, position, aggregation, show-as, number format and removal; sorting is still driven through the widget's `sortBy`, outside the designer.
-- **Saved views are not wired up automatically.** `PivotViewStore` and the designer's state are both serializable, so a consumer can persist and restore designer layouts, but connecting the two is the consumer's responsibility — see the MVC demo for one approach.
+- **Named saved views are not wired up automatically.** `state-storing` persists one current state per key, automatically. Letting a user keep *several* named views and switch between them is a different feature, built on `PivotViewStore` — see the MVC demo for one approach.
 - **`visible: false` fields never activate through the designer.** `visible` is a catalog-level attribute, fixed at construction, not something the designer's drag-and-drop mutates. A field declared `visible="false"` starts out in the available list rather than its declared area, can still be dragged into a zone and will render as a placed chip, but `toFields()` always reports its catalog `visible` value — so it stays excluded from the pivot request regardless of where the designer places it. To let a user actually turn a field on, do not declare it `visible="false"`; use `area="Available"` instead, which keeps it out of the initial layout while leaving it eligible to be dragged in and included normally.
+
+#### `PivotForge.PivotFilterPicker`
+
+`new PivotFilterPicker({ widget, host, labels })` — a modal that lists a field's
+distinct values as checkboxes, with a search box, **Tümünü seç** / **Temizle**,
+and Uygula/İptal. `PivotFieldDesigner` builds one on first use, so a declarative
+page needs only the script tag; a consumer can also drive it directly.
+
+`open({ field, caption, selected, onApply })` fetches the values through
+`widget.fieldValues(field)` and resolves once the list has rendered. `onApply`
+receives the chosen values when the user applies, and is not called at all when
+they cancel, press Escape, or click the backdrop.
+
+Three rules are worth knowing, because they are what make a checkbox list behave
+like a filter rather than a frozen snapshot:
+
+- **An empty incoming `selected` opens with everything checked.** No restriction
+  and "nothing selected" are the same stored state, but they must not look the
+  same: a freshly placed filter field would otherwise appear to exclude
+  everything.
+- **Applying with everything checked emits `[]`, not the full value list.**
+  Freezing the set would silently exclude values that appear in the source
+  later.
+- **Selections the response could not list are preserved.** When a field has
+  more distinct values than `FieldValueLimit`, the picker says so and carries
+  the unlisted selections through `onApply` untouched, rather than dropping the
+  part of the filter it could not display.
+
+**Tümünü seç** and **Temizle** act on what the search is currently showing, the
+way a spreadsheet filter does — searching and then selecting all is how a subset
+gets picked out of a long list.
 
 ### Detail modal
 
@@ -538,6 +645,93 @@ Labels default to Turkish and are overridable through
 `drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
 `summary`, and `columnFilter` are substituted positionally.
 
+### Localization
+
+Culture is resolved separately on each side, because the two answer different
+questions.
+
+**Server-side collation** follows `CultureInfo.CurrentCulture`, resolved per
+call rather than cached — so an ASP.NET application with request localization
+configured sorts each request in that request's culture without wiring anything
+up. For a direct `PivotForge.Core` consumer, `new PivotEngine(culture)` pins it.
+This is not cosmetic: in Turkish `Ç` is a letter of its own that sorts after
+every word starting with `C`, while elsewhere it is a variant of `C` and the
+following letters decide — so `Corum` and `Çanakkale` swap places between the
+two. The same collation orders the filter picker's value list, which is shown
+to a person and therefore sorted the way that person reads.
+
+Deliberately **not** taken from the request payload: a browser claiming a
+culture must not be able to change how the server sorts.
+
+**Browser-side number formatting** follows the reader's own locale unless
+`culture` is declared. Pin it only when the page must show the same separators
+to everyone:
+
+```html
+<pivot-grid id="pivotGrid" culture="tr-TR" ...>
+```
+
+The detail modal inherits the grid's culture, so it cannot contradict the cell
+it was opened from; `drillDownModalOptions.culture` overrides that on purpose.
+
+**Renderer texts.** Every string the renderer puts on screen — `Veri yok`,
+`Satır Etiketleri`, the cell context menu, the column-resize and sort tooltips —
+comes from a `texts` map passed through `rendererOptions`. A key left out keeps
+its built-in Turkish default, exactly as the designer's `labels` and the detail
+modal's own labels already work. `{0}` placeholders are substituted
+positionally.
+
+```js
+PivotForge.create("#pivotGrid", {
+  rendererOptions: {
+    culture: "en-GB",
+    texts: { noData: "No data", sortField: "Sort by {0}" }
+  }
+});
+```
+
+Still open: `IStringLocalizer` integration on the .NET side, so the texts can
+come from resource files rather than being handed over in JavaScript.
+
+### Accessibility
+
+The rendered table declares **`role="grid"`**, which is a claim about behaviour
+as much as about markup: a grid promises arrow-key navigation, `Enter` to
+activate, and a single tab stop, and the renderer has shipped all of that since
+before the role was declared (`pivot-table.js`). Declaring it is what makes the
+behaviour discoverable — and what makes the `aria-selected` written on rows and
+cells mean anything. On a plain table `aria-selected` is an unsupported
+attribute that screen readers drop, so selection used to be visible and nothing
+more.
+
+Because the role **replaces** native table semantics rather than adding to them,
+every row and cell carries its own role: `rowgroup` on `thead`/`tbody`, `row` on
+`tr`, `columnheader` on head cells, `rowheader` on row labels, and `gridcell` on
+values. A cell left without one is a hole in the accessibility tree, not a
+fallback — which is why they are all built through one factory (`createCell`).
+
+- **Name the grid.** `aria-label` defaults to `Pivot tablosu`; a page with two
+  pivots needs two different names.
+- **`aria-rowcount` / `aria-rowindex` state the real size.** A screen reader
+  otherwise counts the rows in the DOM, which under virtual scrolling is a page:
+  "row 3 of 12" for a five-thousand-row pivot. Spacer rows claim no position,
+  and the grand total is indexed against the whole table rather than the page it
+  trails.
+- **`aria-sort`** on a sortable header, because the `▲`/`▼` glyph is
+  `aria-hidden`.
+- **Collapse toggles carry `aria-expanded` and a name.** Their entire content is
+  a `▸`/`▾` glyph, so without a name a screen reader announces "button" and
+  stops there.
+- **Designer zones are named groups.** Each zone body is a `role="group"`
+  labelled by its heading, so a chip is announced as "Satırlar, Bölge, düğme"
+  rather than "Bölge, düğme" — the zone is the only part that says where the
+  field currently is. Heading ids are namespaced per designer, so two panels on
+  one page do not collide.
+
+Still open: an **adaptive mobile layout**. The packaged `@media (max-width:
+720px)` rules cover the demo's page layout, not the designer zones or the filter
+picker.
+
 ### Known limitations
 
 - **Large-data paging is not wired to a virtual-scrolling UI.** `loadPage()` exists and is unit-tested, but `PivotWidget` has no page cache, no cache-hit state, and does not pass a `virtualState` to the renderer. Driving an actual virtual-scrolling grid still requires orchestrating `PivotVirtualDataSource` and `PivotTableRenderer` manually — see the MVC demo, which deliberately keeps its own `/large/start` + `/large/page` code for this reason.
@@ -552,9 +746,10 @@ Labels default to Turkish and are overridable through
 | `POST /pivotforge/large/start` | Calculate/cache a large result and return its first page |
 | `POST /pivotforge/large/page` | Return a page from an existing cached session |
 | `POST /pivotforge/drill-down` | Return source records matching row and column paths |
+| `POST /pivotforge/field-values` | Return the distinct values a filter on one field can accept |
 | `POST /pivotforge/excel` | Convert a renderer export model into an `.xlsx` response |
 
-A missing or expired large-data session returns HTTP `410 Gone`. Invalid pivot, paging, drill-down, and Excel requests return HTTP `400 Bad Request`. Request cancellation propagates through the provider and Core calculation.
+A missing or expired large-data session returns HTTP `410 Gone`. Invalid pivot, paging, drill-down, field-values, and Excel requests return HTTP `400 Bad Request`. Request cancellation propagates through the provider and Core calculation.
 
 ## Large-Data Requests
 
@@ -594,6 +789,7 @@ The authenticated user identifier, endpoint path, and query string are included 
 | `MinimumPageSize` | 10 |
 | `MaximumPageSize` | 200 |
 | `DrillDownRecordLimit` | 1,000 |
+| `FieldValueLimit` | 1,000 |
 | `MaximumExcelRows` | 20,000 |
 | `MaximumExcelCells` | 200,000 |
 

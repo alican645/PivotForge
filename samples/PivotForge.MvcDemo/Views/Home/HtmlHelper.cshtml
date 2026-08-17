@@ -55,11 +55,15 @@
                     .RepeatRowLabels(true)
                     .MinColumnWidth(96)
                     .TotalText("Genel Toplam")
+                    .AriaLabel("Bölge ve kategori bazında satışlar")
+                    .Culture("tr-TR")
                     .OnSelectionChanged("pivotSelectionChanged")
                     .RowSort(PivotSort.RowTotal("Amount_sum", PivotSortDirection.Descending))
                     .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual,
                         900000, PivotConditionalColor.Green, id: "yuksek")
                     .FieldDesigner("#designerHost")
+                    .StateStoring(PivotStateStorage.Session)
+                    .StateKey("tagHelperDemo")
                     .Fields(fields =>
                     {
                         fields.Add().Caption("Bölge").DataField("Region").Area(PivotArea.Row);
@@ -100,11 +104,15 @@
     .RepeatRowLabels(true)
     .MinColumnWidth(96)
     .TotalText("Genel Toplam")
+    .AriaLabel("Bölge ve kategori bazında satışlar")
+    .Culture("tr-TR")
     .OnSelectionChanged("pivotSelectionChanged")
     .RowSort(PivotSort.RowTotal("Amount_sum", PivotSortDirection.Descending))
     .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual,
         900000, PivotConditionalColor.Green, id: "yuksek")
     .FieldDesigner("#designerHost")
+    .StateStoring(PivotStateStorage.Session)
+    .StateKey("tagHelperDemo")
     .Fields(fields =&gt;
     {
         fields.Add().Caption("Bölge").DataField("Region").Area(PivotArea.Row);

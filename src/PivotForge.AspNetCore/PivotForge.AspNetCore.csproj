@@ -10,7 +10,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <PackageId>PivotForge.AspNetCore</PackageId>
-    <Version>0.4.0-preview.8</Version>
+    <Version>0.5.0-preview.1</Version>
     <Authors>Alican</Authors>
     <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge for ASP.NET Core</Title>
@@ -20,7 +20,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Initial state becomes declarable: pivot-filter, pivot-sort and pivot-conditional-rule child elements, with PivotGridBuilder.Filter, RowSort and ConditionalRule behind them. Anything naming a value accepts value-field plus value-aggregation and builds the value key for you. The emitted configuration is now serialized in key order, so the same configuration produces the same bytes whichever API declared it.</PackageReleaseNotes>
+    <PackageReleaseNotes>Behaviour change: numbers are formatted in the reader's own locale unless the new culture attribute pins one, instead of always tr-TR; every renderer string moves behind an overridable texts map. The field designer gains a packaged filter value picker (POST /pivotforge/field-values), state-storing and state-key for automatic save and restore, pointer-event dragging that works with touch and pen, and full keyboard operation. The rendered table now declares role=grid with the roles, aria-sort, aria-expanded and aria-rowcount that make its existing selection and keyboard model reach a screen reader; aria-label names it.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

@@ -117,6 +117,7 @@ public sealed class PivotForgeAspNetCoreTests
         Assert.Contains("/reports/pivot/large/start", routes);
         Assert.Contains("/reports/pivot/large/page", routes);
         Assert.Contains("/reports/pivot/drill-down", routes);
+        Assert.Contains("/reports/pivot/field-values", routes);
         Assert.Contains("/reports/pivot/excel", routes);
     }
 
@@ -241,6 +242,90 @@ public sealed class PivotForgeAspNetCoreTests
         {
             await app.StopAsync();
         }
+    }
+
+    [Fact]
+    public async Task FieldValuesEndpoint_ReturnsDistinctValuesAndReportsTruncation()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>(
+            (_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>(
+            [
+                new("South", 90m),
+                new("North", 120m),
+                new("North", 40m),
+                new("East", 10m)
+            ]),
+            options => options.FieldValueLimit = 2);
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            var response = await PostFieldValuesAsync(client, "Region");
+
+            Assert.Equal("Region", response.GetProperty("field").GetString());
+            Assert.Equal(
+                ["East", "North"],
+                response.GetProperty("values").EnumerateArray().Select(value => value.GetString()));
+            Assert.Equal(3, response.GetProperty("totalCount").GetInt32());
+            Assert.True(response.GetProperty("truncated").GetBoolean());
+            Assert.Equal(2, response.GetProperty("limit").GetInt32());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task FieldValuesEndpoint_RejectsAnUnknownField()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>(
+            (_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>([new("North", 120m)]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+            var json = """{ "field": "Missing" }""";
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            using var httpResponse = await client.PostAsync("/pivotforge/field-values", content);
+
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, httpResponse.StatusCode);
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    private static async Task<JsonElement> PostFieldValuesAsync(HttpClient client, string field)
+    {
+        var json = $$"""{ "field": "{{field}}", "sourceRowCount": 1000 }""";
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var response = await client.PostAsync("/pivotforge/field-values", content);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(stream);
+        return document.RootElement.Clone();
     }
 
     private static async Task<JsonElement> PostLargeStartAsync(

@@ -33,6 +33,7 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         group.MapPost("/large/start", HandleLargeStartAsync).WithName("PivotForge.Large.Start");
         group.MapPost("/large/page", HandleLargePage).WithName("PivotForge.Large.Page");
         group.MapPost("/drill-down", HandleDrillDownAsync).WithName("PivotForge.DrillDown");
+        group.MapPost("/field-values", HandleFieldValuesAsync).WithName("PivotForge.FieldValues");
         group.MapPost("/excel", HandleExcel).WithName("PivotForge.Excel");
 
         return group;
@@ -168,6 +169,40 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         catch (Exception exception) when (IsInvalidPivotRequest(exception))
         {
             return BadRequest("Drill-down request is not valid.");
+        }
+    }
+
+    private static async Task<IResult> HandleFieldValuesAsync(
+        PivotForgeFieldValuesRequest request,
+        IPivotForgeDataExecutor executor,
+        IOptions<PivotForgeOptions> optionsAccessor,
+        CancellationToken cancellationToken)
+    {
+        var options = optionsAccessor.Value;
+        var sourceRowCount = Math.Clamp(request.SourceRowCount, 1, options.MaximumSourceRowCount);
+
+        try
+        {
+            var values = await executor.DistinctValuesAsync(
+                request.Field,
+                sourceRowCount,
+                cancellationToken);
+            var visibleValues = values.Take(options.FieldValueLimit).ToArray();
+
+            return Results.Ok(new PivotForgeFieldValuesResponse(
+                request.Field,
+                visibleValues,
+                values.Count,
+                values.Count > options.FieldValueLimit,
+                options.FieldValueLimit));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsInvalidPivotRequest(exception))
+        {
+            return BadRequest("Field values request is not valid.");
         }
     }
 

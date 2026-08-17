@@ -1,6 +1,33 @@
 (function (root) {
 const PivotForge = root.PivotForge ??= {};
 
+// Every string the renderer puts on screen. Declared here rather than inline so
+// a non-Turkish consumer can replace them without forking the file; a key left
+// out of `texts` keeps its default, exactly as the designer's `labels` work.
+// `{0}` is substituted positionally.
+const TEXTS = {
+  rowLabels: "Satır Etiketleri",
+  rowsHeading: "Rows",
+  rowHeading: "Row {0}",
+  noData: "Veri yok",
+  cellActions: "Hücre işlemleri",
+  openDetails: "Detayı aç",
+  copyCell: "Hücreyi kopyala",
+  copyRow: "Satırı kopyala",
+  sortByValue: "Bu değere göre sırala",
+  filterByValue: "Bu değere göre filtrele",
+  addConditionalFormat: "Koşullu biçimlendirme ekle",
+  resizeColumn: "Sütun genişliğini değiştir",
+  sortField: "{0} alanını sırala",
+  sortActive: "{0} sıralaması aktif"
+};
+
+function formatText(template, ...values) {
+  return values.reduce(
+    (result, value, index) => result.replaceAll(`{${index}}`, String(value)),
+    String(template));
+}
+
 PivotForge.PivotTableRenderer = class PivotTableRenderer {
   constructor(container, options = {}) {
     if (!container) {
@@ -11,6 +38,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.options = {
       emptyText: "-",
       totalText: "Toplam",
+      // A grid needs a name, and a page with two pivots needs two different
+      // ones — so it is declarable rather than fixed.
+      ariaLabel: "Pivot tablosu",
       rowFields: [],
       rowFieldLabels: [],
       subtotals: true,
@@ -35,7 +65,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       repeatRowLabels: false,
       minColumnWidth: 72,
       maxColumnWidth: 420,
-      formatter: new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }),
+      // Left null so Intl falls back to the reader's own locale: a package that
+      // hard-codes one gives every other reader the wrong decimal separator.
+      culture: null,
+      texts: null,
+      formatter: new Intl.NumberFormat(
+        options.culture ?? undefined, { maximumFractionDigits: 2 }),
       ...options
     };
     this.columnWidths = new Map();
@@ -44,7 +79,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   }
 
   render(result, options = {}) {
-    const settings = { ...this.options, ...options };
+    const settings = { ...this.options, ...options, texts: this.resolveTexts(options) };
     this.lastResult = result;
     this.lastOptions = options;
     this.lastSettings = settings;
@@ -76,6 +111,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.selectionMetadata = new WeakMap();
     const table = document.createElement("table");
     table.className = `pivot-table__table is-${settings.layoutMode}`;
+    // The renderer already ships the whole grid keyboard contract — arrow keys,
+    // Enter, Ctrl+C, a roving tabindex and cell selection. Declaring the role is
+    // what makes that contract discoverable, and what makes the aria-selected
+    // already written on rows and cells mean anything: on a plain table it is
+    // an unsupported attribute that screen readers drop.
+    table.setAttribute("role", "grid");
+    table.setAttribute("aria-multiselectable", "false");
+    table.setAttribute("aria-label", settings.ariaLabel);
 
     table.appendChild(this.createTableHead(columnHeaders, columnDepth, measureDepth, rowDepth, values, settings));
     table.appendChild(this.createTableBody(
@@ -91,6 +134,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       columnTotals,
       subtotals));
     this.applyVirtualSpacers(table, settings.virtualState, rowDepth, columnHeaders, values);
+    // After the spacers, so the rows they insert are excluded from the count.
+    this.applyGridIndexes(table, settings.virtualState);
 
     this.container.replaceChildren(table);
     this.currentTable = table;
@@ -315,15 +360,20 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
   createTableHead(columnHeaders, columnDepth, measureDepth, rowDepth, values, settings) {
     const thead = document.createElement("thead");
+    thead.setAttribute("role", "rowgroup");
     const valueSpan = values.length;
 
     for (let level = 0; level < columnDepth; level++) {
-      const row = document.createElement("tr");
+      const row = this.createRow();
 
       if (level === 0) {
         for (let rowLevel = 0; rowLevel < rowDepth; rowLevel++) {
-          const label = settings.rowFieldLabels[rowLevel] ?? (rowDepth === 1 ? "Rows" : `Row ${rowLevel + 1}`);
-          const displayLabel = settings.layoutMode === "compact" ? "Satır Etiketleri" : label;
+          const label = settings.rowFieldLabels[rowLevel] ?? (rowDepth === 1
+            ? settings.texts.rowsHeading
+            : formatText(settings.texts.rowHeading, rowLevel + 1));
+          const displayLabel = settings.layoutMode === "compact"
+            ? settings.texts.rowLabels
+            : label;
           const corner = this.createCell("th", displayLabel, "pivot-table__corner");
           corner.rowSpan = columnDepth + measureDepth;
           corner.dataset.stickyColumn = String(rowLevel);
@@ -371,7 +421,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }
 
     if (measureDepth > 0) {
-      const measureRow = document.createElement("tr");
+      const measureRow = this.createRow();
 
       for (let columnIndex = 0; columnIndex < Math.max(1, columnHeaders.length); columnIndex++) {
         values.forEach((value, valueIndex) => {
@@ -457,10 +507,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     columnTotals = null,
     subtotals = null) {
     const tbody = document.createElement("tbody");
+    tbody.setAttribute("role", "rowgroup");
 
     if (rowHeaders.length === 0) {
-      const row = document.createElement("tr");
-      const empty = this.createCell("td", "Veri yok", "pivot-table__empty");
+      const row = this.createRow();
+      const empty = this.createCell("td", settings.texts.noData, "pivot-table__empty");
       empty.colSpan = rowDepth + Math.max(1, columnHeaders.length) * values.length + values.length;
       row.appendChild(empty);
       tbody.appendChild(row);
@@ -530,10 +581,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   }
 
   createVirtualSpacer(height, columnCount, position) {
-    const row = document.createElement("tr");
-    row.className = `pivot-table__virtual-spacer is-${position}`;
+    const row = this.createRow(`pivot-table__virtual-spacer is-${position}`);
     row.setAttribute("aria-hidden", "true");
-    const cell = document.createElement("td");
+    const cell = this.createCell("td", "", "");
     cell.colSpan = columnCount;
     cell.style.height = `${height}px`;
     row.appendChild(cell);
@@ -551,7 +601,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     rowTotalLookup = new Map(),
     subtotalLookup = new Map(),
     serverTotalsAvailable = false) {
-    const row = document.createElement("tr");
+    const row = this.createRow();
     const rowSelection = this.createRowSelection(rowInfo);
     row.className = {
       detail: "pivot-table__detail-row",
@@ -646,7 +696,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     for (let rowLevel = 0; rowLevel < rowDepth; rowLevel++) {
       const value = rowInfo.rowHeader[rowLevel] ?? null;
       const isGroupLikeRow = rowInfo.type === "subtotal" || rowInfo.type === "group";
-      const header = this.createCell("th", "", isGroupLikeRow ? "pivot-table__subtotal-header" : "pivot-table__row-header");
+      const header = this.createCell("th", "", isGroupLikeRow ? "pivot-table__subtotal-header" : "pivot-table__row-header", "rowheader");
       header.dataset.stickyColumn = String(rowLevel);
       header.dataset.columnIndex = String(rowLevel);
       this.registerSelectionTarget(header, rowSelection, "row");
@@ -656,21 +706,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         previousRowHeader[rowLevel] === rowInfo.rowHeader[rowLevel];
 
       if (rowInfo.type === "subtotal" && rowLevel === rowInfo.level) {
-        const toggle = document.createElement("button");
-        toggle.className = "pivot-table__toggle";
-        toggle.type = "button";
-        toggle.dataset.subtotalKey = rowInfo.key;
-        toggle.textContent = this.collapsedRows.has(rowInfo.key) ? "▸" : "▾";
-        header.appendChild(toggle);
-        header.appendChild(document.createTextNode(`${this.displayValue(value, settings)} ${settings.totalText}`));
+        const label = `${this.displayValue(value, settings)} ${settings.totalText}`;
+        header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
+        header.appendChild(document.createTextNode(label));
       } else if (rowInfo.type === "group" && rowLevel === rowInfo.level) {
-        const toggle = document.createElement("button");
-        toggle.className = "pivot-table__toggle";
-        toggle.type = "button";
-        toggle.dataset.subtotalKey = rowInfo.key;
-        toggle.textContent = this.collapsedRows.has(rowInfo.key) ? "▸" : "▾";
-        header.appendChild(toggle);
-        header.appendChild(document.createTextNode(this.displayValue(value, settings)));
+        const label = this.displayValue(value, settings);
+        header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
+        header.appendChild(document.createTextNode(label));
       } else if (rowInfo.type === "detail" || rowLevel < rowInfo.rowHeader.length) {
         if (isRepeatedLabel) {
           header.classList.add("is-repeated");
@@ -692,7 +734,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       ? rowInfo.level
       : Math.max(0, rowInfo.rowHeader.length - 1);
     const value = rowInfo.rowHeader[rowLevel] ?? null;
-    const header = this.createCell("th", "", rowInfo.type === "subtotal" || rowInfo.type === "group" ? "pivot-table__subtotal-header" : "pivot-table__row-header");
+    const header = this.createCell("th", "", rowInfo.type === "subtotal" || rowInfo.type === "group" ? "pivot-table__subtotal-header" : "pivot-table__row-header", "rowheader");
     header.dataset.stickyColumn = "0";
     header.dataset.columnIndex = "0";
     this.registerSelectionTarget(header, rowSelection, "row");
@@ -700,21 +742,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     header.classList.add("is-compact");
 
     if (rowInfo.type === "subtotal") {
-      const toggle = document.createElement("button");
-      toggle.className = "pivot-table__toggle";
-      toggle.type = "button";
-      toggle.dataset.subtotalKey = rowInfo.key;
-      toggle.textContent = this.collapsedRows.has(rowInfo.key) ? "▸" : "▾";
-      header.appendChild(toggle);
-      header.appendChild(document.createTextNode(`${this.displayValue(value, settings)} ${settings.totalText}`));
+      const label = `${this.displayValue(value, settings)} ${settings.totalText}`;
+      header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
+      header.appendChild(document.createTextNode(label));
     } else if (rowInfo.type === "group") {
-      const toggle = document.createElement("button");
-      toggle.className = "pivot-table__toggle";
-      toggle.type = "button";
-      toggle.dataset.subtotalKey = rowInfo.key;
-      toggle.textContent = this.collapsedRows.has(rowInfo.key) ? "▸" : "▾";
-      header.appendChild(toggle);
-      header.appendChild(document.createTextNode(this.displayValue(value, settings)));
+      const label = this.displayValue(value, settings);
+      header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
+      header.appendChild(document.createTextNode(label));
     } else {
       const isRepeatedLabel = settings.repeatRowLabels === false &&
         previousRowHeader !== null &&
@@ -1238,9 +1272,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const menu = document.createElement("div");
     menu.className = "pivot-cell-menu";
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "Hücre işlemleri");
+    menu.setAttribute("aria-label", (settings.texts ?? TEXTS).cellActions);
 
-    this.createContextMenuItems(selection).forEach(item => {
+    this.createContextMenuItems(selection, settings.texts ?? TEXTS).forEach(item => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "pivot-cell-menu__item";
@@ -1266,18 +1300,22 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     return menu;
   }
 
-  createContextMenuItems(selection) {
+  createContextMenuItems(selection, texts = TEXTS) {
     const isNumeric = typeof selection?.value === "number";
     const hasDimensionPath = (selection?.rowHeader?.length ?? 0) + (selection?.columnHeader?.length ?? 0) > 0;
     const canSort = isNumeric && selection?.rowType !== "grandTotal" && selection?.rowType !== "group";
 
     return [
-      { action: "details", label: "Detayı aç", disabled: selection?.drillDownEnabled === false },
-      { action: "copy-cell", label: "Hücreyi kopyala", disabled: false },
-      { action: "copy-row", label: "Satırı kopyala", disabled: false },
-      { action: "sort", label: "Bu değere göre sırala", disabled: !canSort },
-      { action: "filter", label: "Bu değere göre filtrele", disabled: !hasDimensionPath },
-      { action: "conditional", label: "Koşullu biçimlendirme ekle", disabled: !isNumeric || !selection?.valueKey }
+      { action: "details", label: texts.openDetails, disabled: selection?.drillDownEnabled === false },
+      { action: "copy-cell", label: texts.copyCell, disabled: false },
+      { action: "copy-row", label: texts.copyRow, disabled: false },
+      { action: "sort", label: texts.sortByValue, disabled: !canSort },
+      { action: "filter", label: texts.filterByValue, disabled: !hasDimensionPath },
+      {
+        action: "conditional",
+        label: texts.addConditionalFormat,
+        disabled: !isNumeric || !selection?.valueKey
+      }
     ];
   }
 
@@ -1512,7 +1550,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       handle.className = "pivot-table__resize-handle";
       handle.setAttribute("role", "separator");
       handle.setAttribute("aria-orientation", "vertical");
-      handle.title = "Sütun genişliğini değiştir";
+      handle.title = (settings.texts ?? TEXTS).resizeColumn;
       header.appendChild(handle);
 
       handle.addEventListener("click", event => {
@@ -1633,7 +1671,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   }
 
   createGrandTotalRow(rowHeaders, columnHeaders, rowDepth, values, lookup, grandTotals, settings, columnTotals = null) {
-    const row = document.createElement("tr");
+    const row = this.createRow();
     const rowSelection = {
       type: "row",
       rowKey: "grand-total",
@@ -1645,7 +1683,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     for (let rowLevel = 0; rowLevel < rowDepth; rowLevel++) {
       const label = rowLevel === 0 ? settings.totalText : "";
-      const header = this.createCell("th", label, "pivot-table__row-total-label");
+      const header = this.createCell("th", label, "pivot-table__row-total-label", "rowheader");
       header.dataset.stickyColumn = String(rowLevel);
       header.dataset.columnIndex = String(rowLevel);
       this.registerSelectionTarget(header, rowSelection, "row");
@@ -1743,11 +1781,74 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     });
   }
 
-  createCell(tagName, text, className) {
+  // Declaring role="grid" on the table *replaces* the native table semantics
+  // rather than adding to them, so a row or cell left without a role is a hole
+  // in the accessibility tree, not a fallback. Every cell is built here so
+  // there is one place that cannot be forgotten. `th` is ambiguous on its own —
+  // a column header in the head, a row header in the body — so the caller says
+  // which; `td` is always a cell.
+  createCell(tagName, text, className, role = null) {
     const cell = document.createElement(tagName);
     cell.className = className;
     cell.textContent = text;
+    cell.setAttribute("role", role ?? (tagName === "th" ? "columnheader" : "gridcell"));
     return cell;
+  }
+
+  // Merged rather than spread, or a caller overriding one string would drop
+  // every other default along with it — and the renderer would render blanks
+  // for every key they did not think to repeat.
+  resolveTexts(options = {}) {
+    return { ...TEXTS, ...(this.options.texts ?? {}), ...(options.texts ?? {}) };
+  }
+
+  createRow(className = null) {
+    const row = document.createElement("tr");
+    row.setAttribute("role", "row");
+
+    if (className) {
+      row.className = className;
+    }
+
+    return row;
+  }
+
+  // The glyph is the whole button, so without a name a screen reader announces
+  // nothing but "button", and without aria-expanded there is no way to tell a
+  // collapsed group from an expanded one.
+  createSubtotalToggle(key, label) {
+    const toggle = document.createElement("button");
+    const collapsed = this.collapsedRows.has(key);
+    toggle.className = "pivot-table__toggle";
+    toggle.type = "button";
+    toggle.dataset.subtotalKey = key;
+    toggle.textContent = collapsed ? "▸" : "▾";
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-label", label);
+    return toggle;
+  }
+
+  // A screen reader counts the rows it can see. Under virtual scrolling that is
+  // a page, not the table — "row 3 of 12" for a five-thousand-row pivot — so
+  // the real position and total have to be stated outright.
+  applyGridIndexes(table, virtualState) {
+    const headRows = Array.from(table.tHead?.rows ?? []);
+    const bodyRows = Array.from(table.tBodies[0]?.rows ?? [])
+      .filter(row => !row.classList.contains("pivot-table__virtual-spacer"));
+    const offset = Math.max(0, virtualState?.offset ?? 0);
+    const total = Math.max(bodyRows.length, virtualState?.totalRowCount ?? bodyRows.length);
+
+    table.setAttribute("aria-rowcount", String(headRows.length + total));
+    headRows.forEach((row, index) => row.setAttribute("aria-rowindex", String(index + 1)));
+
+    bodyRows.forEach((row, index) => {
+      // The grand total is appended after the virtual window, so counting it
+      // from the window's start would place it inside the page it follows.
+      const position = row.dataset.selectionRowKey === "grand-total"
+        ? total
+        : offset + index + 1;
+      row.setAttribute("aria-rowindex", String(headRows.length + position));
+    });
   }
 
   decorateSortableHeader(cell, label, request, settings) {
@@ -1761,7 +1862,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const button = document.createElement("button");
     button.className = "pivot-table__sort-button";
     button.type = "button";
-    button.title = `${label} alanını sırala`;
+    button.title = formatText(settings.texts.sortField, label);
 
     const text = document.createElement("span");
     text.className = "pivot-table__sort-label";
@@ -1772,12 +1873,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     indicator.className = "pivot-table__sort-indicator";
     indicator.setAttribute("aria-hidden", "true");
 
+    // The arrow glyph is aria-hidden, so without aria-sort the active sort is
+    // visible and nothing more. It belongs on the header cell rather than the
+    // button: the cell is what carries the columnheader role.
     if (this.isActiveSort(request, settings.sortState)) {
-      indicator.textContent = settings.sortState.direction === "Descending" ? "▼" : "▲";
+      const descending = settings.sortState.direction === "Descending";
+      indicator.textContent = descending ? "▼" : "▲";
       button.classList.add("is-active");
-      button.title = `${label} sıralaması aktif`;
+      button.title = formatText(settings.texts.sortActive, label);
+      cell.setAttribute("aria-sort", descending ? "descending" : "ascending");
     } else {
       indicator.textContent = "↕";
+      cell.setAttribute("aria-sort", "none");
     }
 
     button.appendChild(indicator);
@@ -1859,16 +1966,16 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     if (format.type === "currency") {
       options.style = "currency";
       options.currency = format.currency || "TRY";
-      return new Intl.NumberFormat("tr-TR", options).format(value);
+      return new Intl.NumberFormat(settings.culture ?? undefined, options).format(value);
     }
 
     if (format.type === "percent") {
       options.style = "percent";
       const normalizedValue = this.isPercentShowAs(valueDefinition?.showAs) ? value : value / 100;
-      return new Intl.NumberFormat("tr-TR", options).format(normalizedValue);
+      return new Intl.NumberFormat(settings.culture ?? undefined, options).format(normalizedValue);
     }
 
-    return new Intl.NumberFormat("tr-TR", options).format(value);
+    return new Intl.NumberFormat(settings.culture ?? undefined, options).format(value);
   }
 
   summarizeValues(values, valueDefinition) {

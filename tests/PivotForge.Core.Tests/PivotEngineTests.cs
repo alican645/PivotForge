@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using PivotForge.Core;
 using PivotForge.Core.Records;
 
@@ -6,6 +7,106 @@ namespace PivotForge.Core.Tests;
 
 public sealed class PivotEngineTests
 {
+    // In Turkish Ç is a letter of its own, sorting after every word that starts
+    // with C. Elsewhere it is a variant of C, so the letters after it decide.
+    // "Cx" and "Ça" therefore swap places between the two — which is exactly the
+    // difference a hard-coded tr-TR hid from every other consumer.
+    private static readonly Order[] TurkishLabels =
+    [
+        new Order("Zonguldak", 2026, "A", 1m),
+        new Order("Çanakkale", 2026, "A", 2m),
+        new Order("Corum", 2026, "A", 3m)
+    ];
+
+    private static readonly PivotRequest LabelRequest = new()
+    {
+        Rows = ["Region"],
+        Values = [PivotValueDefinition.Sum("Amount")]
+    };
+
+    private static string[] RowLabels(PivotResult result)
+        => result.RowHeaders.Select(header => header[0]!).ToArray();
+
+    [Fact]
+    public void Execute_CollatesRowLabels_WithTheCultureItWasGiven()
+    {
+        var turkish = new PivotEngine(CultureInfo.GetCultureInfo("tr-TR"))
+            .Execute(TurkishLabels, LabelRequest);
+        var english = new PivotEngine(CultureInfo.GetCultureInfo("en-US"))
+            .Execute(TurkishLabels, LabelRequest);
+
+        Assert.Equal(["Corum", "Çanakkale", "Zonguldak"], RowLabels(turkish));
+        Assert.Equal(["Çanakkale", "Corum", "Zonguldak"], RowLabels(english));
+    }
+
+    [Fact]
+    public void Execute_CollatesRowLabels_WithTheAmbientCultureByDefault()
+    {
+        var original = CultureInfo.CurrentCulture;
+
+        try
+        {
+            // Resolved per call rather than cached, so a request-scoped culture —
+            // which is what ASP.NET's request localization sets — is honoured.
+            var engine = new PivotEngine();
+
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("tr-TR");
+            Assert.Equal(
+                ["Corum", "Çanakkale", "Zonguldak"],
+                RowLabels(engine.Execute(TurkishLabels, LabelRequest)));
+
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            Assert.Equal(
+                ["Çanakkale", "Corum", "Zonguldak"],
+                RowLabels(engine.Execute(TurkishLabels, LabelRequest)));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Fact]
+    public void Execute_CollatesAnExplicitLabelSort_WithTheSameCulture()
+    {
+        // A declared RowLabel sort takes a different path through the engine than
+        // the default ordering does, and used to carry its own hard-coded tr-TR.
+        var request = new PivotRequest
+        {
+            Rows = ["Region"],
+            Values = [PivotValueDefinition.Sum("Amount")],
+            RowSort = PivotSort.RowLabel("Region", PivotSortDirection.Ascending)
+        };
+
+        var turkish = new PivotEngine(CultureInfo.GetCultureInfo("tr-TR"))
+            .Execute(TurkishLabels, request);
+        var english = new PivotEngine(CultureInfo.GetCultureInfo("en-US"))
+            .Execute(TurkishLabels, request);
+
+        Assert.Equal(["Corum", "Çanakkale", "Zonguldak"], RowLabels(turkish));
+        Assert.Equal(["Çanakkale", "Corum", "Zonguldak"], RowLabels(english));
+    }
+
+    [Fact]
+    public void Execute_RefusesANullCulture()
+    {
+        Assert.Throws<ArgumentNullException>(() => new PivotEngine(null!));
+    }
+
+    [Fact]
+    public void DistinctValues_OrdersThePickerListInTheReadersCulture()
+    {
+        var turkish = new PivotEngine(CultureInfo.GetCultureInfo("tr-TR"))
+            .DistinctValues(TurkishLabels, "Region");
+        var english = new PivotEngine(CultureInfo.GetCultureInfo("en-US"))
+            .DistinctValues(TurkishLabels, "Region");
+
+        // The picker shows this list to a person, so it is sorted the way that
+        // person reads rather than by code point.
+        Assert.Equal(["Corum", "Çanakkale", "Zonguldak"], turkish);
+        Assert.Equal(["Çanakkale", "Corum", "Zonguldak"], english);
+    }
+
     [Fact]
     public void Execute_GroupsRowsAndColumns_WithSum()
     {
@@ -425,6 +526,133 @@ public sealed class PivotEngineTests
 
         Assert.Single(engine.DrillDown(table, tableRequest, ["East"], ["2026"]));
         Assert.Single(engine.DrillDownRecords(dictionaryRecords, dictionaryRequest, ["West"], ["2026"]));
+    }
+
+    [Fact]
+    public void DistinctValues_ReturnsEachValueOnceInValueOrder()
+    {
+        var orders = CreateDrillDownOrders();
+
+        var regions = new PivotEngine().DistinctValues(orders, "Region");
+        var years = new PivotEngine().DistinctValues(orders, "Year");
+
+        Assert.Equal(["East", "West"], regions);
+        Assert.Equal(["2025", "2026"], years);
+    }
+
+    [Fact]
+    public void DistinctValues_OrdersNumbersByValueRatherThanText()
+    {
+        var orders = new[]
+        {
+            new Order("East", 2, "A", 1m),
+            new Order("East", 10, "A", 1m),
+            new Order("East", 1, "A", 1m)
+        };
+
+        var years = new PivotEngine().DistinctValues(orders, "Year");
+
+        Assert.Equal(["1", "2", "10"], years);
+    }
+
+    // A null source value converts to the empty string on the filter path too,
+    // so blank is offered as the value that actually selects those records.
+    [Fact]
+    public void DistinctValues_OffersBlankForNullsAndThatBlankFilters()
+    {
+        var orders = new[]
+        {
+            new Order("East", 2026, "A", 100m),
+            new Order("East", 2026, "A", null)
+        };
+        var engine = new PivotEngine();
+
+        Assert.Equal(["", "100"], engine.DistinctValues(orders, "Amount"));
+
+        var blanks = engine.DrillDown(
+            orders,
+            new PivotRequest
+            {
+                Rows = ["Region"],
+                Columns = ["Year"],
+                Values = [PivotValueDefinition.Count("Amount")],
+                Filters = [new PivotFilter("Amount", [""])]
+            },
+            [],
+            []);
+
+        Assert.Equal([null], blanks.Select(record => record.Amount));
+    }
+
+    // A picker is only useful if choosing what it shows actually filters, so the
+    // strings it returns must be the strings the filter compares against.
+    [Fact]
+    public void DistinctValues_ReturnsTheSameStringsTheFilterMatchesOn()
+    {
+        var orders = CreateDrillDownOrders();
+        var engine = new PivotEngine();
+
+        foreach (var year in engine.DistinctValues(orders, "Year"))
+        {
+            var matches = engine.DrillDown(
+                orders,
+                new PivotRequest
+                {
+                    Rows = ["Region"],
+                    Columns = ["Year"],
+                    Values = [PivotValueDefinition.Sum("Amount")],
+                    Filters = [new PivotFilter("Year", [year])]
+                },
+                [],
+                []);
+
+            Assert.NotEmpty(matches);
+            Assert.All(matches, record => Assert.Equal(year, record.Year.ToString()));
+        }
+    }
+
+    // The reader only discovers an unknown field while reading a record, so an
+    // empty source would otherwise report "no values" for a field that is not
+    // there at all — a picker would open blank instead of failing.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DistinctValues_ThrowsForUnknownFieldEvenWithoutRecords(bool hasRecords)
+    {
+        var orders = hasRecords ? CreateDrillDownOrders() : [];
+
+        Assert.Throws<PivotFieldNotFoundException>(
+            () => new PivotEngine().DistinctValues(orders, "Missing"));
+    }
+
+    [Fact]
+    public void DistinctValues_ThrowsForAnEmptyFieldName()
+    {
+        var orders = CreateDrillDownOrders();
+
+        Assert.Throws<ArgumentException>(() => new PivotEngine().DistinctValues(orders, "  "));
+    }
+
+    [Fact]
+    public void DistinctValues_SupportsDataTableAndDictionaryRecords()
+    {
+        var table = new DataTable();
+        table.Columns.Add("Region", typeof(string));
+        table.Rows.Add("West");
+        table.Rows.Add("East");
+        table.Rows.Add("East");
+        var dictionaryRecords = JsonRecordParser.Parse(
+            """
+            [
+              { "region": "West" },
+              { "region": "East" },
+              { "region": "East" }
+            ]
+            """);
+        var engine = new PivotEngine();
+
+        Assert.Equal(["East", "West"], engine.DistinctValues(table, "Region"));
+        Assert.Equal(["East", "West"], engine.DistinctValuesRecords(dictionaryRecords, "region"));
     }
 
     [Fact]

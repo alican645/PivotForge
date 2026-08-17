@@ -169,7 +169,9 @@ test("opening renders one row per record, with declared captions as headers", as
 });
 
 test("declared formats are applied to the detail cells", async () => {
-  const { modal, host } = build();
+  // Pinned, because the assertion is about the declared format reaching the
+  // cell — the locale it lands in is asserted separately.
+  const { modal, host } = build({ modal: { culture: "tr-TR" } });
 
   await modal.open(selection);
 

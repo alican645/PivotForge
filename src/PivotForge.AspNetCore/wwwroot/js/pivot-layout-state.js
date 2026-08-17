@@ -56,7 +56,13 @@
       // declared caption is always recoverable.
       this.captions = new Map();
       this.handlers = new Map();
-      this.layout = layout ? this.adoptLayout(layout) : this.layoutFromCatalog(normalized);
+
+      if (layout) {
+        this.layout = this.adoptLayout(layout);
+        this.adoptCaptions(layout.captions);
+      } else {
+        this.layout = this.layoutFromCatalog(normalized);
+      }
 
       if (this.layout.values.length === 0) {
         throw new Error("A pivot layout requires at least one field in the data area.");
@@ -183,6 +189,27 @@
       }
 
       this.emitChange();
+    }
+
+    // Restores the caption overrides getState() emitted. Unlike the layout
+    // itself, an unusable entry here is skipped rather than fatal: a caption is
+    // a display preference, and a saved view whose catalog has since changed
+    // should still open with the placements it can honour.
+    adoptCaptions(captions) {
+      if (!captions || typeof captions !== "object") {
+        return;
+      }
+
+      Object.entries(captions).forEach(([name, caption]) => {
+        if (!this.catalog.has(name) || typeof caption !== "string") {
+          return;
+        }
+
+        const trimmed = caption.trim();
+        if (trimmed && trimmed !== this.declaredCaption(name)) {
+          this.captions.set(name, trimmed);
+        }
+      });
     }
 
     areaOf(name) {
@@ -352,6 +379,25 @@
       }
 
       value.showAs = showAs;
+      this.emitChange();
+    }
+
+    // The values a filter accepts. An empty list is how "no restriction" is
+    // spelled all the way down to the engine, so clearing a filter and never
+    // setting one are deliberately the same state.
+    setFilterValues(name, values) {
+      const filter = this.layout.filters.find(entry => entry.field === name);
+      if (!filter) {
+        throw new Error(`Field "${name}" is not in the filter area.`);
+      }
+
+      if (!Array.isArray(values)) {
+        throw new Error(`Filter values for "${name}" must be an array.`);
+      }
+
+      // Values reach the engine as strings; a null source value is compared as
+      // the empty string, so that is what blank is stored as.
+      filter.values = values.map(value => (value == null ? "" : String(value)));
       this.emitChange();
     }
 

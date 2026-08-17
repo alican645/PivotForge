@@ -5,7 +5,7 @@ PivotForge.AspNetCore adds reusable browser assets and minimal API endpoints to 
 ## Installation
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.8
+dotnet add package PivotForge.AspNetCore --version 0.5.0-preview.1
 ```
 
 ## Register services
@@ -51,6 +51,7 @@ The default endpoint prefix is `/pivotforge`. Static assets are available at:
 <script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-layout-state.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-filter-picker.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
@@ -138,7 +139,7 @@ Name a host element and get a drag-and-drop panel — a searchable available-fie
 
 A field placed in `Available` needs an explicit `role` (`Dimension` or `Measure`), because there is no area to infer it from; role rules then govern where it can be dropped — a measure only into the data area, a dimension into row/column/filter.
 
-The designer is desktop-only (HTML5 drag-and-drop does not fire on touch devices) and does not include filter value selection, a show-as menu, or a sort panel. See [Field designer](https://github.com/alican645/PivotForge/blob/main/docs/aspnetcore-integration.md#field-designer) in the integration guide for the full reference.
+Chips are moved with a mouse, a finger or a pen (a touch drag starts from the chip's grip), or entirely from the keyboard: `Space` picks a field up, the arrow keys move it between zones and slots, `Space` drops it and `Escape` cancels. A filter chip's `▼` opens a packaged value picker. Still missing: a show-as menu is in the per-field settings modal but a sort panel is not. See [Field designer](https://github.com/alican645/PivotForge/blob/main/docs/aspnetcore-integration.md#field-designer) in the integration guide for the full reference.
 
 ## Endpoint routes
 

@@ -8,9 +8,9 @@
 
 Interactive pivot tables forged for .NET.
 
-PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel export, saved views, selection, conditional formatting, and large-data workflows.
+PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel export, saved views, selection, conditional formatting, state persistence, and large-data workflows. The rendered grid is operable with a mouse, a touch screen or the keyboard alone, declares `role="grid"` for screen readers, and formats in the reader's own culture unless a page pins one.
 
-> The current preview is `0.4.0-preview.8`.
+> The current preview is `0.5.0-preview.1`.
 
 ## Packages
 
@@ -26,8 +26,8 @@ Both packages can be consumed by .NET 8, .NET 9, and .NET 10 applications.
 After the preview is published to NuGet:
 
 ```bash
-dotnet add package PivotForge.Core --version 0.4.0-preview.8
-dotnet add package PivotForge.AspNetCore --version 0.4.0-preview.8
+dotnet add package PivotForge.Core --version 0.5.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.5.0-preview.1
 ```
 
 Installing `PivotForge.AspNetCore` brings `PivotForge.Core` transitively.
@@ -87,6 +87,7 @@ Reference the Razor Class Library assets. Load them in `<head>`, not at the end 
 <script src="/_content/PivotForge.AspNetCore/js/pivot-widget.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-layout-state.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-filter-picker.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
@@ -182,7 +183,7 @@ Name a host element and get a drag-and-drop panel — a searchable available-fie
 </pivot-grid>
 ```
 
-A field placed in `Available` needs an explicit `role` (`Dimension` or `Measure`), because there is no area to infer it from; role rules then govern where it can be dropped — a measure only into the data area, a dimension into row/column/filter. The designer is desktop-only (it uses HTML5 drag-and-drop, which does not fire on touch devices) and does not include filter value selection, a show-as menu, or a sort panel. See [Field designer](docs/aspnetcore-integration.md#field-designer) in the integration guide for the full reference.
+A field placed in `Available` needs an explicit `role` (`Dimension` or `Measure`), because there is no area to infer it from; role rules then govern where it can be dropped — a measure only into the data area, a dimension into row/column/filter. Chips are moved with a mouse, a finger or a pen (a touch drag starts from the chip's grip), or entirely from the keyboard: `Space` picks a field up, the arrow keys move it between zones and slots, `Space` drops it and `Escape` cancels. A filter chip's `▼` opens a packaged value picker. Still missing: a show-as menu is in the per-field settings modal but a sort panel is not. See [Field designer](docs/aspnetcore-integration.md#field-designer) in the integration guide for the full reference.
 
 ## Run the Demo
 

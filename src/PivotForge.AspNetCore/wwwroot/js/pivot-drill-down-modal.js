@@ -39,6 +39,9 @@
       // An explicit column list wins over anything derived from the catalog,
       // for sources whose detail shape differs from the pivot fields.
       this.columns = options.columns ?? null;
+      // Kept in step with the renderer, so the detail table and the cell it was
+      // opened from format their numbers the same way.
+      this.culture = options.culture ?? null;
       this.labels = { ...DEFAULT_LABELS, ...(options.labels ?? {}) };
       this.host = options.host ?? root.document?.body ?? null;
 
@@ -81,7 +84,7 @@
           return key === undefined ? null : {
             key,
             label: field.caption ?? key,
-            format: PivotForge.PivotDrillDownData.createFormatter(field.format),
+            format: PivotForge.PivotDrillDownData.createFormatter(field.format, this.culture),
             // Alignment follows the data, not just the declaration: a measure
             // with no declared format is still a number, and left-aligning it
             // next to a formatted one reads as a mistake.

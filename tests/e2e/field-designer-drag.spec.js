@@ -124,7 +124,8 @@ test("a value chip leads with remove, then settings, then the caption", async ({
   const order = await page.locator(chipIn("data", "Amount")).evaluate(
     chip => Array.from(chip.children).map(child => child.className));
 
-  expect(order).toEqual(["pivot-chip__remove", "pivot-chip__settings", "pivot-chip__label"]);
+  expect(order).toEqual(
+    ["pivot-chip__remove", "pivot-chip__settings", "pivot-chip__label", "pivot-chip__grip"]);
 });
 
 test("field settings open in a modal, not inside the chip", async ({ page }) => {

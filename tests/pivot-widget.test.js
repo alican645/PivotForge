@@ -776,6 +776,40 @@ test("double-clicking a cell opens the packaged detail modal", async () => {
   });
 });
 
+test("the detail modal formats in the same culture as the grid it came from", async () => {
+  await withStubModal(async () => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const widget = PivotForge.create(createContainer(), {
+        fields, autoLoad: false, rendererOptions: { culture: "de-DE" }
+      });
+
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      // Otherwise the modal contradicts the cell that opened it.
+      assert.equal(widget.drillDownModal.options.culture, "de-DE");
+      widget.dispose();
+    });
+  });
+});
+
+test("a modal culture declared on purpose beats the renderer's", async () => {
+  await withStubModal(async () => {
+    await withSpyRenderer(async ({ constructed }) => {
+      const widget = PivotForge.create(createContainer(), {
+        fields,
+        autoLoad: false,
+        rendererOptions: { culture: "de-DE" },
+        drillDownModalOptions: { culture: "en-US" }
+      });
+
+      constructed[0].onCellDoubleClick({ type: "cell" });
+
+      assert.equal(widget.drillDownModal.options.culture, "en-US");
+      widget.dispose();
+    });
+  });
+});
+
 test("the modal is built once and reused across cells", async () => {
   await withStubModal(async () => {
     await withSpyRenderer(async ({ constructed }) => {

@@ -9,7 +9,7 @@
     <EnablePackageValidation>true</EnablePackageValidation>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PackageId>PivotForge.Core</PackageId>
-    <Version>0.4.0-preview.8</Version>
+    <Version>0.5.0-preview.1</Version>
     <Authors>Alican</Authors>
     <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge Core</Title>
@@ -19,7 +19,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Version-aligned preview release; the changes in this version apply to PivotForge.AspNetCore.</PackageReleaseNotes>
+    <PackageReleaseNotes>Behaviour change: row labels and filter values now collate with CultureInfo.CurrentCulture, resolved per call, instead of a hard-coded tr-TR. new PivotEngine(culture) pins it. This is a correctness fix, not a cosmetic one: in Turkish C-cedilla is a letter of its own that sorts after every word starting with C, so results reorder outside Turkish. Also adds PivotEngine.DistinctValues for object, DataTable and dictionary sources, which backs the packaged filter value picker.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

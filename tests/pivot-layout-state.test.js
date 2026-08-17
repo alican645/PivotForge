@@ -708,3 +708,127 @@ test("showAs cannot be set on a field outside the data area", () => {
 
   assert.throws(() => state.setShowAs("Region", "normal"), /not in the data area/);
 });
+
+test("filter values are written to the filter entry and reach the request", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+
+  state.setFilterValues("Quarter", ["Q1", "Q3"]);
+
+  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+  assert.deepEqual(state.toRequestState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+});
+
+test("an empty filter selection is dropped from the request rather than sent", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  state.setFilterValues("Quarter", ["Q1"]);
+
+  state.setFilterValues("Quarter", []);
+
+  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: [] }]);
+  assert.deepEqual(state.toRequestState().filters, []);
+});
+
+test("filter values are stringified, with blank standing in for null", () => {
+  const state = create();
+  state.move("Year", "filter");
+
+  state.setFilterValues("Year", [2025, null, "2026"]);
+
+  assert.deepEqual(state.getState().filters[0].values, ["2025", "", "2026"]);
+});
+
+test("filter values cannot be set on a field outside the filter area", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterValues("Region", ["East"]), /not in the filter area/);
+});
+
+test("a non-array filter selection is refused rather than coerced", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+
+  assert.throws(() => state.setFilterValues("Quarter", "Q1"), /must be an array/);
+});
+
+test("setting filter values notifies change subscribers", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  let seen = null;
+  state.on("change", next => { seen = next; });
+
+  state.setFilterValues("Quarter", ["Q1"]);
+
+  assert.deepEqual(seen.filters, [{ field: "Quarter", values: ["Q1"] }]);
+});
+
+// --- Caption round-trip -----------------------------------------------------
+// getState() has always emitted captions; adoptLayout never read them back, so
+// a saved view silently lost every rename.
+
+const savedLayout = extra => ({
+  rows: ["Region", "Category"],
+  columns: ["Year"],
+  values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+  filters: [],
+  ...extra
+});
+
+test("a renamed caption survives a save and restore round trip", () => {
+  const source = create();
+  source.setCaption("Region", "Satış Bölgesi");
+
+  const restored = new PivotForge.PivotLayoutState(catalog, source.getState());
+
+  assert.equal(restored.field("Region").caption, "Satış Bölgesi");
+  assert.deepEqual(restored.getState().captions, { Region: "Satış Bölgesi" });
+});
+
+test("a restored caption is still resettable to the declared one", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Region: "Satış Bölgesi" } }));
+
+  state.setCaption("Region", "");
+
+  assert.equal(state.field("Region").caption, "Bölge");
+  assert.deepEqual(state.getState().captions, {});
+});
+
+test("a caption for a field the catalog no longer has is ignored, not fatal", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Gone: "Eski Alan", Region: "Satış Bölgesi" } }));
+
+  assert.equal(state.field("Region").caption, "Satış Bölgesi");
+  assert.deepEqual(state.getState().captions, { Region: "Satış Bölgesi" });
+});
+
+test("a restored caption equal to the declared one is not kept as an override", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Region: "Bölge" } }));
+
+  assert.deepEqual(state.getState().captions, {});
+});
+
+test("a blank or non-string restored caption is dropped rather than applied", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Region: "   ", Category: 42, Year: null } }));
+
+  assert.equal(state.field("Region").caption, "Bölge");
+  assert.equal(state.field("Category").caption, "Kategori");
+  assert.deepEqual(state.getState().captions, {});
+});
+
+test("a layout with no captions at all restores exactly as before", () => {
+  const state = new PivotForge.PivotLayoutState(catalog, savedLayout());
+
+  assert.deepEqual(state.getState().captions, {});
+  assert.equal(state.field("Region").caption, "Bölge");
+});
+
+test("a restored caption is trimmed the same way setCaption trims one", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog, savedLayout({ captions: { Region: "  Satış Bölgesi  " } }));
+
+  assert.equal(state.field("Region").caption, "Satış Bölgesi");
+});

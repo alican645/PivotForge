@@ -113,6 +113,19 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder FieldDesigner(string selector) => Set("fieldDesigner", selector);
 
+    /// <summary>Persists the layout, captions, filters, and sort the user arrives at.</summary>
+    /// <param name="storage">Where to persist. <see cref="PivotStateStorage.None"/> writes nothing.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder StateStoring(PivotStateStorage storage) => storage == PivotStateStorage.None
+        ? this
+        : Set("stateStoring", storage == PivotStateStorage.Session ? "session" : "local");
+
+    /// <summary>Names the storage entry, so two grids on a page never share one.</summary>
+    /// <param name="key">The key. When absent the grid's container id stands in; with neither,
+    /// nothing is persisted and the grid works from its declared configuration.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder StateKey(string key) => Set("stateKey", key);
+
     /// <summary>Sets how a click on a cell selects.</summary>
     /// <param name="mode">The selection mode.</param>
     /// <returns>This builder.</returns>
@@ -183,6 +196,37 @@ public sealed class PivotGridBuilder : IHtmlContent
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         return SetRenderer("totalText", text);
+    }
+
+    /// <summary>Sets the culture used to format numbers in the browser.</summary>
+    /// <remarks>
+    /// Left unset the renderer formats in the reader's own locale, which is what a package
+    /// with readers in more than one country wants. Pin it only when the page must show the
+    /// same separators to everyone. Server-side collation is separate: it follows
+    /// <see cref="System.Globalization.CultureInfo.CurrentCulture"/>, which ASP.NET's request
+    /// localization sets per request.
+    /// </remarks>
+    /// <param name="culture">A BCP 47 language tag, such as <c>tr-TR</c>.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The culture is null or blank.</exception>
+    public PivotGridBuilder Culture(string culture)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(culture);
+        return SetRenderer("culture", culture);
+    }
+
+    /// <summary>Sets the accessible name announced for the grid.</summary>
+    /// <remarks>
+    /// The rendered table declares <c>role="grid"</c>, which needs a name; a page carrying
+    /// two pivots needs two different ones, or a screen reader cannot tell them apart.
+    /// </remarks>
+    /// <param name="label">The accessible name.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The label is null or blank.</exception>
+    public PivotGridBuilder AriaLabel(string label)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        return SetRenderer("ariaLabel", label);
     }
 
     /// <summary>Names a page function called before each data request.</summary>

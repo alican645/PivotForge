@@ -21,6 +21,9 @@ public sealed class PivotForgeOptions
     /// <summary>Gets or sets the maximum number of drill-down records returned to a client.</summary>
     public int DrillDownRecordLimit { get; set; } = 1_000;
 
+    /// <summary>Gets or sets the maximum number of distinct field values returned to a client.</summary>
+    public int FieldValueLimit { get; set; } = 1_000;
+
     /// <summary>Gets or sets the maximum number of rows accepted by the Excel endpoint.</summary>
     public int MaximumExcelRows { get; set; } = 20_000;
 
