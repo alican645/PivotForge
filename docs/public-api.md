@@ -91,6 +91,14 @@ PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking 
 
 ### Behaviour changes in `0.6.0-preview.1`
 
+- **`hide-empty-summary-cells` / `HideEmptySummaryCells(bool)`** drops rows and
+  columns that hold no values at all. `PivotRequest` gained
+  `HideEmptySummaryCells`; the engine renumbers cells, row and column totals and
+  each subtotal's own cells together, so nothing survives pointing at an index
+  that moved. Grand totals are unchanged, because a row that aggregated to
+  nothing contributed nothing to them. Off by default, and omitted from the wire
+  when undeclared.
+
 - **A filter carries an operator.** `PivotFilter` gained an
   `Operator` (`PivotFilterOperator`, defaulting to `Equals`), so `Values` doubles
   as the operator's arguments: the list of values to keep for `Equals`, the

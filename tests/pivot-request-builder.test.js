@@ -456,3 +456,19 @@ test("a condition restricts once it has the arguments its operator reads", () =>
   assert.equal(restricts({ field: "Region", values: [] }), false);
   assert.equal(restricts({ field: "Region", values: ["Ege"] }), true);
 });
+
+test("hiding empty summary cells is asked for only when it was declared", () => {
+  const fields = [
+    { dataField: "Region", area: "row" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ];
+
+  // Omitted rather than sent as false, so a request from a page that never
+  // declared it is byte-identical to one written before the option existed.
+  assert.equal(
+    "hideEmptySummaryCells" in PivotForge.PivotRequestBuilder.buildRequest(fields), false);
+  assert.equal(
+    PivotForge.PivotRequestBuilder.buildRequest(fields, { hideEmptySummaryCells: true })
+      .hideEmptySummaryCells,
+    true);
+});

@@ -199,6 +199,17 @@ public sealed class PivotGridBuilder : IHtmlContent
         return SetRenderer("totalText", text);
     }
 
+    /// <summary>Drops rows and columns that hold no values at all.</summary>
+    /// <remarks>
+    /// The column axis is the product of its levels, so sparse data leaves whole columns that
+    /// never occurred; the row axis only observes what the data held, so an empty row is one whose
+    /// values all aggregated to nothing. The dropping happens in the engine rather than in the
+    /// browser, so paging, Excel export and drill-down all agree on which rows exist.
+    /// </remarks>
+    /// <param name="hide">Whether empty rows and columns are dropped.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder HideEmptySummaryCells(bool hide) => Set("hideEmptySummaryCells", hide);
+
     /// <summary>Sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
     /// Every string the grid, the field designer, the value picker and the detail modal put

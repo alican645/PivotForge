@@ -25,8 +25,12 @@ public class PivotForgeRequest
     /// <summary>Gets the per-field ordering of individual row and column header levels.</summary>
     public IReadOnlyList<PivotFieldSort> FieldSorts { get; init; } = [];
 
+    /// <summary>Gets whether rows and columns holding no values at all are dropped.</summary>
+    public bool HideEmptySummaryCells { get; init; }
+
     internal PivotRequest ToPivotRequest() => new()
     {
+        HideEmptySummaryCells = HideEmptySummaryCells,
         Rows = Rows,
         Columns = Columns,
         Values = Values,

@@ -969,6 +969,29 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesHideEmptySummaryCellsAsATopLevelOption()
+    {
+        // The engine drops them, so it belongs to the request rather than to
+        // rendererOptions: hiding them in the browser would leave paging counting
+        // rows nobody can see.
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", HideEmptySummaryCells = true },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.True(config.GetProperty("hideEmptySummaryCells").GetBoolean());
+    }
+
+    [Fact]
+    public async Task OmitsHideEmptySummaryCellsWhenUndeclared()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.TryGetProperty("hideEmptySummaryCells", out _));
+    }
+
+    [Fact]
     public async Task WritesADeclaredFilterOperator()
     {
         var config = ConfigOf(await RenderWithChildrenAsync(
