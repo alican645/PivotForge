@@ -260,3 +260,18 @@ test("loadPage is rejected when largeData is disabled", async () => {
   await assert.rejects(() => widget.loadPage(40), /largeData is disabled/);
   widget.dispose();
 });
+
+test("the widget asks the engine to drop empty rows when told to", () => {
+  // The option belongs to the request rather than to the renderer: hiding them
+  // in the browser would leave paging counting rows nobody can see.
+  const widget = PivotForge.create(createContainer(), {
+    fields,
+    autoLoad: false,
+    renderImpl: () => {},
+    hideEmptySummaryCells: true,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ cells: [] }) })
+  });
+
+  assert.equal(widget.buildRequest().hideEmptySummaryCells, true);
+  widget.dispose();
+});

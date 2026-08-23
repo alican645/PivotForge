@@ -299,6 +299,9 @@
           : normalizedFilter;
       }),
       rowSort: extras.rowSort ?? null,
+      // Sent only when asked for, so a request from a page that never declared it
+      // is byte-identical to one written before the option existed.
+      ...(extras.hideEmptySummaryCells ? { hideEmptySummaryCells: true } : {}),
       // Named rather than positional so the list survives a field moving to
       // another area, and so a later per-field sortBy has somewhere to live.
       fieldSorts: normalized

@@ -28,9 +28,16 @@
                 diziliyor; alfabetik olsaydı Ağustos, Nisan'dan önce gelirdi.
             </p>
             <p>
-                Sütun ekseni de aynı kolonun çeyrek seviyesini kullanıyor. Sütun ekseni normalde
-                verinin geliş sırasını korur; motorun kendi ürettiği grup etiketleri istisnadır,
-                çünkü orada korunacak bir sorgu niyeti yoktur.
+                Sütun ekseni de aynı kolonun çeyrek ve haftanın-günü seviyelerini kullanıyor.
+                Sütun ekseni normalde verinin geliş sırasını korur; motorun kendi ürettiği grup
+                etiketleri istisnadır, çünkü orada korunacak bir sorgu niyeti yoktur.
+            </p>
+            <p>
+                Çeyrek × haftanın günü 28 sütun eder; sayfa <code>Bölge = Ege</code> ile
+                sınırlandığı için bu kadar kayıt hepsine denk gelmiyor.
+                <code>hide-empty-summary-cells="true"</code> hiç veri düşmeyen sütunları
+                <strong>motorda</strong> düşürüyor — tarayıcıda gizlemek, sayfalamanın
+                kimsenin göremediği satırları saymasına yol açardı.
             </p>
         </div>
 
@@ -49,15 +56,19 @@
                             total-text="Genel Toplam"
                             aria-label="Yıl ve ay bazında satışlar"
                             culture="tr-TR"
+                            hide-empty-summary-cells="true"
                             field-designer="#groupingDesignerHost">
                     <pivot-field field="OrderDate" caption="Yıl" area="Row" group-interval="Year" />
                     <pivot-field field="OrderDate" caption="Ay" area="Row" group-interval="Month" />
                     <pivot-field field="OrderDate" caption="Çeyrek" area="Column" group-interval="Quarter" />
+                    <pivot-field field="OrderDate" caption="Haftanın Günü" area="Column"
+                                 group-interval="DayOfWeek" />
                     <pivot-field field="Amount" caption="Tutar" area="Data" aggregation="Sum"
                                  format-type="Currency" format-decimals="0" format-currency="TRY" />
                     <pivot-field field="Region" caption="Bölge" area="Available" role="Dimension" />
-                    <pivot-field field="OrderDate" caption="Haftanın Günü" area="Available"
-                                 role="Dimension" group-interval="DayOfWeek" />
+                    @* A slice narrow enough that the column product outgrows it, which is when
+                       empty columns show up in real reports. *@
+                    <pivot-filter field="Region" values="Ege" />
                 </pivot-grid>
             </div>
         </div>

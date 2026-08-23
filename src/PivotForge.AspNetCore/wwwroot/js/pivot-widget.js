@@ -13,6 +13,9 @@
     largeData: false,
     pageSize: 40,
     sourceRowCount: 100000,
+    // Dropped in the engine rather than hidden in the browser, so paging, Excel
+    // export and drill-down all agree on which rows exist.
+    hideEmptySummaryCells: false,
     rendererOptions: null,
     // A locale pack name ("tr") or an object shaped like one. It supplies the
     // language for every component that puts text on screen; anything the page
@@ -628,7 +631,8 @@
     buildRequest() {
       return PivotForge.PivotRequestBuilder.buildRequest(this.options.fields, {
         filters: this.filters,
-        rowSort: this.rowSort
+        rowSort: this.rowSort,
+        hideEmptySummaryCells: this.options.hideEmptySummaryCells
       });
     }
 

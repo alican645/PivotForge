@@ -143,7 +143,8 @@ public sealed record PivotFilter(
 
 Değer seçici artık pakette (`PivotFilterPicker`): motora `PivotEngine.DistinctValues`,
 uç noktalara `POST /pivotforge/field-values`, tasarımcı çipine `▼` düğmesi eklendi.
-Include/exclude ve satır başlığı hunisi de tamam. Kalan açık operatörler tarafında.
+Include/exclude, satır başlığı hunisi, operatörler ve boş satır/sütun eleme tamam.
+Kalan açık: sütun ekseninde başlık filtresi, tarih aralığı için hazır UI ve Top-N.
 
 - [x] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim,
       "Tümünü seç"/"Temizle", kesme uyarısı — tasarımcıdaki Filtreler bölgesi artık işlevsel
@@ -165,8 +166,15 @@ Include/exclude ve satır başlığı hunisi de tamam. Kalan açık operatörler
 - [ ] Top-N — diğer operatörlerden farklı olarak **toplama sonrası** çalışır:
       satır toplamları üzerinde eleme, ara toplamların ve genel toplamın elenen
       satırları sayıp saymayacağı kararı, sıralamayla etkileşim
-- [ ] Tarih aralığı filtreleri
-- [ ] `hideEmptySummaryCells` — boş satır/sütunları gizle
+- [~] Tarih aralığı filtreleri — motor tarafı `Between` ile **çalışıyor**: iki uç
+      da tarih okunuyorsa tarih olarak karşılaştırılıyor. Açık kalan yalnızca UI:
+      seçicideki argüman kutuları düz metin, tarih seçici değil
+- [x] `hideEmptySummaryCells` — hiç veri düşmeyen satır ve sütunları düşürür.
+      Sütun ekseni seviyelerinin çarpımı olduğu için seyrek veride hiç
+      gerçekleşmemiş sütunlar kalır; satır ekseni yalnızca verinin gösterdiğini
+      üretir, oradaki boşluk değerlerin tümünün null'a toplanmasıdır. Eleme
+      tarayıcıda değil **motorda** yapılıyor: sayfalama, Excel ve detay listesi
+      hangi satırların var olduğu konusunda aynı şeyi söylesin diye
 
 ---
 

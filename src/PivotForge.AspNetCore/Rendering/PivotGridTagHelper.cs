@@ -130,6 +130,15 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("aria-label")]
     public string? AriaLabel { get; set; }
 
+    /// <summary>Gets or sets whether rows and columns holding no values at all are dropped.</summary>
+    /// <remarks>
+    /// The column axis is the product of its levels, so sparse data leaves whole columns that
+    /// never occurred. Dropping happens in the engine, so paging, Excel export and drill-down all
+    /// agree on which rows exist.
+    /// </remarks>
+    [HtmlAttributeName("hide-empty-summary-cells")]
+    public bool? HideEmptySummaryCells { get; set; }
+
     /// <summary>Gets or sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
     /// Left unset it follows the request's UI culture, so a Turkish request gets
@@ -316,6 +325,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (AriaLabel is { } ariaLabel)
         {
             builder.AriaLabel(ariaLabel);
+        }
+
+        if (HideEmptySummaryCells is { } hideEmptySummaryCells)
+        {
+            builder.HideEmptySummaryCells(hideEmptySummaryCells);
         }
 
         if (Locale is { } locale)

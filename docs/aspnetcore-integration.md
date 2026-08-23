@@ -246,6 +246,7 @@ the renderer keeps its own default.
 | `total-text` | `TotalText(string)` | `Toplam` | Caption for total rows and columns. Must not be blank. |
 | `aria-label` | `AriaLabel(string)` | `Pivot tablosu` | Accessible name announced for the grid. Must not be blank. Give two pivots on one page two different names, or a screen reader cannot tell them apart. |
 | `culture` | `Culture(string)` | the reader's own locale | BCP 47 tag used to format numbers in the browser. Must not be blank. Server-side collation is separate — see [Localization](#localization). |
+| `hide-empty-summary-cells` | `HideEmptySummaryCells(bool)` | `false` | Drops rows and columns holding no values at all. The column axis is the product of its levels, so sparse data leaves whole columns that never occurred; a row is empty when its values all aggregated to nothing. Dropped in the engine, so paging, Excel export and drill-down all agree on which rows exist. |
 | `locale` | `Locale(string)` | the request's UI culture | Name of the locale pack supplying every on-screen string. Must not be blank. `en` is the built-in English and loads nothing — see [Localization](#localization). |
 
 `selection-mode` and `layout-mode` are non-nullable enums so Razor accepts the

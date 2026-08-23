@@ -501,11 +501,17 @@ public sealed class PivotEngine
             rawColumnTotals,
             rawSubtotals,
             rawGrandTotals);
+        // Before sorting, so the sort orders what survives rather than ordering
+        // rows that are about to disappear.
+        var populated = request.HideEmptySummaryCells
+            ? DropEmpty(rowIndex.Headers, columnHeaders, transformed)
+            : new PopulatedResult(rowIndex.Headers, columnHeaders, transformed);
+
         var sortedRows = SortRows(
-            rowIndex.Headers,
-            columnHeaders,
-            transformed.Cells,
-            transformed.RowTotals,
+            populated.RowHeaders,
+            populated.ColumnHeaders,
+            populated.Values.Cells,
+            populated.Values.RowTotals,
             request,
             culture);
         cancellationToken.ThrowIfCancellationRequested();
@@ -513,17 +519,17 @@ public sealed class PivotEngine
         return new PivotResult
         {
             RowHeaders = sortedRows.Headers,
-            ColumnHeaders = columnHeaders,
+            ColumnHeaders = populated.ColumnHeaders,
             Cells = sortedRows.Cells,
             RowTotals = sortedRows.RowTotals,
-            ColumnTotals = transformed.ColumnTotals,
-            Subtotals = transformed.Subtotals,
-            GrandTotals = transformed.GrandTotals,
+            ColumnTotals = populated.Values.ColumnTotals,
+            Subtotals = populated.Values.Subtotals,
+            GrandTotals = populated.Values.GrandTotals,
             Metadata = new PivotMetadata
             {
                 SourceRowCount = sourceRowCount,
                 RowHeaderCount = sortedRows.Headers.Count,
-                ColumnHeaderCount = columnHeaders.Count,
+                ColumnHeaderCount = populated.ColumnHeaders.Count,
                 CellCount = sortedRows.Cells.Count
             }
         };
@@ -1319,6 +1325,108 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> Headers,
         IReadOnlyList<PivotCell> Cells,
         IReadOnlyList<PivotTotal> RowTotals);
+
+    /// <summary>Removes the rows and columns that hold no values at all, and renumbers the rest.</summary>
+    /// <remarks>
+    /// A cell counts as holding something when any of its value keys is not null; a row or column
+    /// counts when any of its cells does. Everything addressed by index — cells, row and column
+    /// totals, and each subtotal's own cells — is renumbered together, because an index that
+    /// survives a drop but points at the old position is worse than the empty column was.
+    /// <para>
+    /// Grand totals are left alone: a row that aggregated to nothing contributed nothing to them.
+    /// </para>
+    /// </remarks>
+    private static PopulatedResult DropEmpty(
+        IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
+        IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
+        TransformedResult values)
+    {
+        static bool Holds(IReadOnlyDictionary<string, decimal?> cellValues) =>
+            cellValues.Values.Any(value => value is not null);
+
+        var liveRows = new HashSet<int>();
+        var liveColumns = new HashSet<int>();
+
+        foreach (var cell in values.Cells.Where(cell => Holds(cell.Values)))
+        {
+            liveRows.Add(cell.Row);
+            liveColumns.Add(cell.Column);
+        }
+
+        if (liveRows.Count == rowHeaders.Count && liveColumns.Count == columnHeaders.Count)
+        {
+            return new PopulatedResult(rowHeaders, columnHeaders, values);
+        }
+
+        var rowMap = Renumber(rowHeaders.Count, liveRows);
+        var columnMap = Renumber(columnHeaders.Count, liveColumns);
+
+        IReadOnlyList<PivotCell> Remap(IEnumerable<PivotCell> cells) => cells
+            .Where(cell => rowMap.ContainsKey(cell.Row) && columnMap.ContainsKey(cell.Column))
+            .Select(cell => new PivotCell
+            {
+                Row = rowMap[cell.Row],
+                Column = columnMap[cell.Column],
+                Values = cell.Values
+            })
+            .ToArray();
+
+        var survivingRows = rowMap.Keys.Order().Select(row => rowHeaders[row]).ToArray();
+
+        return new PopulatedResult(
+            survivingRows,
+            columnMap.Keys.Order().Select(column => columnHeaders[column]).ToArray(),
+            values with
+            {
+                Cells = Remap(values.Cells),
+                RowTotals = RemapTotals(values.RowTotals, rowMap),
+                ColumnTotals = RemapTotals(values.ColumnTotals, columnMap),
+                // A subtotal whose whole group went with the rows has nothing left
+                // to summarize, so it goes too rather than heading an empty group.
+                Subtotals = values.Subtotals
+                    .Where(subtotal => survivingRows.Any(header => StartsWith(header, subtotal.RowHeader)))
+                    .Select(subtotal => new PivotSubtotal
+                    {
+                        RowHeader = subtotal.RowHeader,
+                        Cells = Remap(subtotal.Cells),
+                        Totals = subtotal.Totals
+                    })
+                    .ToArray()
+            });
+    }
+
+    /// <summary>Maps each surviving index to its position among the survivors.</summary>
+    private static Dictionary<int, int> Renumber(int count, HashSet<int> live)
+    {
+        var map = new Dictionary<int, int>(live.Count);
+
+        for (var index = 0; index < count; index++)
+        {
+            if (live.Contains(index))
+            {
+                map.Add(index, map.Count);
+            }
+        }
+
+        return map;
+    }
+
+    private static IReadOnlyList<PivotTotal> RemapTotals(
+        IReadOnlyList<PivotTotal> totals,
+        IReadOnlyDictionary<int, int> map) => totals
+        .Where(total => map.ContainsKey(total.Index))
+        .Select(total => new PivotTotal { Index = map[total.Index], Values = total.Values })
+        .OrderBy(total => total.Index)
+        .ToArray();
+
+    private static bool StartsWith(IReadOnlyList<string?> header, IReadOnlyList<string?> prefix) =>
+        header.Count >= prefix.Count &&
+        prefix.Select((value, level) => string.Equals(header[level], value, StringComparison.Ordinal)).All(match => match);
+
+    private sealed record PopulatedResult(
+        IReadOnlyList<IReadOnlyList<string?>> RowHeaders,
+        IReadOnlyList<IReadOnlyList<string?>> ColumnHeaders,
+        TransformedResult Values);
 
     private sealed record TransformedResult(
         IReadOnlyList<PivotCell> Cells,

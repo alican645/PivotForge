@@ -21,6 +21,15 @@ public sealed class PivotRequest
     /// <summary>Gets the optional row ordering definition.</summary>
     public PivotSort? RowSort { get; init; }
 
+    /// <summary>Gets whether rows and columns holding no values at all are dropped.</summary>
+    /// <remarks>
+    /// The column axis is the product of its levels, so sparse data leaves whole columns that
+    /// never occurred; the row axis only observes what the data held, so an empty row is one whose
+    /// values all aggregated to nothing. Dropping happens in the engine rather than in the browser,
+    /// so paging, Excel export and drill-down all agree on which rows exist.
+    /// </remarks>
+    public bool HideEmptySummaryCells { get; init; }
+
     /// <summary>Gets the per-field ordering of individual row and column header levels.</summary>
     /// <remarks><see cref="RowSort"/> orders the row axis as a whole and takes precedence over these
     /// on that axis; the column axis is governed by these alone.</remarks>
