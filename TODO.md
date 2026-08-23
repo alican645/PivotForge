@@ -144,7 +144,7 @@ public sealed record PivotFilter(
 Değer seçici artık pakette (`PivotFilterPicker`): motora `PivotEngine.DistinctValues`,
 uç noktalara `POST /pivotforge/field-values`, tasarımcı çipine `▼` düğmesi eklendi.
 Include/exclude, satır başlığı hunisi, operatörler ve boş satır/sütun eleme tamam.
-Kalan açık: sütun ekseninde başlık filtresi ve tarih aralığı için hazır UI.
+Kalan açık: tarih aralığı için hazır UI.
 
 - [x] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim,
       "Tümünü seç"/"Temizle", kesme uyarısı — tasarımcıdaki Filtreler bölgesi artık işlevsel
@@ -152,10 +152,16 @@ Kalan açık: sütun ekseninde başlık filtresi ve tarih aralığı için hazı
       düğmeleri, `setFilterMode`, kaydedilen görünümde saklanır
 - [x] Excel benzeri başlık filtresi (`headerFilter`) — satır başlığındaki huni aynı
       `PivotFilterPicker`'ı aynı filtre girdisi üzerinde açar; filtre bölgeye değil
-      alana ait olduğu için alan yerinde kalır ve taşınırken filtresini de taşır.
-      Sütun ekseninde alan adı hücresi yok — orası ayrı bir iş (aşağıda)
-- [ ] Sütun ekseninde başlık filtresi — alan adı satırı gerektirir (colSpan/rowSpan,
-      sticky sütunlar, sanal boşluklar, Excel dışa aktarma modeli)
+      alana ait olduğu için alan yerinde kalır ve taşınırken filtresini de taşır
+- [x] Sütun ekseninde başlık filtresi — asıl engel filtreleme değildi, **isimlendirme**
+      idi: bir sütun başlığı `2024` yazar, ait olduğu alanı hiç yazmaz, dolayısıyla
+      huniyi asacak hücre yoktu. Köşe bloğunda her sütun seviyesine kendi ad hücresi
+      verildi; bu da satır alan adlarını kendi satırına indirdi (Excel'in yerleşimi).
+      Filtre yolunun kendisi zaten alan-anahtarı tabanlı olduğu için motor, seçici ve
+      kaydedilen görünüm tarafında tek satır değişmedi. Ad hücreleri yalnızca
+      filtrelenebilir bir sütun alanı varken çiziliyor — renderer'ın "geri çağrı yoksa
+      denetim yok" kuralı, artık hücre düzeyinde. Excel çıktısı çizilen tablodan
+      okunduğu için ad satırı oraya da gidiyor
 - [x] Filtre operatörleri — `Equals` (varsayılan), `Contains`, `StartsWith`,
       `EndsWith`, `Between`, `GreaterThan`, `LessThan`, `Blank`. Operatör ayrı bir
       kavram değil: `PivotFilter.Values` operatörün argüman listesi olarak ikinci

@@ -396,6 +396,7 @@
       }
 
       const rowFields = this.fields.filter(field => field.visible && field.area === "row");
+      const columnFields = this.fields.filter(field => field.visible && field.area === "column");
       const consumer = this.options.rendererOptions ?? {};
 
       // Emits the widget event, then hands the same payload to whatever the
@@ -418,6 +419,10 @@
         rowFieldLabels: rowFields.map(field => field.caption),
         rowFieldExpanded: rowFields.map(field => field.expanded),
         rowFieldSubtotals: rowFields.map(field => field.showTotals),
+        // The column axis needs its field names spelled out before it can carry a
+        // funnel: its headers show values, never the field they belong to.
+        columnFields: columnFields.map(field => field.key),
+        columnFieldLabels: columnFields.map(field => field.caption),
         onSortRequested: this.options.allowSorting
           ? request => { this.sortBy(request); }
           : null,

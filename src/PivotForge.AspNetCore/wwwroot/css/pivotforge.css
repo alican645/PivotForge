@@ -1679,6 +1679,21 @@ select {
   text-align: left !important;
 }
 
+/* The cell that names a column field, and the blank strip beside the row field
+   names. Both sit in the header block but neither is a coordinate, so they read
+   quieter than the value headers around them. */
+.pivot-table__column-field {
+  color: #475569 !important;
+  font-weight: 700;
+}
+
+.pivot-table__column-field-filler {
+  position: sticky;
+  top: var(--sticky-top, 0px);
+  z-index: 5;
+  background: #eef2f7 !important;
+}
+
 .pivot-table__row-header,
 .pivot-table__row-total-label,
 .pivot-table__subtotal-header {
