@@ -2,26 +2,28 @@
 const PivotForge = root.PivotForge ??= {};
 
 // Every string the renderer puts on screen. Declared here rather than inline so
-// a non-Turkish consumer can replace them without forking the file; a key left
-// out of `texts` keeps its default, exactly as the designer's `labels` work.
+// a consumer can replace them without forking the file; a key left out of
+// `texts` keeps its default, exactly as the designer's `labels` work. A whole
+// language at once comes from a locale pack (pivot-locale-*.js).
 // `{0}` is substituted positionally.
 const TEXTS = {
-  rowLabels: "Satır Etiketleri",
+  rowLabels: "Row Labels",
   rowsHeading: "Rows",
   rowHeading: "Row {0}",
-  noData: "Veri yok",
-  cellActions: "Hücre işlemleri",
-  openDetails: "Detayı aç",
-  copyCell: "Hücreyi kopyala",
-  copyRow: "Satırı kopyala",
-  sortByValue: "Bu değere göre sırala",
-  filterByValue: "Bu değere göre filtrele",
-  addConditionalFormat: "Koşullu biçimlendirme ekle",
-  resizeColumn: "Sütun genişliğini değiştir",
-  sortField: "{0} alanını sırala",
-  sortActive: "{0} sıralaması aktif",
-  filterField: "{0} alanını filtrele",
-  filterActive: "{0} filtresi etkin"
+  noData: "No data",
+  noValueFields: "There is nothing to render: no value field.",
+  cellActions: "Cell actions",
+  openDetails: "Show details",
+  copyCell: "Copy cell",
+  copyRow: "Copy row",
+  sortByValue: "Sort by this value",
+  filterByValue: "Filter by this value",
+  addConditionalFormat: "Add conditional formatting",
+  resizeColumn: "Resize column",
+  sortField: "Sort {0}",
+  sortActive: "{0} is sorted",
+  filterField: "Filter {0}",
+  filterActive: "{0} is filtered"
 };
 
 function formatText(template, ...values) {
@@ -39,10 +41,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.container = container;
     this.options = {
       emptyText: "-",
-      totalText: "Toplam",
+      totalText: "Total",
       // A grid needs a name, and a page with two pivots needs two different
       // ones — so it is declarable rather than fixed.
-      ariaLabel: "Pivot tablosu",
+      ariaLabel: "Pivot table",
       rowFields: [],
       rowFieldLabels: [],
       // Parallel to rowFields, following rowFieldLabels' shape. A false entry
@@ -109,7 +111,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.closeContextMenu();
 
     if (values.length === 0) {
-      this.container.replaceChildren(this.createEmptyState("Render edilecek value bulunamadı."));
+      this.container.replaceChildren(this.createEmptyState(settings.texts.noValueFields));
       return;
     }
 

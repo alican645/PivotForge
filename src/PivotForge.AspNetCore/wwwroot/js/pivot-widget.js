@@ -14,6 +14,14 @@
     pageSize: 40,
     sourceRowCount: 100000,
     rendererOptions: null,
+    // A locale pack name ("tr") or an object shaped like one. It supplies the
+    // language for every component that puts text on screen; anything the page
+    // declared explicitly still wins over it.
+    locale: null,
+    // The field designer's labels, and through `filterPicker` the value
+    // picker's. Declared here rather than on the designer because the widget is
+    // what builds it.
+    designerLabels: null,
     events: null,
     fetchImpl: null,
     renderImpl: null,
@@ -144,6 +152,9 @@
         this.rowSort = restored.rowSort;
       }
 
+      // Before the renderer, which is the first thing to put text on screen.
+      this.locale = this.resolveLocale();
+
       this.subscribeDeclaredEvents();
 
       this.renderer = this.options.renderImpl ? null : this.createRenderer();
@@ -165,7 +176,8 @@
         this.layoutState = this.createLayoutState(restored);
         this.designer = new PivotForge.PivotFieldDesigner(this.options.fieldDesigner, {
           state: this.layoutState,
-          widget: this
+          widget: this,
+          labels: this.designerLabels()
         });
         // Caption edits and filter-value picks never travel through a widget
         // method, so subscribing here is what makes them persist at all.
@@ -325,6 +337,52 @@
       }
     }
 
+    // A name is looked up among the loaded locale packs; an object is taken as
+    // one. A name nothing answers to leaves every component in English rather
+    // than failing the grid over a presentation file that did not load -- the
+    // warning is for the developer, the English is for the reader.
+    resolveLocale() {
+      const locale = this.options.locale;
+      // English is the built-in language rather than a pack, so naming it loads
+      // nothing and warns about nothing -- which is what lets the tag helper
+      // derive a locale from the request without noise on English pages.
+      if (!locale || locale === "en") {
+        return {};
+      }
+
+      if (typeof locale === "object") {
+        return locale;
+      }
+
+      const found = PivotForge.locales?.[locale];
+      if (!found) {
+        root.console?.warn(
+          `PivotForge: locale "${locale}" is not loaded. Reference pivot-locale-${locale}.js before pivot-widget.js.`);
+        return {};
+      }
+
+      return found;
+    }
+
+    // The designer's labels, and nested under them the value picker's -- the
+    // designer is what opens it. Declared labels win over the locale key by
+    // key, so translating one term does not cost the rest of the language.
+    designerLabels() {
+      const declared = this.options.designerLabels ?? {};
+      return {
+        ...this.locale.designer,
+        ...declared,
+        filterPicker: this.filterPickerLabels()
+      };
+    }
+
+    filterPickerLabels() {
+      return {
+        ...this.locale.filterPicker,
+        ...(this.options.designerLabels?.filterPicker ?? {})
+      };
+    }
+
     createRenderer() {
       const Renderer = PivotForge.PivotTableRenderer;
       if (!Renderer) {
@@ -345,7 +403,13 @@
         consumer[`on${eventName[0].toUpperCase()}${eventName.slice(1)}`]?.(payload);
       };
 
+      // The locale leads: it carries presentation strings that live outside
+      // `texts` too (totalText, ariaLabel), and a rendererOption the page
+      // declared still overrides it below.
+      const localeTable = this.locale.table ?? {};
+
       return new Renderer(this.container, {
+        ...localeTable,
         rowFields: rowFields.map(field => field.dataField),
         rowFieldLabels: rowFields.map(field => field.caption),
         rowFieldExpanded: rowFields.map(field => field.expanded),
@@ -380,6 +444,9 @@
 
           this.drillDownHandler()?.(selection);
         },
+        // Merged rather than replaced: a page overriding one string keeps the
+        // locale's other seventeen.
+        texts: { ...localeTable.texts, ...(consumer.texts ?? {}) },
         onSelectionChanged: selection => bridge("selectionChanged", selection),
         onCellFilterRequested: selection => bridge("cellFilterRequested", selection),
         onViewStateChanged: state => bridge("viewStateChanged", state),
@@ -411,6 +478,7 @@
     openDrillDown(selection) {
       this.drillDownModal ??= new PivotForge.PivotDrillDownModal({
         widget: this,
+        labels: this.locale.drillDown,
         // Spread first, so a page that pins the modal's culture on purpose wins
         // over the renderer's — but by default the two cannot drift apart.
         culture: this.options.rendererOptions?.culture ?? null,
@@ -465,7 +533,10 @@
         return this.designer.openFilterPicker(field);
       }
 
-      this.headerFilterPicker ??= new PivotForge.PivotFilterPicker({ widget: this });
+      this.headerFilterPicker ??= new PivotForge.PivotFilterPicker({
+        widget: this,
+        labels: this.filterPickerLabels()
+      });
       const current = this.filters.find(filter => filter.field === field) ?? null;
 
       return this.headerFilterPicker.open({

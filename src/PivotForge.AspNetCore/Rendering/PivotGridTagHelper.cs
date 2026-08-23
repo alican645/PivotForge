@@ -130,6 +130,16 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("aria-label")]
     public string? AriaLabel { get; set; }
 
+    /// <summary>Gets or sets the locale pack supplying the on-screen text.</summary>
+    /// <remarks>
+    /// Left unset it follows the request's UI culture, so a Turkish request gets
+    /// <c>tr</c> without the page saying so. Reference <c>js/pivot-locale-&lt;name&gt;.js</c>
+    /// for the pack to exist; without it the text stays English. Set <c>en</c> to pin the
+    /// built-in English defaults regardless of the request.
+    /// </remarks>
+    [HtmlAttributeName("locale")]
+    public string? Locale { get; set; }
+
     /// <summary>Gets or sets the culture used to format numbers in the browser.</summary>
     /// <remarks>
     /// Left unset, numbers are formatted in the reader's own locale. Server-side collation
@@ -306,6 +316,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (AriaLabel is { } ariaLabel)
         {
             builder.AriaLabel(ariaLabel);
+        }
+
+        if (Locale is { } locale)
+        {
+            builder.Locale(locale);
         }
 
         if (Culture is { } culture)

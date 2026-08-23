@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using PivotForge.AspNetCore.Rendering;
@@ -5,6 +6,16 @@ using PivotForge.Core;
 using Xunit;
 
 namespace PivotForge.AspNetCore.Tests;
+
+/// <summary>Pins the UI culture for one test and restores it afterwards.</summary>
+internal sealed class UiCulture : IDisposable
+{
+    private readonly CultureInfo _previous = CultureInfo.CurrentUICulture;
+
+    public UiCulture(string name) => CultureInfo.CurrentUICulture = new CultureInfo(name);
+
+    public void Dispose() => CultureInfo.CurrentUICulture = _previous;
+}
 
 public class PivotGridBuilderTests
 {
@@ -33,6 +44,30 @@ public class PivotGridBuilderTests
                 fields.Add().Caption("Tutar").DataField("tutar")
                     .Aggregation(PivotAggregation.Sum).Area(PivotArea.Data);
             });
+
+    [Fact]
+    public void DerivesTheLocaleFromTheRequestsUiCulture()
+    {
+        // What makes a localized app localized without every grid saying so: the
+        // request's UI culture already names the reader's language.
+        using var _ = new UiCulture("tr-TR");
+
+        Assert.Equal("tr", ConfigOf(SalesGrid()).GetProperty("locale").GetString());
+    }
+
+    [Fact]
+    public void ADeclaredLocaleWinsOverTheRequestsUiCulture()
+    {
+        using var _ = new UiCulture("tr-TR");
+
+        Assert.Equal("en", ConfigOf(SalesGrid().Locale("en")).GetProperty("locale").GetString());
+    }
+
+    [Fact]
+    public void RefusesABlankLocale()
+    {
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().Locale(" "));
+    }
 
     [Fact]
     public void RendersAContainerCarryingTheSuppliedId()

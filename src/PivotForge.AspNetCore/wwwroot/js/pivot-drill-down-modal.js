@@ -2,23 +2,23 @@
   const PivotForge = root.PivotForge ??= {};
 
   const DEFAULT_LABELS = {
-    title: "Kaynak Kayıtlar",
-    close: "Kapat",
-    search: "Kayıtlarda ara",
+    title: "Source Records",
+    close: "Close",
+    search: "Search records",
     csv: "CSV",
-    all: "Tümü",
-    empty: "(Boş)",
-    loading: "Kayıtlar yükleniyor...",
-    noRecords: "Bu hücre için kaynak kayıt bulunamadı",
-    noMatches: "Filtrelerle eşleşen kayıt yok",
-    failed: "Kaynak kayıtlar alınamadı",
-    allRows: "Tüm satırlar",
-    allColumns: "Tüm sütunlar",
+    all: "All",
+    empty: "(Blank)",
+    loading: "Loading records...",
+    noRecords: "This cell has no source records",
+    noMatches: "No record matches the filters",
+    failed: "The source records could not be loaded",
+    allRows: "All rows",
+    allColumns: "All columns",
     // {0} is replaced with the server's record limit.
-    truncated: "İlk {0} kayıt gösteriliyor.",
+    truncated: "Showing the first {0} records.",
     // {0} visible, {1} total.
-    summary: "{0} / {1} kayıt",
-    columnFilter: "{0} filtresi"
+    summary: "{0} of {1} records",
+    columnFilter: "{0} filter"
   };
 
   const NUMERIC_TYPES = ["number", "currency", "percent"];

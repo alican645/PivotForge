@@ -295,8 +295,21 @@ uyarlanabilir mobil düzen.
       (`Veri yok`, `Satır Etiketleri`, bağlam menüsü, sütun genişletme ve
       sıralama ipuçları) `rendererOptions.texts` üzerinden değiştirilebiliyor;
       bildirilmeyen anahtar gömülü Türkçe varsayılanını koruyor
-- [ ] `.NET` tarafında `IStringLocalizer` entegrasyonu — metinler JavaScript'te
-      elden verilmek yerine kaynak dosyalarından gelsin
+- [x] **Varsayılan dil İngilizce** — dört bileşenin (tablo, tasarımcı, filtre
+      seçici, detay modali) ekrana koyduğu her metin artık İngilizce. Türkçe bir
+      **locale paketine** taşındı: `js/pivot-locale-tr.js` sayfaya eklendiğinde
+      metinler geri geliyor. Paket adı `CultureInfo.CurrentUICulture`'dan
+      türetiliyor, yani request localization yapılandırılmış bir uygulama hiçbir
+      grid bunu bildirmeden kendi dilinde çalışıyor; `locale` niteliği sabitliyor.
+      Paketi bulunmayan bir ad grid'i düşürmüyor — konsola uyarı yazıp İngilizce
+      kalıyor, çünkü eksik bir çeviri dosyası sayfayı kaybetmeye değmez
+- [x] `designerLabels` — tasarımcının etiketlerinin ilk bildirimsel yolu
+      (öncesinde hiç yoktu), `designerLabels.filterPicker` ile değer seçiciye de
+      ulaşıyor
+- [ ] `.NET` tarafında `IStringLocalizer` entegrasyonu — locale paketi elden
+      yazılmak yerine kaynak dosyalarından üretilsin
+- [ ] İngilizce dışında ikinci bir paket (en yakın aday: `pivot-locale-de.js`),
+      paket şemasının gerçekten dile bağımsız olduğunu kanıtlamak için
 
 ---
 

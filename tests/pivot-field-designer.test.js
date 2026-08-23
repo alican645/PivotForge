@@ -1811,7 +1811,7 @@ test("an excluding filter chip counts what it drops, not what it accepts", async
   // "(2)" under an excluding filter would read as two values accepted, which is
   // the opposite of what it does.
   const count = findByClassName(filterChip(host), "pivot-chip__filter-count");
-  assert.equal(count.textContent, "(2 hariç)");
+  assert.equal(count.textContent, "(2 excluded)");
   assert.equal(count.classList.contains("is-excluding"), true);
 });
 
@@ -1826,7 +1826,7 @@ test("a chip reads its own filter entry, not the first one in the zone", async (
   designer.render();
 
   const count = findByClassName(filterChip(host), "pivot-chip__filter-count");
-  assert.equal(count.textContent, "(2 hariç)");
+  assert.equal(count.textContent, "(2 excluded)");
 
   await designer.openFilterPicker("Quarter");
   assert.deepEqual(pickerByAction("filter-value").map(box => box.checked), [false, true, false]);

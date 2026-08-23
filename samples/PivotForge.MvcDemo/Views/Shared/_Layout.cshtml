@@ -6,6 +6,9 @@
     <title>@ViewData["Title"] - PivotForge</title>
     <link rel="stylesheet" href="~/_content/PivotForge.AspNetCore/css/pivotforge.css" asp-append-version="true">
     @* Loaded in the head so the markup helpers rendered by RenderBody can call PivotForge.create inline. *@
+    @* The demo is a Turkish page: without this pack every string would be the package's
+       English default. It loads before the widget, which resolves the locale at creation. *@
+    <script src="~/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js" asp-append-version="true"></script>
     <script src="~/_content/PivotForge.AspNetCore/js/pivot-table.js" asp-append-version="true"></script>
     <script src="~/_content/PivotForge.AspNetCore/js/pivot-request-builder.js" asp-append-version="true"></script>
     <script src="~/_content/PivotForge.AspNetCore/js/pivot-widget.js" asp-append-version="true"></script>

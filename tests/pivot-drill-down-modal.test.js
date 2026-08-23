@@ -247,7 +247,7 @@ test("an empty path is titled as covering everything", async () => {
 
   await modal.open({ ...selection, rowHeader: [], columnHeader: [] });
 
-  assert.equal(byTag(host, "h2")[0].textContent, "Tüm satırlar · Tüm sütunlar · Tutar");
+  assert.equal(byTag(host, "h2")[0].textContent, "All rows · All columns · Tutar");
 });
 
 test("the search box filters the rendered rows", async () => {
@@ -282,12 +282,12 @@ test("the summary counts visible records against the server's total", async () =
   await modal.open(selection);
 
   const summary = byClass(host, "pivot-drill-down-heading")[0].children[1];
-  assert.equal(summary.textContent, "3 / 3 kayıt");
+  assert.equal(summary.textContent, "3 of 3 records");
 
   const search = byTag(host, "input")[0];
   search.value = "ege";
   search.dispatch("input");
-  assert.equal(summary.textContent, "1 / 3 kayıt");
+  assert.equal(summary.textContent, "1 of 3 records");
 });
 
 test("a truncated response shows the server's limit", async () => {
@@ -300,7 +300,7 @@ test("a truncated response shows the server's limit", async () => {
 
   const notice = byClass(host, "pivot-drill-down-notice")[0];
   assert.equal(notice.hidden, false);
-  assert.equal(notice.textContent, "İlk 100 kayıt gösteriliyor.");
+  assert.equal(notice.textContent, "Showing the first 100 records.");
 });
 
 test("an untruncated response hides the notice", async () => {
@@ -320,7 +320,7 @@ test("a cell with no source records says so instead of showing an empty table", 
   await modal.open(selection);
 
   const state = byClass(host, "pivot-drill-down-state")[0];
-  assert.equal(state.textContent, "Bu hücre için kaynak kayıt bulunamadı");
+  assert.equal(state.textContent, "This cell has no source records");
   assert.equal(state.hidden, false);
 });
 
@@ -332,7 +332,7 @@ test("filters that match nothing are reported differently from an empty cell", a
   search.value = "yokböylebirşey";
   search.dispatch("input");
 
-  assert.equal(byClass(host, "pivot-drill-down-state")[0].textContent, "Filtrelerle eşleşen kayıt yok");
+  assert.equal(byClass(host, "pivot-drill-down-state")[0].textContent, "No record matches the filters");
 });
 
 test("a failed drill-down surfaces the error", async () => {
@@ -354,7 +354,7 @@ test("an aborted drill-down is not reported as a failure", async () => {
 
   await modal.open(selection);
 
-  assert.equal(byClass(host, "pivot-drill-down-state")[0].textContent, "Kayıtlar yükleniyor...");
+  assert.equal(byClass(host, "pivot-drill-down-state")[0].textContent, "Loading records...");
 });
 
 test("a stale response never overwrites the records of a newer open", async () => {
