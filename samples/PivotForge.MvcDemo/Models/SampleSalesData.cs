@@ -52,7 +52,8 @@ public static class SampleSalesData
             var discount = (index % 6) * 175m;
 
             records.Add(new SalesRecord(
-                region, category, person, year, quarter, orderDate, amount, quantity, discount));
+                region, category, person, year, quarter, orderDate, amount, quantity, discount,
+                $"musteri{index:D4}@ornek.test"));
         }
 
         return records;

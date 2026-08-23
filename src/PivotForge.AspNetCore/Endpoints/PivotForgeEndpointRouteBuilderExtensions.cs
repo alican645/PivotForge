@@ -42,8 +42,14 @@ public static class PivotForgeEndpointRouteBuilderExtensions
     private static async Task<IResult> HandlePivotAsync(
         PivotForgeRequest request,
         IPivotForgeDataExecutor executor,
+        IOptions<PivotForgeOptions> optionsAccessor,
         CancellationToken cancellationToken)
     {
+        if (!optionsAccessor.Value.Allows(request.ReadFields()))
+        {
+            return FieldNotAllowed();
+        }
+
         try
         {
             var result = await executor.ExecuteAsync(request.ToPivotRequest(), null, cancellationToken);
@@ -68,6 +74,12 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         CancellationToken cancellationToken)
     {
         var options = optionsAccessor.Value;
+
+        if (!options.Allows(request.ReadFields()))
+        {
+            return FieldNotAllowed();
+        }
+
         var sourceRowCount = Math.Clamp(
             request.SourceRowCount,
             options.MinimumLargeDataSourceRowCount,
@@ -143,6 +155,12 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         CancellationToken cancellationToken)
     {
         var options = optionsAccessor.Value;
+
+        if (!options.Allows(request.ReadFields()))
+        {
+            return FieldNotAllowed();
+        }
+
         var sourceRowCount = Math.Clamp(request.SourceRowCount, 1, options.MaximumSourceRowCount);
 
         try
@@ -152,6 +170,7 @@ public static class PivotForgeEndpointRouteBuilderExtensions
                 request.RowPath,
                 request.ColumnPath,
                 sourceRowCount,
+                options.AllowedFields,
                 cancellationToken);
             var visibleRecords = records.Take(options.DrillDownRecordLimit).ToArray();
 
@@ -179,6 +198,12 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         CancellationToken cancellationToken)
     {
         var options = optionsAccessor.Value;
+
+        if (!options.Allows([request.Field]))
+        {
+            return FieldNotAllowed();
+        }
+
         var sourceRowCount = Math.Clamp(request.SourceRowCount, 1, options.MaximumSourceRowCount);
 
         try
@@ -234,6 +259,11 @@ public static class PivotForgeEndpointRouteBuilderExtensions
             return BadRequest("Excel export request is not valid.");
         }
     }
+
+    // Named rather than described: telling a caller which field it was would turn the
+    // endpoint into a way of asking what the record type holds.
+    private static IResult FieldNotAllowed() =>
+        BadRequest("The request names a field that is not available.");
 
     private static IResult BadRequest(string message) =>
         Results.BadRequest(new PivotForgeErrorResponse(message));

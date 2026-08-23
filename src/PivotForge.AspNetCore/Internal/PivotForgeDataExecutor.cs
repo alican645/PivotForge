@@ -35,6 +35,7 @@ internal sealed class PivotForgeDataExecutor<TRecord>(IPivotForgeDataProvider<TR
         IReadOnlyList<string?> rowPath,
         IReadOnlyList<string?> columnPath,
         int? sourceRowCount,
+        ICollection<string> projection,
         CancellationToken cancellationToken)
     {
         var records = await GetRecordsAsync(sourceRowCount, cancellationToken);
@@ -43,7 +44,12 @@ internal sealed class PivotForgeDataExecutor<TRecord>(IPivotForgeDataProvider<TR
             () => new PivotEngine().DrillDown(records, request, rowPath, columnPath),
             cancellationToken);
 
-        return matches.Select(record => (object?)record).ToArray();
+        // The detail list is the one response that hands back whole source records, so an
+        // allow-list has to reach it too: a field that cannot be a header should not arrive
+        // as a column of the modal either.
+        return projection.Count == 0
+            ? matches.Select(record => (object?)record).ToArray()
+            : PivotEngine.Project(matches, projection).Select(record => (object?)record).ToArray();
     }
 
     private async ValueTask<IReadOnlyList<TRecord>> GetRecordsAsync(

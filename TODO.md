@@ -336,6 +336,29 @@ uyarlanabilir mobil düzen.
 
 ---
 
+## Bölüm 10 — Paket olgunluğu
+
+DevExpress denkliğinden gelmeyen, "yayınlanabilir paket" tarafındaki açıklar.
+
+- [x] **Uç noktalarda alan beyaz listesi** — `PivotForgeOptions.AllowedFields`.
+      Öncesinde uç noktalar tarayıcının bildirdiği her alan adını okuyordu:
+      kaynak nesnede rapora ait olmayan bir özellik varsa satır başlığı olarak
+      ekrana gelebiliyordu, üstelik detay listesi zaten **tüm kaydı** geri
+      veriyordu. Liste iki işi birden yapıyor: bildirilmeyen alanı adlayan istek
+      reddediliyor (hangi alan olduğunu söylemeden — söylemek, uç noktayı
+      "kayıtta şu alan var mı" sorusunun cevabına çevirirdi) ve drill-down
+      yalnızca listedeki alanları döndürüyor. Boş liste eski davranış, yani
+      yükseltmede kimsenin sayfası bozulmuyor
+- [ ] `Directory.Build.props` — sürüm ve paket meta verisi iki csproj'da kopya
+- [ ] `CHANGELOG.md`
+- [ ] `net8.0;net10.0` çoklu hedefleme
+- [ ] `IQueryable` / EF Core sağlayıcısı — bugün her şey belleğe çekiliyor
+- [ ] Blazor bileşeni
+- [ ] Benchmark'lar (BenchmarkDotNet)
+- [ ] Yayınlanmış demo / doküman sitesi
+
+---
+
 ## Önerilen sıra
 
 Sizin önceliğiniz "az kodla çok iş" olduğu için sıralama işlevsel büyüklüğe göre değil,

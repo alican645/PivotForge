@@ -14,7 +14,15 @@ builder.Services.AddControllersWithViews()
     });
 builder.Services.AddPivotForge<SalesRecord>(
     (request, _) => ValueTask.FromResult<IReadOnlyList<SalesRecord>>(
-        SampleSalesData.Create(request.SourceRowCount ?? 100)));
+        SampleSalesData.Create(request.SourceRowCount ?? 100)),
+    // What the endpoints may read. The source record also carries CustomerEmail,
+    // which no report needs: leaving it off means the browser can neither pivot on
+    // it nor receive it in a drill-down, whatever it asks for.
+    options => options.AllowedFields.UnionWith(
+    [
+        "Region", "Category", "SalesPerson", "Year", "Quarter",
+        "OrderDate", "Amount", "Quantity", "Discount"
+    ]));
 
 var app = builder.Build();
 

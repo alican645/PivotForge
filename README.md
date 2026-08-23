@@ -69,7 +69,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddPivotForge<Sale>(
     (request, cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<Sale>>(
-            LoadSales(request.SourceRowCount)));
+            LoadSales(request.SourceRowCount)),
+    // Optional, and worth declaring once the record type carries more than the
+    // report needs: the endpoints then refuse any other field and drill-down
+    // returns only these. Left empty, every field on the record is readable.
+    options => options.AllowedFields.UnionWith(
+        ["Region", "Category", "OrderDate", "Amount"]));
 
 var app = builder.Build();
 
