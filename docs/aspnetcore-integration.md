@@ -672,11 +672,38 @@ gets picked out of a long list.
 
 ### Header filter
 
-Every row field's header cell in the table itself carries the same `▼`. It opens the same `PivotFilterPicker` over the same filter entry the Filters zone would — the funnel and the chip are two ways into one filter, not two filters — and the field stays where it is: filtering `Bölge` from its header leaves it a row field and adds no chip to the Filters zone. A funnel whose field is currently restricted is marked (`is-active`).
+Every row and column field's header cell in the table itself carries the same `▼`. It opens the same `PivotFilterPicker` over the same filter entry the Filters zone would — the funnel and the chip are two ways into one filter, not two filters — and the field stays where it is: filtering `Bölge` from its header leaves it a row field and adds no chip to the Filters zone. A funnel whose field is currently restricted is marked (`is-active`).
 
 The control is rendered only where there is something behind it: the renderer draws it when `onFilterRequested` is a function, and the widget supplies that callback only when `allowFiltering` is on and `pivot-filter-picker.js` was loaded. A host that renders through its own `PivotTableRenderer` options gets the same bargain — no callback, no funnel.
 
-Two limits worth knowing. The **column axis has no field-name cell** — column headers render values — so column fields are still filtered from their designer chip. And in `compact` layout mode the row fields share one header cell, so only the first of them is reachable from the table.
+#### Where a column field's funnel lives
+
+The row axis had somewhere obvious to put a funnel: its corner cell already names
+the field. The column axis did not — a column header reads `2024`, never `Yıl`, and
+a funnel on a value cell would read as filtering that one column.
+
+So the column fields get named cells of their own, one per column level, in the
+corner block beside the values they head. That pushes the row field names onto a
+header row of their own, directly above the body — the layout a spreadsheet uses,
+and the reason the header block gained a row:
+
+```
+Yıl ▼        | 2024 | 2025 | Genel Toplam
+Bölge ▼ | Kategori ▼ |
+```
+
+Those cells are drawn only when there is a column field to name **and** a filter
+callback to give it — the same bargain the funnel itself makes. A grid with no
+column fields, or with filtering off, keeps exactly the header it always had. The
+export model is read off the rendered table, so the field names travel into the
+`.xlsx` as header rows too.
+
+Nothing else moved: a filter belongs to a field rather than to an area, so the
+picker, the engine, the saved view and the request are unchanged — the column
+axis simply gained a way in.
+
+One limit remains: in `compact` layout mode the row fields share one header cell,
+so only the first of them is reachable from the table.
 
 Because a filter belongs to the field, `PivotLayoutState.move` carries it along: dragging a header-filtered row field into the Filters zone shows the selection it already had, and dragging it back out keeps it. Only `remove` drops a filter.
 

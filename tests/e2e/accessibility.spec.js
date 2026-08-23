@@ -70,7 +70,9 @@ test("a selected cell announces itself as selected", async ({ page }) => {
 });
 
 test("a sortable header states the sort it carries", async ({ page }) => {
-  const header = page.locator(".pivot-table__table th.is-sortable").first();
+  // A row field's own header, named rather than taken by position: the header
+  // block also holds the grand total, which the page declares a sort on.
+  const header = page.locator(".pivot-table__corner.is-sortable").first();
   await expect(header).toHaveAttribute("aria-sort", "none");
 
   await header.locator(".pivot-table__sort-button").click();

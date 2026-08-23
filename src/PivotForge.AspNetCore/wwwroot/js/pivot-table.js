@@ -47,6 +47,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       ariaLabel: "Pivot table",
       rowFields: [],
       rowFieldLabels: [],
+      columnFields: [],
+      columnFieldLabels: [],
       // Parallel to rowFields, following rowFieldLabels' shape. A false entry
       // means that row field starts collapsed, or produces no total.
       rowFieldExpanded: null,
@@ -409,32 +411,60 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const thead = document.createElement("thead");
     thead.setAttribute("role", "rowgroup");
     const valueSpan = values.length;
+    // A column header names a value -- "2024" -- never the field behind it, so
+    // there is nowhere to hang a funnel the way the row axis hangs one on its
+    // corner. The field names get a cell of their own in the corner block, one
+    // per column level, which pushes the row field names down to a row of their
+    // own. Drawn only when both halves are there: nothing to filter, or no way
+    // to filter it, and the table keeps the shape it always had.
+    const columnFields = settings.columnFields ?? [];
+    const namesColumnFields =
+      typeof settings.onFilterRequested === "function" && columnFields.length > 0;
+    const rowFieldRow = namesColumnFields ? this.createRow() : null;
+
+    const appendRowFieldHeaders = row => {
+      for (let rowLevel = 0; rowLevel < rowDepth; rowLevel++) {
+        const label = settings.rowFieldLabels[rowLevel] ?? (rowDepth === 1
+          ? settings.texts.rowsHeading
+          : formatText(settings.texts.rowHeading, rowLevel + 1));
+        const displayLabel = settings.layoutMode === "compact"
+          ? settings.texts.rowLabels
+          : label;
+        const corner = this.createCell("th", displayLabel, "pivot-table__corner");
+        corner.rowSpan = namesColumnFields ? 1 : columnDepth + measureDepth;
+        corner.dataset.stickyColumn = String(rowLevel);
+        corner.dataset.columnIndex = String(rowLevel);
+        const rowField = settings.rowFields[rowLevel] ?? null;
+        this.decorateSortableHeader(corner, displayLabel, {
+          mode: "RowLabel",
+          field: rowField
+        }, settings);
+        // After the sort button, which replaces the cell's children: the
+        // funnel has to survive that, and the two controls sit side by side.
+        this.decorateFilterableHeader(corner, displayLabel, rowField, settings);
+        row.appendChild(corner);
+      }
+    };
+
+    // The corner cell of a column level's own row: it names the field whose
+    // values that row shows, and carries that field's funnel.
+    const appendColumnFieldHeader = (row, level) => {
+      const field = columnFields[level] ?? null;
+      const label = settings.columnFieldLabels?.[level] ?? field ?? "";
+      const cell = this.createCell("th", label, "pivot-table__corner pivot-table__column-field");
+      cell.colSpan = rowDepth;
+      cell.dataset.stickyColumn = "0";
+      this.decorateFilterableHeader(cell, label, field, settings);
+      row.appendChild(cell);
+    };
 
     for (let level = 0; level < columnDepth; level++) {
       const row = this.createRow();
 
-      if (level === 0) {
-        for (let rowLevel = 0; rowLevel < rowDepth; rowLevel++) {
-          const label = settings.rowFieldLabels[rowLevel] ?? (rowDepth === 1
-            ? settings.texts.rowsHeading
-            : formatText(settings.texts.rowHeading, rowLevel + 1));
-          const displayLabel = settings.layoutMode === "compact"
-            ? settings.texts.rowLabels
-            : label;
-          const corner = this.createCell("th", displayLabel, "pivot-table__corner");
-          corner.rowSpan = columnDepth + measureDepth;
-          corner.dataset.stickyColumn = String(rowLevel);
-          corner.dataset.columnIndex = String(rowLevel);
-          const rowField = settings.rowFields[rowLevel] ?? null;
-          this.decorateSortableHeader(corner, displayLabel, {
-            mode: "RowLabel",
-            field: rowField
-          }, settings);
-          // After the sort button, which replaces the cell's children: the
-          // funnel has to survive that, and the two controls sit side by side.
-          this.decorateFilterableHeader(corner, displayLabel, rowField, settings);
-          row.appendChild(corner);
-        }
+      if (namesColumnFields) {
+        appendColumnFieldHeader(row, level);
+      } else if (level === 0) {
+        appendRowFieldHeaders(row);
       }
 
       const groups = this.createColumnGroups(columnHeaders, level);
@@ -474,6 +504,15 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     if (measureDepth > 0) {
       const measureRow = this.createRow();
 
+      if (namesColumnFields) {
+        // The corner block keeps its width on every head row, or the value
+        // headers below would slide left out from under their columns.
+        const filler = this.createCell("th", "", "pivot-table__corner");
+        filler.colSpan = rowDepth;
+        filler.dataset.stickyColumn = "0";
+        measureRow.appendChild(filler);
+      }
+
       for (let columnIndex = 0; columnIndex < Math.max(1, columnHeaders.length); columnIndex++) {
         values.forEach((value, valueIndex) => {
           const cell = this.createCell("th", value.label, "pivot-table__value-header");
@@ -500,6 +539,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       });
 
       thead.appendChild(measureRow);
+    }
+
+    if (rowFieldRow) {
+      appendRowFieldHeaders(rowFieldRow);
+      // One blank strip under the column values rather than a cell per column:
+      // the row names an axis, not a coordinate, so there is nothing to line up
+      // with underneath.
+      const filler = this.createCell("th", "", "pivot-table__column-field-filler");
+      filler.colSpan = Math.max(1, columnHeaders.length) * valueSpan + valueSpan;
+      rowFieldRow.appendChild(filler);
+      thead.appendChild(rowFieldRow);
     }
 
     return thead;
