@@ -72,6 +72,9 @@ globalThis.document = {
   }
 };
 
+// The picker reads the operator list from the request builder, which a page
+// loads before it in the documented order.
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-request-builder.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-filter-picker.js");
 
 const PivotForge = globalThis.PivotForge;
@@ -519,4 +522,136 @@ test("an excluding filter keeps listed values the truncated response omitted", a
   byAction(host, "filter-apply")[0].dispatch("click");
 
   assert.deepEqual(applied, [{ values: ["Karadeniz", "Marmara"], mode: "Exclude" }]);
+});
+
+// --- conditions -------------------------------------------------------------
+
+// The picker's condition half: an operator and its arguments, which replace the
+// value list rather than narrowing it.
+const operatorOf = host => byAction(host, "filter-operator")[0];
+const argumentsOf = host => byAction(host, "filter-argument");
+
+async function openCondition(host, picker, request = {}) {
+  const applied = [];
+  await picker.open({
+    field: "Amount",
+    caption: "Tutar",
+    onApply: (values, mode, operator) => applied.push({ values, mode, operator }),
+    ...request
+  });
+  return applied;
+}
+
+function type(input, text) {
+  input.value = text;
+  input.dispatch("input");
+}
+
+test("the picker opens on the value list unless told otherwise", async () => {
+  const { picker, host } = build();
+
+  await open(host, picker);
+
+  assert.equal(operatorOf(host).value, "Equals");
+  assert.equal(argumentsOf(host).every(input => input.hidden), true);
+});
+
+test("choosing a condition replaces the value list with its arguments", async () => {
+  const { picker, host } = build();
+  await open(host, picker);
+
+  picker.setOperator("Contains");
+
+  const [first, second] = argumentsOf(host);
+  assert.equal(first.hidden, false);
+  // Contains reads one argument, so the second box is not part of the question.
+  assert.equal(second.hidden, true);
+  assert.equal(byClass(host, "pivot-filter-picker__toolbar")[0].hidden, true);
+});
+
+test("between asks for both ends", async () => {
+  const { picker, host } = build();
+  await open(host, picker);
+
+  picker.setOperator("Between");
+
+  assert.deepEqual(argumentsOf(host).map(input => input.hidden), [false, false]);
+});
+
+test("a condition applies its arguments rather than the value list", async () => {
+  const { picker, host } = build();
+  const applied = await openCondition(host, picker);
+
+  picker.setOperator("Contains");
+  type(argumentsOf(host)[0], " çim ");
+  byAction(host, "filter-apply")[0].dispatch("click");
+
+  // Trimmed, because a trailing space in a text box is a typo rather than part
+  // of the condition.
+  assert.deepEqual(applied, [{ values: ["çim"], mode: "Include", operator: "Contains" }]);
+});
+
+test("a half-typed range cannot be applied", async () => {
+  const { picker, host } = build();
+  await openCondition(host, picker);
+
+  picker.setOperator("Between");
+  type(argumentsOf(host)[0], "100");
+
+  assert.equal(byAction(host, "filter-apply")[0].disabled, true);
+
+  type(argumentsOf(host)[1], "500");
+
+  assert.equal(byAction(host, "filter-apply")[0].disabled, false);
+});
+
+test("blank needs no argument at all", async () => {
+  const { picker, host } = build();
+  const applied = await openCondition(host, picker);
+
+  picker.setOperator("Blank");
+
+  assert.deepEqual(argumentsOf(host).map(input => input.hidden), [true, true]);
+  assert.equal(byAction(host, "filter-apply")[0].disabled, false);
+
+  byAction(host, "filter-apply")[0].dispatch("click");
+
+  assert.deepEqual(applied, [{ values: [], mode: "Include", operator: "Blank" }]);
+});
+
+test("a picker opened on a condition shows the arguments already in force", async () => {
+  const { picker, host } = build();
+
+  await openCondition(host, picker, { operator: "Between", selected: ["100", "500"] });
+
+  assert.equal(operatorOf(host).value, "Between");
+  assert.deepEqual(argumentsOf(host).map(input => input.value), ["100", "500"]);
+});
+
+test("opening on a condition costs no value request", async () => {
+  // The list answers a question the condition is not asking, and the values it
+  // would list need not even exist in the source yet.
+  const { picker, host, widget } = build();
+
+  await openCondition(host, picker, { operator: "Contains", selected: ["çim"] });
+
+  assert.deepEqual(widget.calls, []);
+});
+
+test("switching back to the value list fetches it", async () => {
+  const { picker, host, widget } = build();
+  await openCondition(host, picker, { operator: "Contains", selected: ["çim"] });
+
+  await picker.setOperator("Equals");
+  await Promise.resolve();
+
+  assert.deepEqual(widget.calls, ["Amount"]);
+});
+
+test("an unknown operator opens as the value list rather than as a broken control", async () => {
+  const { picker, host } = build();
+
+  await open(host, picker, { operator: "Sometimes" });
+
+  assert.equal(operatorOf(host).value, "Equals");
 });

@@ -273,7 +273,7 @@ Three child elements declare the state a grid starts in. Each has a
 
 | Element | Builder | Notes |
 | --- | --- | --- |
-| `pivot-filter` | `Filter(string, params string[])`, `Filter(string, PivotFilterMode, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. `type="Exclude"` turns the list into the values to drop; the default `Include` keeps only the listed ones. |
+| `pivot-filter` | `Filter(string, params string[])`, `Filter(string, PivotFilterMode, params string[])`, `Filter(string, PivotFilterMode, PivotFilterOperator, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. `type="Exclude"` turns the list into the values to drop; the default `Include` keeps only the listed ones. `operator` turns the list into a condition's arguments — see [Filter operators](#filter-operators). |
 | `pivot-sort` | `RowSort(PivotSort)` | At most one per grid — rows order one way, so a second is refused rather than merged. |
 | `pivot-conditional-rule` | `ConditionalRule(...)` | Repeatable. Later rules win over earlier ones on the same cell. |
 
@@ -682,6 +682,53 @@ your own detail UI overrides the packaged one rather than fighting it. Setting
 Labels default to English, come from the `drillDown` section of a locale pack,
 and are overridable per key through `drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
 `summary`, and `columnFilter` are substituted positionally.
+
+### Filter operators
+
+A filter compares its values with an operator. The default, `Equals`, reads them as
+the list of values to keep — which is what a filter was before operators existed —
+and every other operator reads them as its arguments:
+
+```html
+<pivot-filter field="Category" operator="Contains"    values="çim" />
+<pivot-filter field="Amount"   operator="Between"     values="100, 5000" />
+<pivot-filter field="Note"     operator="Blank" type="Exclude" />
+```
+
+| Operator | Arguments | Keeps |
+|---|---|---|
+| `Equals` | any | values on the list |
+| `Contains` | 1 | values holding the argument anywhere |
+| `StartsWith` | 1 | values opening with the argument |
+| `EndsWith` | 1 | values closing with the argument |
+| `Between` | 2 | values between the two, both ends included |
+| `GreaterThan` | 1 | values above the argument |
+| `LessThan` | 1 | values below the argument |
+| `Blank` | 0 | values that are blank |
+
+There is no "does not contain" or "is not blank", because `type="Exclude"` negates
+whichever operator is used: every operator arrives with its opposite attached.
+
+Text comparisons ignore case and collate in the resolved culture — a filter is
+typed by a person. A range compares as numbers when both sides read as numbers and
+as dates when both read as dates, so `Between 100 and 5000` does not put 100 after
+2000; anything else collates as text. Everything is compared against the value's
+display text, which is what the header shows and the picker lists — so on a grouped
+level a condition applies to the month name rather than to the timestamp behind it.
+
+A condition with fewer arguments than its operator reads **restricts nothing**, the
+way an empty value list already did: that is what a range looks like while it is
+being typed into. A *declaration* is checked instead — `<pivot-filter
+operator="Between" values="100" />` throws — because a typo in markup is a bug
+rather than an unfinished input box.
+
+In the browser, `PivotFilterPicker` shows a condition row above its value list.
+Choosing anything but "is one of" replaces the list with the operator's argument
+boxes, since the two are answers to the same question; Apply stays disabled until
+the condition has what it reads. `widget.setFilter(field, values, mode, operator)`
+and `layoutState.setFilterOperator(field, operator)` are the programmatic paths,
+and a filter chip in the designer's Filters zone names its condition instead of
+counting values.
 
 ### Date grouping
 

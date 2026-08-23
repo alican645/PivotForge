@@ -19,6 +19,19 @@
     // The same count means the opposite thing under an excluding filter, so it
     // cannot share the label.
     filterCountExcluded: "({0} excluded)",
+    // A condition names itself instead of counting, so {0} is the operator.
+    filterCondition: "({0})",
+    filterConditionExcluded: "(not {0})",
+    operators: {
+      Equals: "equals",
+      Contains: "contains",
+      StartsWith: "starts with",
+      EndsWith: "ends with",
+      Between: "between",
+      GreaterThan: "greater than",
+      LessThan: "less than",
+      Blank: "blank"
+    },
     aggregation: "Value settings",
     showAs: "Show values as",
     formatting: "Formatting",
@@ -245,15 +258,14 @@
       chip.appendChild(label);
 
       // A filter whose zone shows only the field name gives no clue that it is
-      // restricting anything, so an active one carries its selection count.
+      // restricting anything, so an active one carries its selection count -- or,
+      // where a count would mean nothing, the name of the condition it applies.
       const filter = area === "filter" ? this.filterEntryOf(name) : null;
-      if (filter && filter.values.length > 0) {
+      if (filter && PivotForge.PivotRequestBuilder.restricts(filter)) {
         const count = document.createElement("span");
         count.className = "pivot-chip__filter-count";
         count.classList.toggle("is-excluding", filter.mode === "Exclude");
-        count.textContent = format(
-          filter.mode === "Exclude" ? this.labels.filterCountExcluded : this.labels.filterCount,
-          filter.values.length);
+        count.textContent = this.filterChipText(filter);
         chip.appendChild(count);
       }
 
@@ -685,6 +697,21 @@
     // A chip in the Filters zone always has an entry. A field filtered from its
     // row header does not until the first apply, and an absent entry is exactly
     // the unrestricted filter the picker should open with.
+    // A list of values counts; a condition does not -- "(2)" beside a field
+    // filtered by "contains" would name its two typed characters.
+    filterChipText(filter) {
+      if ((filter.operator ?? "Equals") !== "Equals") {
+        const name = this.labels.operators[filter.operator] ?? filter.operator;
+        return format(
+          filter.mode === "Exclude" ? this.labels.filterConditionExcluded : this.labels.filterCondition,
+          name);
+      }
+
+      return format(
+        filter.mode === "Exclude" ? this.labels.filterCountExcluded : this.labels.filterCount,
+        filter.values.length);
+    }
+
     filterEntryOf(name) {
       return this.state.getState().filters.find(filter => filter.field === name)
         ?? { field: name, values: [], mode: "Include" };
@@ -703,8 +730,11 @@
         caption: this.state.field(name).caption,
         selected: filter.values,
         mode: filter.mode,
-        // One apply(), so a picker that changed both produces a single refresh.
-        onApply: (values, mode) => this.apply(() => {
+        operator: filter.operator ?? "Equals",
+        // One apply(), so a picker that changed all three produces a single
+        // refresh. The operator leads, because it decides what the values mean.
+        onApply: (values, mode, operator) => this.apply(() => {
+          this.state.setFilterOperator(name, operator ?? "Equals");
           this.state.setFilterMode(name, mode);
           this.state.setFilterValues(name, values);
         })

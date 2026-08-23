@@ -317,10 +317,44 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">The field name is null or blank.</exception>
     /// <exception cref="ArgumentNullException">The values are null.</exception>
-    public PivotGridBuilder Filter(string field, PivotFilterMode mode, params string[] values)
+    public PivotGridBuilder Filter(string field, PivotFilterMode mode, params string[] values) =>
+        Filter(field, mode, PivotFilterOperator.Equals, values);
+
+    /// <summary>Restricts a field by a condition before aggregation.</summary>
+    /// <remarks>
+    /// The operator decides what <paramref name="values"/> means: the list of values to keep for
+    /// <see cref="PivotFilterOperator.Equals"/>, the argument for the text and comparison
+    /// operators, two arguments for <see cref="PivotFilterOperator.Between"/>, and nothing at all
+    /// for <see cref="PivotFilterOperator.Blank"/>. There is no "does not contain" operator
+    /// because <see cref="PivotFilterMode.Exclude"/> negates whichever one is used.
+    /// </remarks>
+    /// <param name="field">The source field to filter.</param>
+    /// <param name="mode">Whether the condition names what is kept or what is dropped.</param>
+    /// <param name="op">How the values are compared.</param>
+    /// <param name="values">The operator's arguments.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The field name is null or blank.</exception>
+    /// <exception cref="ArgumentNullException">The values are null.</exception>
+    /// <exception cref="InvalidOperationException">The operator has fewer arguments than it reads.</exception>
+    public PivotGridBuilder Filter(
+        string field,
+        PivotFilterMode mode,
+        PivotFilterOperator op,
+        params string[] values)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
         ArgumentNullException.ThrowIfNull(values);
+
+        // A declaration is code, so a condition that reads two arguments and was
+        // given one is a typo and fails where it was written. At runtime the same
+        // shortfall is an unfinished input box, which the engine treats as no
+        // restriction rather than as an error.
+        var needed = RequiredArguments(op);
+        if (op != PivotFilterOperator.Equals && values.Length < needed)
+        {
+            throw new InvalidOperationException(
+                $"Filter on \"{field}\" uses {op}, which reads {needed} argument(s), but {values.Length} were given.");
+        }
 
         var filter = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -335,9 +369,21 @@ public sealed class PivotGridBuilder : IHtmlContent
             filter["mode"] = mode.ToString();
         }
 
+        if (op != PivotFilterOperator.Equals)
+        {
+            filter["operator"] = op.ToString();
+        }
+
         _filters.Add(filter);
         return this;
     }
+
+    private static int RequiredArguments(PivotFilterOperator op) => op switch
+    {
+        PivotFilterOperator.Blank => 0,
+        PivotFilterOperator.Between => 2,
+        _ => 1
+    };
 
     /// <summary>Sets the row ordering the grid starts with.</summary>
     /// <param name="sort">The sort definition. Build one with the <see cref="PivotSort"/> factories.</param>

@@ -91,6 +91,23 @@ PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking 
 
 ### Behaviour changes in `0.6.0-preview.1`
 
+- **A filter carries an operator.** `PivotFilter` gained an
+  `Operator` (`PivotFilterOperator`, defaulting to `Equals`), so `Values` doubles
+  as the operator's arguments: the list of values to keep for `Equals`, the
+  argument for `Contains`/`StartsWith`/`EndsWith`/`GreaterThan`/`LessThan`, two
+  for `Between`, none for `Blank`. `PivotFilterMode.Exclude` negates whichever
+  operator is used, which is where "does not contain" comes from. A condition
+  with fewer arguments than its operator reads restricts nothing, exactly as an
+  empty list already did; a *declaration* with too few throws.
+
+  New with it: `operator` on `<pivot-filter>`,
+  `PivotGridBuilder.Filter(string, PivotFilterMode, PivotFilterOperator, params string[])`,
+  `widget.setFilter(field, values, mode, operator)`,
+  `layoutState.setFilterOperator(field, operator)`, a condition row in
+  `PivotFilterPicker`, and `PivotRequestBuilder.restricts(filter)` — the one rule
+  the funnel, the chip and the request all consult. On the wire the default
+  operator is omitted, so a payload from a page that never used one is unchanged.
+
 - **A header axis is a list of levels, not a list of field names.**
   `PivotRequest.Rows` and `PivotRequest.Columns` are now
   `IReadOnlyList<PivotFieldRef>`, where a `PivotFieldRef` is a source field plus

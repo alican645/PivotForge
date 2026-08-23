@@ -310,7 +310,7 @@
           }
           : {}),
         filters: layout
-          ? layout.filters.filter(filter => filter.values.length > 0)
+          ? layout.filters.filter(PivotForge.PivotRequestBuilder.restricts)
           : this.filters,
         rowSort: this.rowSort
       };
@@ -521,7 +521,9 @@
     // Which fields are restricted right now, so the header can mark its funnel.
     // An empty value list is no restriction, so it does not count.
     filteredFields() {
-      return this.filters.filter(filter => filter.values.length > 0)
+      // A blank condition carries no values and still restricts, so counting
+      // values would leave its funnel looking inactive.
+      return this.filters.filter(PivotForge.PivotRequestBuilder.restricts)
         .map(filter => filter.field);
     }
 
@@ -544,7 +546,8 @@
         caption: this.fields.find(entry => entry.key === field)?.caption ?? field,
         selected: current?.values ?? [],
         mode: current?.mode ?? "Include",
-        onApply: (values, mode) => this.setFilter(field, values, mode)
+        operator: current?.operator ?? "Equals",
+        onApply: (values, mode, operator) => this.setFilter(field, values, mode, operator)
       });
     }
 
@@ -728,8 +731,15 @@
       }
 
       if (filters !== undefined) {
-        this.filters = filters.map(filter =>
-          ({ field: filter.field, values: [...filter.values], mode: filter.mode }));
+        // Copied member by member rather than spread, so an entry cannot carry
+        // anything the request builder has not agreed to -- but the operator has
+        // to be among them, or a condition would arrive as a value selection.
+        this.filters = filters.map(filter => ({
+          field: filter.field,
+          values: [...filter.values],
+          mode: filter.mode,
+          ...(filter.operator ? { operator: filter.operator } : {})
+        }));
       }
 
       if (rowSort !== undefined) {
@@ -905,7 +915,7 @@
       await this.refresh();
     }
 
-    async setFilter(field, values, mode = "Include") {
+    async setFilter(field, values, mode = "Include", operator = "Equals") {
       if (!this.options.allowFiltering) {
         throw new Error("Cannot filter because allowFiltering is disabled.");
       }
@@ -914,6 +924,9 @@
       // here directly would be overwritten by the next update() the designer
       // sends, and its chip would go on showing the previous selection.
       if (this.layoutState) {
+        // The operator first: it decides whether the values are a selection or
+        // a condition's arguments.
+        this.layoutState.setFilterOperator(field, operator);
         this.layoutState.setFilterMode(field, mode);
         this.layoutState.setFilterValues(field, values ?? []);
         this.designer.render();
@@ -922,11 +935,11 @@
       }
 
       this.filters = this.filters.filter(filter => filter.field !== field);
-      // An empty list restricts nothing whichever mode it is in, so it is stored
-      // as no filter at all rather than as an empty one.
-      if (Array.isArray(values) && values.length > 0) {
-        this.filters.push(
-          PivotForge.PivotRequestBuilder.normalizeFilter({ field, values, mode }, 0));
+      // A condition with fewer arguments than its operator reads restricts
+      // nothing, so it is stored as no filter at all rather than as a half one.
+      const candidate = { field, values: values ?? [], mode, operator };
+      if (PivotForge.PivotRequestBuilder.restricts(candidate)) {
+        this.filters.push(PivotForge.PivotRequestBuilder.normalizeFilter(candidate, 0));
       }
 
       this.saveState();

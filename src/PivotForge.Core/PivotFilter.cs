@@ -9,11 +9,16 @@ namespace PivotForge.Core;
 /// <param name="Interval">The date interval the listed values are groups of. A filter set from a
 /// grouped header lists group labels — month names rather than dates — so it has to collapse the
 /// source value the same way the header did before comparing.</param>
+/// <param name="Operator">How <paramref name="Values"/> is compared. The default reads them as
+/// the list of values to keep, which is what a filter was before operators existed; every other
+/// operator reads them as its arguments. A condition with fewer arguments than its operator needs
+/// restricts nothing, exactly as an empty list does.</param>
 public sealed record PivotFilter(
     string Field,
     IReadOnlyList<string?> Values,
     PivotFilterMode Mode = PivotFilterMode.Include,
-    PivotGroupInterval Interval = PivotGroupInterval.None);
+    PivotGroupInterval Interval = PivotGroupInterval.None,
+    PivotFilterOperator Operator = PivotFilterOperator.Equals);
 
 /// <summary>Specifies how a filter's listed values are applied.</summary>
 /// <remarks>

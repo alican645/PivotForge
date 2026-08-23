@@ -968,6 +968,77 @@ public class PivotTagHelperTests
         Assert.False(config.GetProperty("filters")[0].TryGetProperty("mode", out _));
     }
 
+    [Fact]
+    public async Task WritesADeclaredFilterOperator()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotFilterTagHelper
+            {
+                Field = "Category",
+                Values = "çim",
+                Operator = PivotFilterOperator.Contains
+            }],
+            MinimalFields));
+
+        var filter = config.GetProperty("filters")[0];
+        Assert.Equal("Contains", filter.GetProperty("operator").GetString());
+        Assert.Equal(
+            new[] { "çim" },
+            filter.GetProperty("values").EnumerateArray().Select(v => v.GetString()).ToArray());
+    }
+
+    [Fact]
+    public async Task OmitsTheFilterOperatorWhenItIsTheDefault()
+    {
+        // Equals is what a filter always was, so a payload from a page that never
+        // touched an operator has to look exactly as it did before they existed.
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotFilterTagHelper { Field = "Region", Values = "Marmara" }],
+            MinimalFields));
+
+        Assert.False(config.GetProperty("filters")[0].TryGetProperty("operator", out _));
+    }
+
+    [Fact]
+    public async Task WritesARangeAsTwoArguments()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotFilterTagHelper
+            {
+                Field = "Amount",
+                Values = "100, 500",
+                Operator = PivotFilterOperator.Between
+            }],
+            MinimalFields));
+
+        Assert.Equal(
+            new[] { "100", "500" },
+            config.GetProperty("filters")[0].GetProperty("values")
+                .EnumerateArray().Select(v => v.GetString()).ToArray());
+    }
+
+    [Fact]
+    public void RefusesARangeMissingOneEnd()
+    {
+        // A declaration is code: a condition that reads two arguments and was
+        // given one is a typo, and it fails where it was written. At runtime the
+        // same shortfall is an unfinished input box and restricts nothing.
+        Assert.Throws<InvalidOperationException>(() => new PivotGridBuilder()
+            .Filter("Amount", PivotFilterMode.Include, PivotFilterOperator.Between, "100"));
+    }
+
+    [Fact]
+    public void AcceptsABlankConditionWithNoArguments()
+    {
+        var builder = new PivotGridBuilder()
+            .Filter("Note", PivotFilterMode.Exclude, PivotFilterOperator.Blank);
+
+        Assert.NotNull(builder);
+    }
+
     /// <summary>The builder equivalent of <see cref="MinimalFields"/>.</summary>
     private static void FillMinimalFields(PivotFieldCollectionBuilder fields) =>
         fields.Add().DataField("Amount").Area(PivotArea.Data).Caption("Tutar")

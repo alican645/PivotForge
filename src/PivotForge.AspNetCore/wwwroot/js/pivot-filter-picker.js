@@ -14,6 +14,22 @@
     // The mode's only observable effect is on values the source does not have
     // yet, so the control says that rather than "include"/"exclude" -- which
     // describes the storage and tells the reader nothing about the outcome.
+    // The condition row. An operator other than "equals" replaces the value list
+    // rather than narrowing it, so the two are never shown together.
+    operatorLabel: "Condition",
+    operators: {
+      Equals: "is one of",
+      Contains: "contains",
+      StartsWith: "starts with",
+      EndsWith: "ends with",
+      Between: "between",
+      GreaterThan: "greater than",
+      LessThan: "less than",
+      Blank: "is blank"
+    },
+    argument: "Value",
+    argumentFrom: "From",
+    argumentTo: "To",
     modeLabel: "Values added later",
     modeInclude: "Are hidden",
     modeExclude: "Are shown",
@@ -56,6 +72,10 @@
       this.values = [];
       this.selected = new Set();
       this.mode = "Include";
+      // How the values are read: as a list to keep, or as a condition's
+      // arguments. Two argument boxes because Between is the widest operator.
+      this.operator = "Equals";
+      this.arguments = ["", ""];
       // Values the caller had selected that the server did not list, because
       // the response was truncated. Applying must not silently drop them.
       this.hiddenValues = [];
@@ -152,6 +172,42 @@
         return button;
       });
 
+      // Sits above the list because it decides whether the list means anything:
+      // an operator other than Equals answers the question the list was asking.
+      const { FILTER_OPERATORS, FILTER_ARGUMENTS } = PivotForge.PivotRequestBuilder;
+      const conditionRow = create("div", "pivot-filter-picker__condition");
+      const conditionLabel = create("label", "pivot-filter-picker__condition-label");
+      conditionLabel.textContent = this.labels.operatorLabel;
+      conditionLabel.setAttribute("for", "pivot-filter-picker-operator");
+
+      const operator = create("select", "pivot-filter-picker__operator");
+      operator.id = "pivot-filter-picker-operator";
+      operator.dataset.action = "filter-operator";
+      FILTER_OPERATORS.forEach(name => {
+        const option = create("option");
+        option.value = name;
+        option.textContent = this.labels.operators[name] ?? name;
+        operator.appendChild(option);
+      });
+      operator.addEventListener("change", () => this.setOperator(operator.value));
+
+      conditionRow.appendChild(conditionLabel);
+      conditionRow.appendChild(operator);
+
+      const argumentInputs = [0, 1].map(index => {
+        const input = create("input", "pivot-filter-picker__argument");
+        input.dataset.action = "filter-argument";
+        input.dataset.index = String(index);
+        input.setAttribute("type", "text");
+        input.setAttribute("autocomplete", "off");
+        input.addEventListener("input", () => {
+          this.arguments[index] = input.value;
+          this.renderCondition();
+        });
+        conditionRow.appendChild(input);
+        return input;
+      });
+
       const notice = create("div", "pivot-filter-picker__notice");
       notice.hidden = true;
       const state = create("div", "pivot-filter-picker__state");
@@ -175,6 +231,7 @@
       foot.appendChild(cancel);
       foot.appendChild(apply);
 
+      body.appendChild(conditionRow);
       body.appendChild(toolbar);
       body.appendChild(modeRow);
       body.appendChild(notice);
@@ -202,11 +259,14 @@
       root.document.addEventListener("keydown", this.keydownHandler);
 
       this.host.appendChild(overlay);
-      this.elements = { overlay, title, summary, search, notice, state, list, apply, modeButtons };
+      this.elements = {
+        overlay, title, summary, search, notice, state, list, apply, modeButtons,
+        toolbar, operator, argumentInputs, argumentCounts: FILTER_ARGUMENTS
+      };
       return this.elements;
     }
 
-    async open({ field, caption, selected = [], mode = "Include", onApply } = {}) {
+    async open({ field, caption, selected = [], mode = "Include", operator = "Equals", onApply } = {}) {
       if (this.disposed || !field) {
         return;
       }
@@ -227,7 +287,19 @@
       // Anything that is not Exclude is Include; the strict check belongs to
       // the layout state, which is what a stored view is adopted through.
       this.mode = mode === "Exclude" ? "Exclude" : "Include";
+      // An unknown operator opens as the value list rather than as a broken
+      // control; the strict check belongs to the layout state, which is what a
+      // stored view is adopted through.
+      this.operator = PivotForge.PivotRequestBuilder.FILTER_OPERATORS.includes(operator)
+        ? operator
+        : "Equals";
+      // A condition's arguments are carried in the same list a value selection
+      // uses, so opening one is a matter of reading it as arguments instead.
+      this.arguments = this.operator === "Equals"
+        ? ["", ""]
+        : [selected?.[0] ?? "", selected?.[1] ?? ""];
       this.renderMode();
+      this.renderCondition();
 
       elements.search.value = "";
       elements.apply.disabled = true;
@@ -239,6 +311,13 @@
       elements.title.textContent = format(this.labels.title, caption ?? field);
       elements.summary.textContent = "";
       this.setState(this.labels.loading, false);
+
+      if (this.operator !== "Equals") {
+        // A condition compares against values the source may not even hold yet,
+        // so listing them would cost a request that answers nothing.
+        this.setState("", false);
+        return;
+      }
 
       try {
         const response = await this.widget.fieldValues(field);
@@ -386,6 +465,82 @@
       this.renderMode();
     }
 
+    setOperator(operator) {
+      this.operator = PivotForge.PivotRequestBuilder.FILTER_OPERATORS.includes(operator)
+        ? operator
+        : "Equals";
+      this.renderCondition();
+
+      // Switching back to the value list needs the list, which was never
+      // fetched if the picker opened on a condition.
+      if (this.operator === "Equals" && this.values.length === 0) {
+        this.loadValues();
+      }
+    }
+
+    async loadValues() {
+      const requestId = this.requestId;
+      this.setState(this.labels.loading, false);
+
+      try {
+        const response = await this.widget.fieldValues(this.field);
+
+        if (requestId !== this.requestId) {
+          return;
+        }
+
+        this.values = response?.values ?? [];
+        this.applySelection([], response);
+        this.renderList();
+      } catch (error) {
+        if (error?.name !== "AbortError" && requestId === this.requestId) {
+          this.setState(error?.message || this.labels.failed, true);
+        }
+      }
+    }
+
+    // Which half of the picker is the live one. A condition and a value list are
+    // two answers to the same question, so exactly one of them is on screen.
+    renderCondition() {
+      const elements = this.elements;
+      if (!elements) {
+        return;
+      }
+
+      const listed = this.operator === "Equals";
+      const count = elements.argumentCounts[this.operator] ?? 1;
+
+      elements.operator.value = this.operator;
+      elements.toolbar.hidden = !listed;
+
+      elements.argumentInputs.forEach((input, index) => {
+        input.hidden = listed || index >= count;
+        input.value = this.arguments[index] ?? "";
+        input.setAttribute("placeholder", count > 1
+          ? (index === 0 ? this.labels.argumentFrom : this.labels.argumentTo)
+          : this.labels.argument);
+      });
+
+      if (!listed) {
+        elements.summary.textContent = "";
+        elements.list.hidden = true;
+        // Enabled as soon as the condition has what it needs, which is exactly
+        // the engine's own rule for when a condition restricts anything.
+        elements.apply.disabled = this.conditionValues().length < count;
+      }
+    }
+
+    // The arguments a condition applies with, trimmed and cut to what its
+    // operator reads. Blank takes none, which is how it applies with none.
+    conditionValues() {
+      const count = (this.elements?.argumentCounts ?? {})[this.operator] ?? 1;
+
+      return this.arguments
+        .slice(0, count)
+        .map(value => String(value ?? "").trim())
+        .filter(value => value.length > 0);
+    }
+
     renderMode() {
       this.elements?.modeButtons.forEach(button => {
         const active = button.dataset.mode === this.mode;
@@ -395,6 +550,16 @@
     }
 
     apply() {
+      if (this.operator !== "Equals") {
+        const values = this.conditionValues();
+        const callback = this.onApply;
+        const mode = this.mode;
+        const operator = this.operator;
+        this.close();
+        callback(values, mode, operator);
+        return;
+      }
+
       // Include stores the checked values, Exclude the unchecked ones, so the
       // two describe the same visible rows and differ only over values that are
       // not in the source yet.
@@ -413,7 +578,7 @@
       const callback = this.onApply;
       const mode = this.mode;
       this.close();
-      callback(values, mode);
+      callback(values, mode, "Equals");
     }
 
     close() {

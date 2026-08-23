@@ -48,6 +48,18 @@
       filterValues: "Filtre değerleri",
       filterCount: "({0})",
       filterCountExcluded: "({0} hariç)",
+      filterCondition: "({0})",
+      filterConditionExcluded: "({0} değil)",
+      operators: {
+        Equals: "eşittir",
+        Contains: "içerir",
+        StartsWith: "ile başlar",
+        EndsWith: "ile biter",
+        Between: "arasında",
+        GreaterThan: "büyüktür",
+        LessThan: "küçüktür",
+        Blank: "boş"
+      },
       aggregation: "Değer ayarları",
       showAs: "Değerleri farklı göster",
       formatting: "Biçimlendirme",
