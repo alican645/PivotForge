@@ -29,6 +29,7 @@ This document records the supported public surface for `0.6.0-preview.1`. Public
 - `AddPivotForge<TRecord>(dataProvider, configure)` registers the provider, cache, executor, options, and JSON enum support.
 - `MapPivotForgeEndpoints(pattern)` maps the route group. The default prefix is `/pivotforge`; a custom prefix may be supplied with or without a leading or trailing slash.
 - `PivotForgeDataProvider<TRecord>` and `PivotForgeDataRequest` define source loading.
+- `PivotTopN` / `PivotTopNMode` limit a row header level to its highest or lowest ranking groups, ranked after aggregation and counted inside each parent group. On `PivotRequest.TopN`; declared as `<pivot-top-n>` or `PivotGridBuilder.TopN`.
 - `PivotForgeOptions` configures cache duration, paging, source-row, drill-down, Excel, and filter value (`FieldValueLimit`) limits, plus `AllowedFields`, the set of source fields the endpoints may read.
 
 ### HTTP models and cache extension point

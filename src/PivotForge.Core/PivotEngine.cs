@@ -421,72 +421,33 @@ public sealed class PivotEngine
     {
         ValidateRequest(request, reader);
 
-        var rowIndex = new HeaderIndex();
-        var columnIndex = new HeaderIndex();
-        var columnLevelValues = CreateColumnLevelValueLists(request.Columns.Count);
-        var buckets = new Dictionary<CellKey, AggregateBucket>();
-        var rowTotalBuckets = new Dictionary<int, AggregateBucket>();
-        var columnTotalBuckets = new Dictionary<int, AggregateBucket>();
-        var subtotalBuckets = new Dictionary<HeaderKey, SubtotalBuckets>();
-        var grandTotalBucket = new AggregateBucket(request.Values);
-        var filters = CompileFilters(request.Filters);
-        var sourceRowCount = 0;
+        var scan = Scan(records, request, reader, culture, null, cancellationToken);
 
-        var scannedRowCount = 0;
-
-        foreach (var record in records)
+        // Top-N ranks groups that do not exist until the records have been summed, so the
+        // rows it drops can only be known after a pass. Running the pass again without them
+        // is what keeps every total agreeing with the rows above it: a column total or a
+        // grand total carried over from the first pass would still be counting rows the
+        // reader cannot see. The cost is one extra pass over records already in memory, and
+        // only for a request that asked for a ranking.
+        if (request.TopN.Count > 0)
         {
-            if ((scannedRowCount++ & 255) == 0)
+            var excluded = ExcludedGroups(scan, request, culture);
+
+            if (excluded.Count > 0)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-
-            if (!MatchesFilters(record, filters, reader, culture))
-            {
-                continue;
-            }
-
-            sourceRowCount++;
-
-            var rowValues = ReadHeaderValues(record, request.Rows, reader, culture);
-            var columnValues = ReadHeaderValues(record, request.Columns, reader, culture);
-            TrackColumnLevelValues(columnLevelValues, columnValues);
-            var row = rowIndex.GetOrAdd(rowValues);
-            var column = columnIndex.GetOrAdd(columnValues);
-            var key = new CellKey(row, column);
-
-            if (!buckets.TryGetValue(key, out var bucket))
-            {
-                bucket = new AggregateBucket(request.Values);
-                buckets.Add(key, bucket);
-            }
-
-            var rowTotalBucket = GetOrAddBucket(rowTotalBuckets, row, request.Values);
-            var columnTotalBucket = GetOrAddBucket(columnTotalBuckets, column, request.Values);
-
-            for (var level = 1; level < rowValues.Count; level++)
-            {
-                var path = rowValues.Take(level).ToArray();
-                var subtotalKey = new HeaderKey(path);
-
-                if (!subtotalBuckets.TryGetValue(subtotalKey, out var subtotal))
-                {
-                    subtotal = new SubtotalBuckets(path, request.Values);
-                    subtotalBuckets.Add(subtotalKey, subtotal);
-                }
-
-                subtotal.Add(column, request.Values, record, reader);
-            }
-
-            foreach (var valueDefinition in request.Values)
-            {
-                var value = reader.GetValue(record, valueDefinition.Field);
-                bucket.Add(valueDefinition, value);
-                rowTotalBucket.Add(valueDefinition, value);
-                columnTotalBucket.Add(valueDefinition, value);
-                grandTotalBucket.Add(valueDefinition, value);
+                scan = Scan(records, request, reader, culture, excluded, cancellationToken);
             }
         }
+
+        var rowIndex = scan.RowIndex;
+        var columnIndex = scan.ColumnIndex;
+        var buckets = scan.Cells;
+        var rowTotalBuckets = scan.RowTotals;
+        var columnTotalBuckets = scan.ColumnTotals;
+        var subtotalBuckets = scan.Subtotals;
+        var grandTotalBucket = scan.GrandTotal;
+        var columnLevelValues = scan.ColumnLevelValues;
+        var sourceRowCount = scan.SourceRowCount;
 
         var columnHeaders = CreateColumnHeaders(
             columnIndex.Headers,
@@ -563,6 +524,223 @@ public sealed class PivotEngine
             }
         };
     }
+
+    // One pass over the source records, accumulating every bucket the result is built
+    // from. Taken apart from ExecuteCore because Top-N has to run it twice.
+    private static ScanResult Scan(
+        IEnumerable<object> records,
+        PivotRequest request,
+        IRecordReader reader,
+        CultureInfo culture,
+        IReadOnlySet<HeaderKey>? excludedGroups,
+        CancellationToken cancellationToken)
+    {
+        var rowIndex = new HeaderIndex();
+        var columnIndex = new HeaderIndex();
+        var columnLevelValues = CreateColumnLevelValueLists(request.Columns.Count);
+        var buckets = new Dictionary<CellKey, AggregateBucket>();
+        var rowTotalBuckets = new Dictionary<int, AggregateBucket>();
+        var columnTotalBuckets = new Dictionary<int, AggregateBucket>();
+        var subtotalBuckets = new Dictionary<HeaderKey, SubtotalBuckets>();
+        var grandTotalBucket = new AggregateBucket(request.Values);
+        var filters = CompileFilters(request.Filters);
+        var sourceRowCount = 0;
+
+        var scannedRowCount = 0;
+
+        foreach (var record in records)
+        {
+            if ((scannedRowCount++ & 255) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (!MatchesFilters(record, filters, reader, culture))
+            {
+                continue;
+            }
+
+            var rowValues = ReadHeaderValues(record, request.Rows, reader, culture);
+
+            // Checked after the filters and before anything is counted, so a group a
+            // ranking dropped is absent from the totals rather than merely hidden.
+            if (excludedGroups is not null && IsExcluded(excludedGroups, rowValues))
+            {
+                continue;
+            }
+
+            sourceRowCount++;
+
+            var columnValues = ReadHeaderValues(record, request.Columns, reader, culture);
+            TrackColumnLevelValues(columnLevelValues, columnValues);
+            var row = rowIndex.GetOrAdd(rowValues);
+            var column = columnIndex.GetOrAdd(columnValues);
+            var key = new CellKey(row, column);
+
+            if (!buckets.TryGetValue(key, out var bucket))
+            {
+                bucket = new AggregateBucket(request.Values);
+                buckets.Add(key, bucket);
+            }
+
+            var rowTotalBucket = GetOrAddBucket(rowTotalBuckets, row, request.Values);
+            var columnTotalBucket = GetOrAddBucket(columnTotalBuckets, column, request.Values);
+
+            for (var level = 1; level < rowValues.Count; level++)
+            {
+                var path = rowValues.Take(level).ToArray();
+                var subtotalKey = new HeaderKey(path);
+
+                if (!subtotalBuckets.TryGetValue(subtotalKey, out var subtotal))
+                {
+                    subtotal = new SubtotalBuckets(path, request.Values);
+                    subtotalBuckets.Add(subtotalKey, subtotal);
+                }
+
+                subtotal.Add(column, request.Values, record, reader);
+            }
+
+            foreach (var valueDefinition in request.Values)
+            {
+                var value = reader.GetValue(record, valueDefinition.Field);
+                bucket.Add(valueDefinition, value);
+                rowTotalBucket.Add(valueDefinition, value);
+                columnTotalBucket.Add(valueDefinition, value);
+                grandTotalBucket.Add(valueDefinition, value);
+            }
+        }
+
+        return new ScanResult(
+            rowIndex,
+            columnIndex,
+            columnLevelValues,
+            buckets,
+            rowTotalBuckets,
+            columnTotalBuckets,
+            subtotalBuckets,
+            grandTotalBucket,
+            sourceRowCount);
+    }
+
+    /// <summary>The row groups a ranking leaves out, as header prefixes.</summary>
+    private static IReadOnlySet<HeaderKey> ExcludedGroups(
+        ScanResult scan,
+        PivotRequest request,
+        CultureInfo culture)
+    {
+        var excluded = new HashSet<HeaderKey>();
+
+        foreach (var limit in request.TopN)
+        {
+            var level = LevelIndex(request.Rows, limit.Field);
+            var depth = level + 1;
+            var valueKey = limit.ValueKey ?? request.Values[0].Key;
+            var ranked = new Dictionary<HeaderKey, List<(HeaderKey Group, IReadOnlyList<string?> Header, decimal? Value)>>();
+
+            for (var row = 0; row < scan.RowIndex.Headers.Count; row++)
+            {
+                var header = scan.RowIndex.Headers[row];
+                var groupHeader = header.Take(depth).ToArray();
+                var group = new HeaderKey(groupHeader);
+                // Ranked inside its own parent, so "the top two categories" means two per
+                // region rather than two across all of them.
+                var parent = new HeaderKey(header.Take(level).ToArray());
+
+                if (!ranked.TryGetValue(parent, out var siblings))
+                {
+                    siblings = [];
+                    ranked.Add(parent, siblings);
+                }
+
+                if (siblings.Any(sibling => sibling.Group.Equals(group)))
+                {
+                    continue;
+                }
+
+                siblings.Add((group, groupHeader, GroupValue(scan, request, row, depth, group, valueKey)));
+            }
+
+            foreach (var siblings in ranked.Values)
+            {
+                excluded.UnionWith(Losers(siblings, limit, culture));
+            }
+        }
+
+        return excluded;
+    }
+
+    private static IEnumerable<HeaderKey> Losers(
+        List<(HeaderKey Group, IReadOnlyList<string?> Header, decimal? Value)> siblings,
+        PivotTopN limit,
+        CultureInfo culture)
+    {
+        // A group that aggregated to nothing has no rank, so it sits at the bottom of both
+        // orderings rather than winning a "bottom five" by being empty. Ties break on the
+        // label so the same data always produces the same rows, whatever order it arrived in.
+        var ordered = siblings
+            .OrderBy(sibling => sibling.Value is null)
+            .ThenBy(sibling => sibling.Value, limit.Mode == PivotTopNMode.Top
+                ? Comparer<decimal?>.Create((left, right) => Comparer<decimal?>.Default.Compare(right, left))
+                : Comparer<decimal?>.Default)
+            .ThenBy(sibling => sibling.Header[^1], StringComparer.Create(culture, ignoreCase: false));
+
+        return ordered.Skip(limit.Count).Select(sibling => sibling.Group);
+    }
+
+    private static decimal? GroupValue(
+        ScanResult scan,
+        PivotRequest request,
+        int row,
+        int depth,
+        HeaderKey group,
+        string valueKey) =>
+        // At the deepest level a group is one row, and its total is already the row's own.
+        // Above it, the subtotal buckets hold exactly this prefix's aggregate.
+        depth == request.Rows.Count
+            ? Lookup(scan.RowTotals[row].Finalize(request.Values), valueKey)
+            : scan.Subtotals.TryGetValue(group, out var subtotal)
+                ? Lookup(subtotal.FinalizeTotals(request.Values), valueKey)
+                : null;
+
+    private static decimal? Lookup(IReadOnlyDictionary<string, decimal?> values, string key) =>
+        values.TryGetValue(key, out var value) ? value : null;
+
+    private static int LevelIndex(IReadOnlyList<PivotFieldRef> fields, string? name)
+    {
+        for (var level = 0; level < fields.Count; level++)
+        {
+            if (NamesLevel(name, fields[level]))
+            {
+                return level;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool IsExcluded(IReadOnlySet<HeaderKey> excludedGroups, IReadOnlyList<string?> rowValues)
+    {
+        for (var length = 1; length <= rowValues.Count; length++)
+        {
+            if (excludedGroups.Contains(new HeaderKey(rowValues.Take(length).ToArray())))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private sealed record ScanResult(
+        HeaderIndex RowIndex,
+        HeaderIndex ColumnIndex,
+        List<List<string?>> ColumnLevelValues,
+        Dictionary<CellKey, AggregateBucket> Cells,
+        Dictionary<int, AggregateBucket> RowTotals,
+        Dictionary<int, AggregateBucket> ColumnTotals,
+        Dictionary<HeaderKey, SubtotalBuckets> Subtotals,
+        AggregateBucket GrandTotal,
+        int SourceRowCount);
 
     private static List<object> Materialize<T>(IEnumerable<T> records, CancellationToken cancellationToken)
     {
@@ -904,6 +1082,29 @@ public sealed class PivotEngine
             if (!reader.HasField(field))
             {
                 throw new PivotFieldNotFoundException(field);
+            }
+        }
+
+        foreach (var limit in request.TopN)
+        {
+            if (limit.Count <= 0)
+            {
+                throw new ArgumentException("A pivot ranking must keep at least one group.", nameof(request));
+            }
+
+            // A ranking that names nothing would silently show every row, which reads as the
+            // feature being broken rather than as the field name being wrong.
+            if (LevelIndex(request.Rows, limit.Field) < 0)
+            {
+                throw new ArgumentException(
+                    "A pivot ranking must name a row header level.", nameof(request));
+            }
+
+            if (limit.ValueKey is { } valueKey &&
+                !request.Values.Any(value => string.Equals(value.Key, valueKey, StringComparison.Ordinal)))
+            {
+                throw new ArgumentException(
+                    "A pivot ranking must be ranked by a declared value.", nameof(request));
             }
         }
     }
@@ -1494,6 +1695,10 @@ public sealed class PivotEngine
                 _total.Add(definition, value);
             }
         }
+
+        /// <summary>The aggregate of the whole group, which is what a ranking compares.</summary>
+        public IReadOnlyDictionary<string, decimal?> FinalizeTotals(
+            IReadOnlyList<PivotValueDefinition> definitions) => _total.Finalize(definitions);
 
         public PivotSubtotal Finalize(
             IReadOnlyList<PivotValueDefinition> definitions,

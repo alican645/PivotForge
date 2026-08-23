@@ -30,6 +30,11 @@ public sealed class PivotRequest
     /// </remarks>
     public bool HideEmptySummaryCells { get; init; }
 
+    /// <summary>Gets the row header levels limited to their highest or lowest ranking groups.</summary>
+    /// <remarks>These run after aggregation, on groups that do not exist until the records have
+    /// been summed, which is what separates them from <see cref="Filters"/>.</remarks>
+    public IReadOnlyList<PivotTopN> TopN { get; init; } = [];
+
     /// <summary>Gets the per-field ordering of individual row and column header levels.</summary>
     /// <remarks><see cref="RowSort"/> orders the row axis as a whole and takes precedence over these
     /// on that axis; the column axis is governed by these alone.</remarks>

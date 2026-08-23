@@ -29,6 +29,7 @@ public sealed class PivotGridBuilder : IHtmlContent
 
     // Initial state the grid starts with, rather than settings it is configured by.
     private readonly List<Dictionary<string, object?>> _filters = [];
+    private readonly List<Dictionary<string, object?>> _topN = [];
     private readonly List<Dictionary<string, object?>> _conditionalRules = [];
     private readonly PivotFieldCollectionBuilder _fields = new();
     private string? _id;
@@ -389,6 +390,60 @@ public sealed class PivotGridBuilder : IHtmlContent
         return this;
     }
 
+    /// <summary>Limits a row header level to its highest ranking groups.</summary>
+    /// <param name="field">The row field, or <c>field:interval</c> level key, being limited.</param>
+    /// <param name="count">How many groups survive in each parent group.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder TopN(string field, int count) =>
+        TopN(field, count, null, PivotTopNMode.Top);
+
+    /// <summary>Limits a row header level to its highest or lowest ranking groups.</summary>
+    /// <remarks>
+    /// This runs after aggregation, on groups that do not exist until the records have been
+    /// summed, which is what separates it from <see cref="Filter(string, string[])"/>. The rows
+    /// it drops leave the result entirely, so every total on screen still adds up.
+    /// <para>
+    /// A level is ranked inside its own parent group, so the top two categories of every region
+    /// are two per region rather than two in total.
+    /// </para>
+    /// </remarks>
+    /// <param name="field">The row field, or <c>field:interval</c> level key, being limited.</param>
+    /// <param name="count">How many groups survive in each parent group.</param>
+    /// <param name="valueKey">
+    /// The value key that ranks the groups, as <c>Field_aggregation</c>. Null uses the first
+    /// declared value, which is what a grid with one measure means by "top five".
+    /// </param>
+    /// <param name="mode">Whether the highest or the lowest ranking groups survive.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The field name is null or blank.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The count is not positive.</exception>
+    public PivotGridBuilder TopN(string field, int count, string? valueKey, PivotTopNMode mode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(field);
+        ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+
+        var limit = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["field"] = field,
+            ["count"] = count
+        };
+
+        // Spelled by their absence, so a ranking that took the defaults travels as the
+        // two members it actually declared.
+        if (!string.IsNullOrWhiteSpace(valueKey))
+        {
+            limit["valueKey"] = valueKey;
+        }
+
+        if (mode != PivotTopNMode.Top)
+        {
+            limit["mode"] = mode.ToString();
+        }
+
+        _topN.Add(limit);
+        return this;
+    }
+
     private static int RequiredArguments(PivotFilterOperator op) => op switch
     {
         PivotFilterOperator.Blank => 0,
@@ -548,6 +603,11 @@ public sealed class PivotGridBuilder : IHtmlContent
         if (_filters.Count > 0)
         {
             payload["filters"] = _filters;
+        }
+
+        if (_topN.Count > 0)
+        {
+            payload["topN"] = _topN;
         }
 
         // Conditional rules are drawn by the renderer, so they ride with the other

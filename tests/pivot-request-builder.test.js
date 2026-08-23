@@ -472,3 +472,54 @@ test("hiding empty summary cells is asked for only when it was declared", () => 
       .hideEmptySummaryCells,
     true);
 });
+
+test("a ranking travels as the two members it declared", () => {
+  const request = PivotRequestBuilder.buildRequest(salesFields, { topN: [{ field: "urun", count: 3 }] });
+
+  assert.deepStrictEqual(request.topN, [{ field: "urun", count: 3 }]);
+});
+
+test("a ranking that declared more carries more", () => {
+  const request = PivotRequestBuilder.buildRequest(salesFields, {
+    topN: [{ field: "urun", count: 2, valueKey: "tutar_sum", mode: "Bottom" }]
+  });
+
+  assert.deepStrictEqual(request.topN, [
+    { field: "urun", count: 2, valueKey: "tutar_sum", mode: "Bottom" }
+  ]);
+});
+
+test("a request that declared no ranking does not mention one", () => {
+  // The same rule the other optional members follow: a page written before
+  // rankings existed produces byte-identical bytes.
+  const request = PivotRequestBuilder.buildRequest(salesFields, {});
+
+  assert.ok(!("topN" in request));
+});
+
+test("an empty ranking list is the same as none", () => {
+  const request = PivotRequestBuilder.buildRequest(salesFields, { topN: [] });
+
+  assert.ok(!("topN" in request));
+});
+
+test("a ranking without a field is rejected where it was written", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest(salesFields, { topN: [{ count: 3 }] }),
+    /requires a "field"/);
+});
+
+test("a ranking counting less than one group is rejected", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest(salesFields, { topN: [{ field: "urun", count: 0 }] }),
+    /at least 1/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest(salesFields, { topN: [{ field: "urun", count: 2.5 }] }),
+    /whole "count"/);
+});
+
+test("an unknown ranking mode is rejected", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest(salesFields, { topN: [{ field: "urun", count: 2, mode: "Middle" }] }),
+    /Unknown ranking mode/);
+});

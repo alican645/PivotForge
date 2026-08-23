@@ -144,7 +144,7 @@ public sealed record PivotFilter(
 Değer seçici artık pakette (`PivotFilterPicker`): motora `PivotEngine.DistinctValues`,
 uç noktalara `POST /pivotforge/field-values`, tasarımcı çipine `▼` düğmesi eklendi.
 Include/exclude, satır başlığı hunisi, operatörler ve boş satır/sütun eleme tamam.
-Kalan açık: sütun ekseninde başlık filtresi, tarih aralığı için hazır UI ve Top-N.
+Kalan açık: sütun ekseninde başlık filtresi ve tarih aralığı için hazır UI.
 
 - [x] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim,
       "Tümünü seç"/"Temizle", kesme uyarısı — tasarımcıdaki Filtreler bölgesi artık işlevsel
@@ -163,9 +163,18 @@ Kalan açık: sütun ekseninde başlık filtresi, tarih aralığı için hazır 
       `Exclude` modu hangi operatör kullanıldıysa onu olumsuzluyor. Seçicide
       koşul satırı, `<pivot-filter operator="...">` ile bildirim, gruplu
       seviyelerde de çalışıyor
-- [ ] Top-N — diğer operatörlerden farklı olarak **toplama sonrası** çalışır:
-      satır toplamları üzerinde eleme, ara toplamların ve genel toplamın elenen
-      satırları sayıp saymayacağı kararı, sıralamayla etkileşim
+- [x] Top-N — `<pivot-top-n field="Region" count="3" />`. Diğer filtrelerden farkı
+      **toplama sonrası** çalışması: karşılaştırdığı gruplar kayıtlar toplanana
+      kadar var olmuyor. Üç karar: sayı tablo genelinde değil **her üst grubun
+      içinde** sayılıyor (yoksa tek bir bölge bütün kotayı doldururdu); elenen
+      satırlar sonuçtan **tümüyle** çıkıyor, yani genel toplam ekrandaki
+      satırların toplamına eşit; toplamı çıkarmayla düzeltmek yerine kayıtlar
+      bir kez daha taranıyor, çünkü bir alt kümenin ortalaması parçalarının
+      ortalamalarından geri çıkarılamaz. Hiçbir şeye toplanmayan grup her iki
+      yönde de sonda; eşitlikler etikete göre bozuluyor, böylece aynı veri her
+      zaman aynı satırları veriyor (büyük veri uç noktası sonucu önbelleğe
+      alıyor). `value-key` ile sıralayan ölçü, `mode="Bottom"` ile diğer uç
+      seçiliyor
 - [~] Tarih aralığı filtreleri — motor tarafı `Between` ile **çalışıyor**: iki uç
       da tarih okunuyorsa tarih olarak karşılaştırılıyor. Açık kalan yalnızca UI:
       seçicideki argüman kutuları düz metin, tarih seçici değil

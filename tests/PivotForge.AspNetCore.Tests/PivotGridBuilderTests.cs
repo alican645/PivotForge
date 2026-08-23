@@ -249,6 +249,33 @@ public class PivotGridBuilderTests
     }
 
     [Fact]
+    public void ARankingKeepingNoGroupsIsRejectedByTheBuilderItself()
+    {
+        // The tag helper refuses this too, but the fluent API is a separate front
+        // door and an empty table is a poor way to report a typo.
+        Assert.Throws<ArgumentOutOfRangeException>(() => SalesGrid().TopN("Region", 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SalesGrid().TopN("Region", -1));
+    }
+
+    [Fact]
+    public void ARankingWithoutAFieldIsRejectedByTheBuilderItself()
+    {
+        Assert.Throws<ArgumentException>(() => SalesGrid().TopN("  ", 3));
+    }
+
+    [Fact]
+    public void ARankingReachesTheConfiguration()
+    {
+        var config = ConfigOf(SalesGrid().TopN("Region", 3, "Amount_sum", PivotTopNMode.Bottom));
+
+        var ranking = config.GetProperty("topN")[0];
+        Assert.Equal("Region", ranking.GetProperty("field").GetString());
+        Assert.Equal(3, ranking.GetProperty("count").GetInt32());
+        Assert.Equal("Amount_sum", ranking.GetProperty("valueKey").GetString());
+        Assert.Equal("Bottom", ranking.GetProperty("mode").GetString());
+    }
+
+    [Fact]
     public void StateStoringAndKeyReachTheConfiguration()
     {
         var config = ConfigOf(SalesGrid()
