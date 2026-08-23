@@ -86,7 +86,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
 | `showGrandTotals` (alan başına) | ❌ | ❌ | Yalnızca tablo geneli |
 | `dataType` | ❌ | ❌ | Tür dönüşümü yok |
-| `groupInterval` (yıl/çeyrek/ay/gün) | ❌ | ❌ | **Önemli** — tarih gruplaması için ayrı alan açmak gerekiyor |
+| `groupInterval` (yıl/çeyrek/ay/gün) | ✅ | ✅ | `group-interval` niteliği ve `GroupInterval()` metodu; aynı kolon birden fazla seviyede |
 | `selector` / `sortingMethod` | ❌ | ❌ | Özel gruplama/sıralama fonksiyonu |
 | `customizeText` | ❌ | ❌ | Hücre metnini özelleştirme |
 | `calculateCustomSummary` | ❌ | ❌ | Bkz. Bölüm 3 |
@@ -117,7 +117,13 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
       toplanmaya değer seviyelerde toplam gösterebiliyor
 - [ ] Alan başına `show-grand-totals` — DevExpress'te sütun yönünde de anlamı
       var, renderer'da karşılığı yok; ayrı bir tasarım kararı gerektiriyor
-- [ ] `group-interval` — tarih alanlarını yıl/çeyrek/ay/gün olarak gruplama
+- [x] `group-interval` — tarih alanlarını yıl/çeyrek/ay/gün/haftanın-günü olarak
+      gruplama. Gruplama başlığın okunduğu yerde olduğu için kaynakta ikinci bir
+      kolon gerekmiyor ve **aynı kolon birden fazla seviyede** yer alabiliyor;
+      bu yüzden bir seviye artık alan adıyla değil `alan:aralık` anahtarıyla
+      tanımlanıyor (`PivotFieldRef`). Etiket ile sıra tek konu: ay adı olarak
+      okunur, ay numarasına göre sıralanır. Filtre, drill-down ve değer seçici
+      aynı gruplamadan geçiyor
 - [ ] `data-type` ve tür dönüşümü
 - [ ] `width`, `word-wrap`
 - [ ] Alan başına `allow-sorting` / `allow-filtering`

@@ -50,7 +50,9 @@
     constructor(catalog, layout = null) {
       const normalized = PivotForge.PivotRequestBuilder.normalizeFields(catalog ?? []);
 
-      this.catalog = new Map(normalized.map(field => [field.dataField, field]));
+      // Keyed by level rather than by column: one date column grouped by year and
+      // again by month is two entries, and dataField alone cannot tell them apart.
+      this.catalog = new Map(normalized.map(field => [field.key, field]));
       // A caption the user typed, overriding the catalog's. Kept apart from the
       // catalog so resetting is just forgetting the override, and so the
       // declared caption is always recoverable.
@@ -76,16 +78,16 @@
       const inArea = area => fields.filter(field => field.area === area && field.visible);
 
       return {
-        rows: inArea("row").map(field => field.dataField),
-        columns: inArea("column").map(field => field.dataField),
+        rows: inArea("row").map(field => field.key),
+        columns: inArea("column").map(field => field.key),
         values: inArea("data").map(field => ({
-          field: field.dataField,
+          field: field.key,
           aggregation: field.aggregation ?? "sum",
           showAs: field.showAs ?? "normal",
-          ...(field.format ? { format: checkFormat(field.dataField, field.format) } : {})
+          ...(field.format ? { format: checkFormat(field.key, field.format) } : {})
         })),
         filters: inArea("filter").map(field =>
-          ({ field: field.dataField, values: [], mode: "Include" }))
+          ({ field: field.key, values: [], mode: "Include" }))
       };
     }
 
@@ -501,7 +503,7 @@
 
       return [
         ...state.rows.map(name => ({
-          dataField: name,
+          ...this.sourceOf(name),
           caption: captionOf(name),
           area: "row",
           format: formatOf(name),
@@ -509,7 +511,7 @@
           ...declaredIn(name, "row")
         })),
         ...state.columns.map(name => ({
-          dataField: name,
+          ...this.sourceOf(name),
           caption: captionOf(name),
           area: "column",
           format: formatOf(name),
@@ -517,7 +519,7 @@
           ...declaredIn(name, "column")
         })),
         ...state.values.map(value => ({
-          dataField: value.field,
+          ...this.sourceOf(value.field),
           caption: captionOf(value.field),
           area: "data",
           aggregation: value.aggregation,
@@ -529,13 +531,25 @@
         // filtered from its header has an entry too, and emitting that as a
         // filter-area field would place the same field twice.
         ...state.filters.filter(filter => this.areaOf(filter.field) === "filter").map(filter => ({
-          dataField: filter.field,
+          ...this.sourceOf(filter.field),
           caption: captionOf(filter.field),
           area: "filter",
           format: formatOf(filter.field),
           visible: visibleOf(filter.field)
         }))
       ];
+    }
+
+    // The layout names levels; a field declaration names a source column and the
+    // interval it is grouped by. The catalog entry carries both, so this is where
+    // one turns back into the other.
+    sourceOf(name) {
+      const field = this.catalog.get(name);
+
+      return {
+        dataField: field?.dataField ?? name,
+        ...(field?.groupInterval ? { groupInterval: field.groupInterval } : {})
+      };
     }
 
     toRequestState() {

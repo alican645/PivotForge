@@ -87,6 +87,17 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("sort-order")]
     public PivotSortDirection SortOrder { get; set; }
 
+    /// <summary>Gets or sets the date interval this field's values are grouped into.</summary>
+    /// <remarks>
+    /// Collapses dates to their year, quarter, month, day or weekday. The same column may be
+    /// declared more than once at different intervals, which is how a year over month hierarchy
+    /// is built without a second source column. Not valid on a <c>Data</c> field. Declared
+    /// non-nullable so Razor accepts the unqualified <c>group-interval="Month"</c> form; whether
+    /// the author wrote it is tracked through the element's attributes.
+    /// </remarks>
+    [HtmlAttributeName("group-interval")]
+    public PivotGroupInterval GroupInterval { get; set; }
+
     /// <summary>The attribute names the view author actually wrote on this element.</summary>
     private HashSet<string> _writtenAttributes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -192,6 +203,13 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (AreaIndex is { } areaIndex)
         {
             builder.AreaIndex(areaIndex);
+        }
+
+        // None is the enum's default value, so an undeclared attribute would be
+        // indistinguishable from group-interval="None" without this.
+        if (_writtenAttributes.Contains("group-interval"))
+        {
+            builder.GroupInterval(GroupInterval);
         }
 
         // Ascending is the enum's default value, so only the written-attribute set

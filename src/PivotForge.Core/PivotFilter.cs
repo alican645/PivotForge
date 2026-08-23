@@ -6,10 +6,14 @@ namespace PivotForge.Core;
 /// empty string, so <c>""</c> — not <c>null</c> — is the entry that matches blanks. An empty
 /// list restricts nothing, in either mode.</param>
 /// <param name="Mode">Whether the listed values are the ones kept or the ones dropped.</param>
+/// <param name="Interval">The date interval the listed values are groups of. A filter set from a
+/// grouped header lists group labels — month names rather than dates — so it has to collapse the
+/// source value the same way the header did before comparing.</param>
 public sealed record PivotFilter(
     string Field,
     IReadOnlyList<string?> Values,
-    PivotFilterMode Mode = PivotFilterMode.Include);
+    PivotFilterMode Mode = PivotFilterMode.Include,
+    PivotGroupInterval Interval = PivotGroupInterval.None);
 
 /// <summary>Specifies how a filter's listed values are applied.</summary>
 /// <remarks>

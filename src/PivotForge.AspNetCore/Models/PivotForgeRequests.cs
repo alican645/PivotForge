@@ -5,11 +5,13 @@ namespace PivotForge.AspNetCore.Models;
 /// <summary>Describes a pivot operation received by an ASP.NET Core endpoint.</summary>
 public class PivotForgeRequest
 {
-    /// <summary>Gets the source fields that form row headers.</summary>
-    public IReadOnlyList<string> Rows { get; init; } = [];
+    /// <summary>Gets the header levels that form rows.</summary>
+    /// <remarks>Each entry is a field name, or an object carrying a <c>field</c> and an
+    /// <c>interval</c> when the level groups dates.</remarks>
+    public IReadOnlyList<PivotFieldRef> Rows { get; init; } = [];
 
-    /// <summary>Gets the source fields that form column headers.</summary>
-    public IReadOnlyList<string> Columns { get; init; } = [];
+    /// <summary>Gets the header levels that form columns.</summary>
+    public IReadOnlyList<PivotFieldRef> Columns { get; init; } = [];
 
     /// <summary>Gets the values to aggregate.</summary>
     public IReadOnlyList<PivotValueDefinition> Values { get; init; } = [];
@@ -65,6 +67,11 @@ public sealed class PivotForgeFieldValuesRequest
 {
     /// <summary>Gets the source field whose values are listed.</summary>
     public string Field { get; init; } = "";
+
+    /// <summary>Gets the date interval the listed values are groups of.</summary>
+    /// <remarks>A picker opened from a grouped header lists what that header shows — month
+    /// names rather than timestamps — because that is what the filter will compare against.</remarks>
+    public PivotGroupInterval Interval { get; init; } = PivotGroupInterval.None;
 
     /// <summary>Gets the source-row hint passed to the configured data provider.</summary>
     public int SourceRowCount { get; init; } = 100_000;

@@ -20,6 +20,7 @@ public sealed class PivotFieldBuilder
     private bool? _showTotals;
     private int? _areaIndex;
     private PivotSortDirection? _sortOrder;
+    private PivotGroupInterval? _groupInterval;
 
     /// <summary>Sets the source field name.</summary>
     /// <param name="dataField">The source field name.</param>
@@ -200,6 +201,21 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Collapses a date field's values into year, quarter, month, day or weekday groups.</summary>
+    /// <remarks>
+    /// Grouping happens where the header is read, so no second source column is needed — and the
+    /// same column may be declared more than once at different intervals, which is how a
+    /// year over quarter over month hierarchy is built. Not valid on a
+    /// <see cref="PivotArea.Data"/> field: a measure is aggregated rather than grouped.
+    /// </remarks>
+    /// <param name="interval">The interval the field's dates are collapsed to.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder GroupInterval(PivotGroupInterval interval)
+    {
+        _groupInterval = interval;
+        return this;
+    }
+
     /// <summary>Builds the browser field configuration.</summary>
     /// <returns>A dictionary matching the JavaScript field model.</returns>
     /// <exception cref="InvalidOperationException">
@@ -260,6 +276,15 @@ public sealed class PivotFieldBuilder
                 "SortOrder is only valid on fields whose Area is Row or Column.");
         }
 
+        // A measure is aggregated, not grouped: collapsing it to a month would
+        // leave nothing to sum.
+        if (_area == PivotArea.Data && _groupInterval is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets GroupInterval, but its Area is \"{_area}\". " +
+                "GroupInterval is only valid on fields whose Area is not Data.");
+        }
+
         // Only a data field produces the numbers the renderer formats.
         if (_area != PivotArea.Data && HasFormat)
         {
@@ -288,6 +313,11 @@ public sealed class PivotFieldBuilder
         if (_showAs is { } showAs)
         {
             field["showAs"] = ToCamelCase(showAs.ToString());
+        }
+
+        if (_groupInterval is { } groupInterval and not PivotGroupInterval.None)
+        {
+            field["groupInterval"] = ToCamelCase(groupInterval.ToString());
         }
 
         if (_expanded is { } expanded)

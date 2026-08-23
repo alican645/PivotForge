@@ -185,6 +185,7 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         {
             var values = await executor.DistinctValuesAsync(
                 request.Field,
+                request.Interval,
                 sourceRowCount,
                 cancellationToken);
             var visibleValues = values.Take(options.FieldValueLimit).ToArray();

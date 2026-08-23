@@ -91,6 +91,21 @@ PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking 
 
 ### Behaviour changes in `0.6.0-preview.1`
 
+- **A header axis is a list of levels, not a list of field names.**
+  `PivotRequest.Rows` and `PivotRequest.Columns` are now
+  `IReadOnlyList<PivotFieldRef>`, where a `PivotFieldRef` is a source field plus
+  an optional `PivotGroupInterval`. A field name converts to one implicitly, so
+  `Rows = ["Region"]` still compiles and means what it did; code that *reads*
+  `request.Rows` as strings does not. The change buys what a name alone could
+  not express: the same date column at two intervals, which is what a year over
+  month hierarchy is.
+
+  With it, `PivotFilter` gained an `Interval`, `PivotEngine.DistinctValues`
+  gained an optional one, and both collapse the source value the same way the
+  header did before comparing. On the wire a plain level is still the bare
+  string it always was; a grouped one is `{"field","interval"}`, and a string is
+  never split on its colon, so a column called `A:B` is unaffected.
+
 - **On-screen text defaults to English.** Every string the grid, the field
   designer, the filter value picker and the detail modal put on screen was
   Turkish and is now English. Turkish moves into a locale pack — reference
@@ -105,6 +120,13 @@ PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking 
   New with it: `locale` / `Locale(string)` on the grid, `designerLabels` on the
   widget — the field designer's labels had no declarative path at all before,
   and `designerLabels.filterPicker` reaches the value picker the designer opens.
+
+- **`group-interval` / `GroupInterval(PivotGroupInterval)`** collapses a date
+  field into year, quarter, month, day or weekday header groups. Labels come
+  from the resolved culture and order by the interval rather than the alphabet;
+  a grouped column axis therefore orders itself instead of keeping arrival
+  order. In the browser a level is identified by `field:interval`, which is what
+  `rowFields`, `fieldSorts`, a filter entry and the header funnel all name.
 
 - **A filter belongs to the field, not to the Filters zone.** Every row field's
   header cell in the rendered table carries a `▼` that opens the same

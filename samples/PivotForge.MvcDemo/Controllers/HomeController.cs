@@ -14,6 +14,8 @@ public sealed class HomeController : Controller
 
     public IActionResult TagHelpers() => View(SampleSalesData.Create());
 
+    public IActionResult Grouping() => View(SampleSalesData.Create());
+
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error() =>
         View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });

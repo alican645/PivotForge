@@ -1,5 +1,6 @@
 using System.Data;
 using System.Globalization;
+using PivotForge.Core.Grouping;
 using PivotForge.Core.Aggregation;
 using PivotForge.Core.Records;
 
@@ -129,7 +130,7 @@ public sealed class PivotEngine
         ArgumentNullException.ThrowIfNull(columnPath);
 
         var materialized = records.ToList();
-        return DrillDownCore(materialized.Cast<object>(), request, rowPath, columnPath, new ObjectRecordReader<T>())
+        return DrillDownCore(materialized.Cast<object>(), request, rowPath, columnPath, new ObjectRecordReader<T>(), Culture)
             .Cast<T>()
             .ToArray();
     }
@@ -151,7 +152,7 @@ public sealed class PivotEngine
         ArgumentNullException.ThrowIfNull(rowPath);
         ArgumentNullException.ThrowIfNull(columnPath);
 
-        return DrillDownCore(table.Rows.Cast<DataRow>().Cast<object>(), request, rowPath, columnPath, new DataTableRecordReader(table))
+        return DrillDownCore(table.Rows.Cast<DataRow>().Cast<object>(), request, rowPath, columnPath, new DataTableRecordReader(table), Culture)
             .Cast<DataRow>()
             .ToArray();
     }
@@ -179,7 +180,7 @@ public sealed class PivotEngine
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return DrillDownCore(materialized.Cast<object>(), request, rowPath, columnPath, new DictionaryRecordReader(fields))
+        return DrillDownCore(materialized.Cast<object>(), request, rowPath, columnPath, new DictionaryRecordReader(fields), Culture)
             .Cast<IReadOnlyDictionary<string, object?>>()
             .ToArray();
     }
@@ -189,18 +190,28 @@ public sealed class PivotEngine
     /// <param name="records">The source records.</param>
     /// <param name="field">The source field name.</param>
     /// <returns>The distinct values a filter on this field can accept, in value order.</returns>
-    public IReadOnlyList<string?> DistinctValues<T>(IEnumerable<T> records, string field)
+    /// <param name="interval">The date interval to collapse the values to, so the list holds the
+    /// groups a header shows rather than the raw dates behind them.</param>
+    public IReadOnlyList<string?> DistinctValues<T>(
+        IEnumerable<T> records,
+        string field,
+        PivotGroupInterval interval = PivotGroupInterval.None)
     {
         ArgumentNullException.ThrowIfNull(records);
 
-        return DistinctValuesCore(records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture);
+        return DistinctValuesCore(records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture, interval);
     }
 
     /// <summary>Returns the distinct display values of a data table column.</summary>
     /// <param name="table">The source data table.</param>
     /// <param name="field">The source column name.</param>
     /// <returns>The distinct values a filter on this column can accept, in value order.</returns>
-    public IReadOnlyList<string?> DistinctValues(DataTable table, string field)
+    /// <param name="interval">The date interval to collapse the values to, so the list holds the
+    /// groups a header shows rather than the raw dates behind them.</param>
+    public IReadOnlyList<string?> DistinctValues(
+        DataTable table,
+        string field,
+        PivotGroupInterval interval = PivotGroupInterval.None)
     {
         ArgumentNullException.ThrowIfNull(table);
 
@@ -208,16 +219,20 @@ public sealed class PivotEngine
             table.Rows.Cast<DataRow>().Cast<object>(),
             field,
             new DataTableRecordReader(table),
-            Culture);
+            Culture,
+            interval);
     }
 
     /// <summary>Returns the distinct display values of a field in dictionary-backed records.</summary>
     /// <param name="records">The source records.</param>
     /// <param name="field">The source field name.</param>
     /// <returns>The distinct values a filter on this field can accept, in value order.</returns>
+    /// <param name="interval">The date interval to collapse the values to, so the list holds the
+    /// groups a header shows rather than the raw dates behind them.</param>
     public IReadOnlyList<string?> DistinctValuesRecords(
         IEnumerable<IReadOnlyDictionary<string, object?>> records,
-        string field)
+        string field,
+        PivotGroupInterval interval = PivotGroupInterval.None)
     {
         ArgumentNullException.ThrowIfNull(records);
 
@@ -231,14 +246,16 @@ public sealed class PivotEngine
             materialized.Cast<object>(),
             field,
             new DictionaryRecordReader(fields),
-            Culture);
+            Culture,
+            interval);
     }
 
     private static IReadOnlyList<string?> DistinctValuesCore(
         IEnumerable<object> records,
         string field,
         IRecordReader reader,
-        CultureInfo culture)
+        CultureInfo culture,
+        PivotGroupInterval interval = PivotGroupInterval.None)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
 
@@ -256,7 +273,9 @@ public sealed class PivotEngine
         foreach (var record in records)
         {
             var value = reader.GetValue(record, field);
-            var text = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "";
+            // The picker lists what the header shows, because that is what the
+            // filter will be compared against.
+            var text = PivotGroupLabels.Label(value, interval, culture) ?? "";
 
             // A null source value converts to the empty string here exactly as it
             // does when a filter is matched, so blank is a selectable value — but
@@ -270,7 +289,11 @@ public sealed class PivotEngine
             seen.TryAdd(text, value);
         }
 
-        var ordered = OrderDistinctValues(seen, culture);
+        var ordered = PivotGroupLabels.Order(interval, culture) is { } intervalOrder
+            // A grouped list runs in its interval's order, not its labels' --
+            // the same reason a month column does not sort alphabetically.
+            ? seen.Keys.OrderBy(label => (string?)label, intervalOrder).ToArray()
+            : OrderDistinctValues(seen, culture);
 
         // Blank leads the list rather than being sorted into it, the way every
         // spreadsheet filter presents it.
@@ -311,7 +334,8 @@ public sealed class PivotEngine
         PivotRequest request,
         IReadOnlyList<string?> rowPath,
         IReadOnlyList<string?> columnPath,
-        IRecordReader reader)
+        IRecordReader reader,
+        CultureInfo culture)
     {
         ValidateRequest(request, reader);
         ValidateDrillDownPath(rowPath, request.Rows, nameof(rowPath));
@@ -319,15 +343,15 @@ public sealed class PivotEngine
         var filters = CompileFilters(request.Filters);
 
         return records
-            .Where(record => MatchesFilters(record, filters, reader))
-            .Where(record => MatchesDrillDownPath(record, request.Rows, rowPath, reader))
-            .Where(record => MatchesDrillDownPath(record, request.Columns, columnPath, reader))
+            .Where(record => MatchesFilters(record, filters, reader, culture))
+            .Where(record => MatchesDrillDownPath(record, request.Rows, rowPath, reader, culture))
+            .Where(record => MatchesDrillDownPath(record, request.Columns, columnPath, reader, culture))
             .ToArray();
     }
 
     private static void ValidateDrillDownPath(
         IReadOnlyList<string?> path,
-        IReadOnlyList<string> fields,
+        IReadOnlyList<PivotFieldRef> fields,
         string parameterName)
     {
         if (path.Count > fields.Count)
@@ -338,15 +362,17 @@ public sealed class PivotEngine
 
     private static bool MatchesDrillDownPath(
         object record,
-        IReadOnlyList<string> fields,
+        IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<string?> path,
-        IRecordReader reader)
+        IRecordReader reader,
+        CultureInfo culture)
     {
         for (var index = 0; index < path.Count; index++)
         {
-            var value = Convert.ToString(
-                reader.GetValue(record, fields[index]),
-                System.Globalization.CultureInfo.InvariantCulture);
+            // The path carries what the header showed, so the record has to be
+            // collapsed to that same group before it can be compared.
+            var value = PivotGroupLabels.Label(
+                reader.GetValue(record, fields[index].Field), fields[index].Interval, culture);
 
             if (!string.Equals(value, path[index], StringComparison.Ordinal))
             {
@@ -386,15 +412,15 @@ public sealed class PivotEngine
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
-            if (!MatchesFilters(record, filters, reader))
+            if (!MatchesFilters(record, filters, reader, culture))
             {
                 continue;
             }
 
             sourceRowCount++;
 
-            var rowValues = ReadHeaderValues(record, request.Rows, reader);
-            var columnValues = ReadHeaderValues(record, request.Columns, reader);
+            var rowValues = ReadHeaderValues(record, request.Rows, reader, culture);
+            var columnValues = ReadHeaderValues(record, request.Columns, reader, culture);
             TrackColumnLevelValues(columnLevelValues, columnValues);
             var row = rowIndex.GetOrAdd(rowValues);
             var column = columnIndex.GetOrAdd(columnValues);
@@ -436,6 +462,7 @@ public sealed class PivotEngine
         var columnHeaders = CreateColumnHeaders(
             columnIndex.Headers,
             columnLevelValues,
+            request.Columns,
             ResolveLevelDirections(request.Columns, request.FieldSorts),
             culture);
         var columnLookup = CreateHeaderLookup(columnHeaders);
@@ -830,8 +857,7 @@ public sealed class PivotEngine
             throw new ArgumentException("At least one pivot value definition is required.", nameof(request));
         }
 
-        foreach (var field in request.Rows
-                     .Concat(request.Columns)
+        foreach (var field in request.Rows.Concat(request.Columns).Select(level => level.Field)
                      .Concat(request.Values.Select(value => value.Field))
                      .Concat(request.Filters.Select(filter => filter.Field)))
         {
@@ -857,11 +883,16 @@ public sealed class PivotEngine
             .Select(filter => new CompiledFilter(
                 filter.Field,
                 new HashSet<string?>(filter.Values, StringComparer.Ordinal),
-                filter.Mode == PivotFilterMode.Exclude))
+                filter.Mode == PivotFilterMode.Exclude,
+                filter.Interval))
             .ToArray();
     }
 
-    private static bool MatchesFilters(object record, IReadOnlyList<CompiledFilter> filters, IRecordReader reader)
+    private static bool MatchesFilters(
+        object record,
+        IReadOnlyList<CompiledFilter> filters,
+        IRecordReader reader,
+        CultureInfo culture)
     {
         if (filters.Count == 0)
         {
@@ -870,7 +901,10 @@ public sealed class PivotEngine
 
         foreach (var filter in filters)
         {
-            var value = Convert.ToString(reader.GetValue(record, filter.Field), System.Globalization.CultureInfo.InvariantCulture);
+            // Collapsed the same way the header was, or a filter listing month
+            // names would be compared against raw timestamps and match nothing.
+            var value = PivotGroupLabels.Label(
+                reader.GetValue(record, filter.Field), filter.Interval, culture);
 
             if (filter.Values.Contains(value) == filter.Excludes)
             {
@@ -881,10 +915,15 @@ public sealed class PivotEngine
         return true;
     }
 
-    private static IReadOnlyList<string?> ReadHeaderValues(object record, IEnumerable<string> fields, IRecordReader reader)
+    private static IReadOnlyList<string?> ReadHeaderValues(
+        object record,
+        IEnumerable<PivotFieldRef> fields,
+        IRecordReader reader,
+        CultureInfo culture)
     {
         return fields
-            .Select(field => Convert.ToString(reader.GetValue(record, field), System.Globalization.CultureInfo.InvariantCulture))
+            .Select(field => PivotGroupLabels.Label(
+                reader.GetValue(record, field.Field), field.Interval, culture))
             .ToArray();
     }
 
@@ -917,6 +956,7 @@ public sealed class PivotEngine
     private static IReadOnlyList<IReadOnlyList<string?>> CreateColumnHeaders(
         IReadOnlyList<IReadOnlyList<string?>> observedHeaders,
         IReadOnlyList<IReadOnlyList<string?>> columnLevelValues,
+        IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotSortDirection?> directions,
         CultureInfo culture)
     {
@@ -927,29 +967,39 @@ public sealed class PivotEngine
 
         var headers = new List<IReadOnlyList<string?>>();
         AppendColumnHeaderProducts(
-            headers, OrderColumnLevels(columnLevelValues, directions, culture), [], 0);
+            headers, OrderColumnLevels(columnLevelValues, fields, directions, culture), [], 0);
         return headers;
     }
 
     /// <summary>Orders the values of each declared column level, leaving the rest as observed.</summary>
     /// <remarks>An undeclared level keeps the order the data arrived in, which can carry an
     /// intent the engine cannot see — a query's own ORDER BY on month number, for instance,
-    /// which alphabetical ordering would destroy.</remarks>
+    /// which alphabetical ordering would destroy. A grouped level is the exception: the engine
+    /// produced those labels itself and knows what order they run in, so it applies it rather
+    /// than trusting an arrival order it no longer reflects.</remarks>
     private static IReadOnlyList<IReadOnlyList<string?>> OrderColumnLevels(
         IReadOnlyList<IReadOnlyList<string?>> columnLevelValues,
+        IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotSortDirection?> directions,
         CultureInfo culture)
     {
-        var comparer = StringComparer.Create(culture, ignoreCase: true);
-
         return columnLevelValues
-            .Select((values, level) => directions.ElementAtOrDefault(level) switch
+            .Select((values, level) =>
             {
-                PivotSortDirection.Ascending =>
-                    (IReadOnlyList<string?>)values.OrderBy(value => value, comparer).ToArray(),
-                PivotSortDirection.Descending =>
-                    values.OrderByDescending(value => value, comparer).ToArray(),
-                _ => values
+                var interval = fields.ElementAtOrDefault(level)?.Interval ?? PivotGroupInterval.None;
+                var intervalOrder = PivotGroupLabels.Order(interval, culture);
+                var comparer = intervalOrder ?? StringComparer.Create(culture, ignoreCase: true);
+
+                return directions.ElementAtOrDefault(level) switch
+                {
+                    PivotSortDirection.Ascending =>
+                        (IReadOnlyList<string?>)values.OrderBy(value => value, comparer).ToArray(),
+                    PivotSortDirection.Descending =>
+                        values.OrderByDescending(value => value, comparer).ToArray(),
+                    _ => intervalOrder is null
+                        ? values
+                        : values.OrderBy(value => value, intervalOrder).ToArray()
+                };
             })
             .ToArray();
     }
@@ -1017,7 +1067,7 @@ public sealed class PivotEngine
                 .OrderBy(
                     row => rowHeaders[row],
                     Comparer<IReadOnlyList<string?>>.Create(
-                        (left, right) => CompareRowHeaders(left, right, culture, directions)))
+                        (left, right) => CompareRowHeaders(left, right, request.Rows, culture, directions)))
                 .ToArray()
             : sort.Mode switch
         {
@@ -1058,15 +1108,18 @@ public sealed class PivotEngine
     private static int CompareRowHeaders(
         IReadOnlyList<string?> left,
         IReadOnlyList<string?> right,
+        IReadOnlyList<PivotFieldRef> fields,
         CultureInfo culture,
         IReadOnlyList<PivotSortDirection?> directions)
     {
-        var comparer = StringComparer.Create(culture, ignoreCase: true);
         var depth = Math.Max(left.Count, right.Count);
 
         for (var level = 0; level < depth; level++)
         {
-            var comparison = comparer.Compare(left.ElementAtOrDefault(level), right.ElementAtOrDefault(level));
+            // Per level rather than once: a grouped level runs in its interval's
+            // order while the plain levels around it stay collated.
+            var comparison = LevelComparer(fields, level, culture)
+                .Compare(left.ElementAtOrDefault(level), right.ElementAtOrDefault(level));
 
             if (comparison != 0)
             {
@@ -1084,7 +1137,7 @@ public sealed class PivotEngine
 
     /// <summary>Maps the declared per-field sorts onto header levels, by position in the axis.</summary>
     private static IReadOnlyList<PivotSortDirection?> ResolveLevelDirections(
-        IReadOnlyList<string> fields,
+        IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotFieldSort> fieldSorts)
     {
         if (fieldSorts.Count == 0)
@@ -1094,7 +1147,7 @@ public sealed class PivotEngine
 
         return fields
             .Select(field => fieldSorts
-                .Where(sort => string.Equals(sort.Field, field, StringComparison.Ordinal))
+                .Where(sort => NamesLevel(sort.Field, field))
                 .Select(sort => (PivotSortDirection?)sort.Direction)
                 .FirstOrDefault())
             .ToArray();
@@ -1103,17 +1156,38 @@ public sealed class PivotEngine
     private static int[] SortRowsByLabel(
         int[] rowOrder,
         IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
-        IReadOnlyList<string> rowFields,
+        IReadOnlyList<PivotFieldRef> rowFields,
         PivotSort sort,
         CultureInfo culture)
     {
         var level = ResolveRowFieldLevel(rowFields, sort.Field);
+        // A grouped level sorts the way its interval runs even when the reader
+        // asked for a label sort: alphabetical month names are not what anyone
+        // means by sorting a month column.
+        var comparer = LevelComparer(rowFields, level, culture);
 
         return ApplyDirection(
-            rowOrder.OrderBy(
-                row => rowHeaders[row].ElementAtOrDefault(level),
-                StringComparer.Create(culture, ignoreCase: true)),
+            rowOrder.OrderBy(row => rowHeaders[row].ElementAtOrDefault(level), comparer),
             sort.Direction);
+    }
+
+    /// <summary>Whether a declared sort or filter names a given header level.</summary>
+    /// <remarks>A grouped level answers to its key — <c>OrderDate:month</c> — and a plain one to
+    /// its field name, which are the same string. A bare field name also names every grouped
+    /// level of that field, so a declaration written before the grouping existed still lands.</remarks>
+    private static bool NamesLevel(string? name, PivotFieldRef field) =>
+        string.Equals(name, field.Key, StringComparison.Ordinal) ||
+        string.Equals(name, field.Field, StringComparison.Ordinal);
+
+    /// <summary>The comparer a header level is ordered by: its interval's, or the culture's.</summary>
+    private static IComparer<string?> LevelComparer(
+        IReadOnlyList<PivotFieldRef> fields,
+        int level,
+        CultureInfo culture)
+    {
+        var interval = fields.ElementAtOrDefault(level)?.Interval ?? PivotGroupInterval.None;
+
+        return PivotGroupLabels.Order(interval, culture) ?? StringComparer.Create(culture, ignoreCase: true);
     }
 
     private static int[] SortRowsByTotal(
@@ -1201,7 +1275,7 @@ public sealed class PivotEngine
         return true;
     }
 
-    private static int ResolveRowFieldLevel(IReadOnlyList<string> rowFields, string? field)
+    private static int ResolveRowFieldLevel(IReadOnlyList<PivotFieldRef> rowFields, string? field)
     {
         if (string.IsNullOrWhiteSpace(field))
         {
@@ -1210,7 +1284,7 @@ public sealed class PivotEngine
 
         var index = rowFields
             .Select((item, itemIndex) => new { item, itemIndex })
-            .FirstOrDefault(item => string.Equals(item.item, field, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(item => NamesLevel(field, item.item))
             ?.itemIndex;
 
         return index ?? 0;
@@ -1228,7 +1302,11 @@ public sealed class PivotEngine
         return rows;
     }
 
-    private sealed record CompiledFilter(string Field, HashSet<string?> Values, bool Excludes);
+    private sealed record CompiledFilter(
+        string Field,
+        HashSet<string?> Values,
+        bool Excludes,
+        PivotGroupInterval Interval);
 
     private sealed record SortedRows(
         IReadOnlyList<IReadOnlyList<string?>> Headers,

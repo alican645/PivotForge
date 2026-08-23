@@ -7,6 +7,9 @@
   const FORMAT_TYPES = ["number", "currency", "percent"];
   const SORT_ORDERS = ["Ascending", "Descending"];
   const FILTER_MODES = ["Include", "Exclude"];
+  // Date groupings. Spelled as the engine's enum reads them, lowercased, because
+  // that spelling is also half of a grouped level's identity.
+  const GROUP_INTERVALS = ["year", "quarter", "month", "day", "dayOfWeek"];
   const SHOW_AS = [
     "normal",
     "percentOfRowTotal",
@@ -112,6 +115,22 @@
       );
     }
 
+    // A measure is aggregated, not grouped: collapsing it to a month would leave
+    // nothing to sum. Everything else may group, including a field waiting in
+    // the available list.
+    if (isData && field.groupInterval !== undefined) {
+      throw new Error(
+        `"groupInterval" is only valid on a dimension field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+
+    const groupInterval = isData ? null : field.groupInterval ?? null;
+    if (groupInterval !== null && !GROUP_INTERVALS.includes(groupInterval)) {
+      throw new Error(
+        `Unknown groupInterval "${groupInterval}" on field "${dataField}". Expected one of: ${GROUP_INTERVALS.join(", ")}.`
+      );
+    }
+
     const sortOrder = isDimensionAxis ? field.sortOrder ?? null : null;
     if (sortOrder !== null && !SORT_ORDERS.includes(sortOrder)) {
       throw new Error(
@@ -121,6 +140,12 @@
 
     return {
       dataField,
+      // What identifies this level everywhere except the source query: a date
+      // column grouped by year and again by month is two levels, and dataField
+      // alone cannot tell them apart. A plain field is its own key, so nothing
+      // that existed before grouping changes shape.
+      key: groupInterval === null ? dataField : `${dataField}:${groupInterval}`,
+      groupInterval,
       area,
       role,
       areaIndex: areaIndex ?? null,
@@ -221,21 +246,39 @@
       throw new Error('A pivot configuration requires at least one field with area "data".');
     }
 
+    // A plain level goes on the wire as the field name it always was; a grouped
+    // one has to say which interval it is, because the same column can be there
+    // twice.
+    const level = field => field.groupInterval === null
+      ? field.dataField
+      : { field: field.dataField, interval: field.groupInterval };
+
     return {
-      rows: inArea("row").map(field => field.dataField),
-      columns: inArea("column").map(field => field.dataField),
+      rows: inArea("row").map(level),
+      columns: inArea("column").map(level),
       values: values.map(field => ({
         field: field.dataField,
         aggregation: field.aggregation,
         showAs: field.showAs
       })),
-      filters: (extras.filters ?? []).map(normalizeFilter),
+      // A filter names a level, so a grouped one has to be translated back into
+      // the source field plus the interval its values are groups of -- the
+      // engine compares month names against months, not against timestamps.
+      filters: (extras.filters ?? []).map((filter, index) => {
+        const normalizedFilter = normalizeFilter(filter, index);
+        const grouped = normalized.find(
+          field => field.key === normalizedFilter.field && field.groupInterval !== null);
+
+        return grouped
+          ? { ...normalizedFilter, field: grouped.dataField, interval: grouped.groupInterval }
+          : normalizedFilter;
+      }),
       rowSort: extras.rowSort ?? null,
       // Named rather than positional so the list survives a field moving to
       // another area, and so a later per-field sortBy has somewhere to live.
       fieldSorts: normalized
         .filter(field => field.sortOrder !== null)
-        .map(field => ({ field: field.dataField, direction: field.sortOrder }))
+        .map(field => ({ field: field.key, direction: field.sortOrder }))
     };
   }
 
