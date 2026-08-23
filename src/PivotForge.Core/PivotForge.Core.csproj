@@ -19,7 +19,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageIcon>pivotforge-icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>No engine changes: this release moves the browser package's on-screen text to English defaults with locale packs. Version bumped to keep the two packages in step.</PackageReleaseNotes>
+    <PackageReleaseNotes>Adds PivotGroupInterval: a date column collapses into year, quarter, month, day or weekday header groups, and the same column may occupy several levels at once, so a year over month hierarchy needs no second source column. Breaking: PivotRequest.Rows and Columns are now IReadOnlyList of PivotFieldRef rather than of string. A field name converts implicitly, so Rows = ["Region"] still compiles; code that reads request.Rows as strings does not. Labels come from the resolved culture and order by the interval rather than the alphabet. PivotFilter gained an Interval and DistinctValues an optional one, so a filter set from a month header compares month names against months.</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

@@ -271,7 +271,7 @@
         // stored by an older or a tampered-with client should still open.
         filters: Array.isArray(payload.filters)
           ? payload.filters.filter(filter =>
-            this.fields.some(field => field.dataField === filter?.field) &&
+            this.fields.some(field => field.key === filter?.field) &&
             Array.isArray(filter.values) &&
             (filter.mode === undefined ||
               PivotForge.PivotRequestBuilder.FILTER_MODES.includes(filter.mode)))
@@ -410,7 +410,7 @@
 
       return new Renderer(this.container, {
         ...localeTable,
-        rowFields: rowFields.map(field => field.dataField),
+        rowFields: rowFields.map(field => field.key),
         rowFieldLabels: rowFields.map(field => field.caption),
         rowFieldExpanded: rowFields.map(field => field.expanded),
         rowFieldSubtotals: rowFields.map(field => field.showTotals),
@@ -541,7 +541,7 @@
 
       return this.headerFilterPicker.open({
         field,
-        caption: this.fields.find(entry => entry.dataField === field)?.caption ?? field,
+        caption: this.fields.find(entry => entry.key === field)?.caption ?? field,
         selected: current?.values ?? [],
         mode: current?.mode ?? "Include",
         onApply: (values, mode) => this.setFilter(field, values, mode)
@@ -835,8 +835,14 @@
         throw new Error("Cannot list field values because allowFiltering is disabled.");
       }
 
+      // The picker asks by level; the server lists values of a column. A grouped
+      // level has to say which interval, or it would get raw dates back and the
+      // filter it applied would match nothing.
+      const level = this.fields.find(entry => entry.key === field) ?? null;
+
       return await this.post("/field-values", {
-        field,
+        field: level?.dataField ?? field,
+        ...(level?.groupInterval ? { interval: level.groupInterval } : {}),
         sourceRowCount: this.options.sourceRowCount
       });
     }

@@ -381,8 +381,8 @@ Anything not listed here still needs `rendererOptions` through
 
 `<pivot-field>` attributes are `field` (the source column, required),
 `caption`, `area`, `role`, `aggregation`, `show-as`, the four `format-*`
-attributes, `visible`, `area-index`, `sort-order`, and — on `Row` fields
-only — `expanded` and `show-totals`. `area` defaults to `Data`, matching
+attributes, `visible`, `area-index`, `sort-order`, `group-interval`, and — on
+`Row` fields only — `expanded` and `show-totals`. `area` defaults to `Data`, matching
 `PivotFieldBuilder`.
 
 `area-index` gives the field an explicit position among the fields sharing its
@@ -398,9 +398,12 @@ the order the data arrived in — a query that ordered months by month number
 would be ruined by alphabetical ordering, so the engine does not impose one. A
 sort the user applies by clicking a header still wins over the declaration.
 
-`area`, `role`, `aggregation`, `show-as`, and `sort-order` bind to the
-`PivotArea`, `PivotFieldRole`, `PivotAggregation`, `PivotShowAs`, and
-`PivotSortDirection` enums, so a misspelled value such as `area="Roww"` fails
+`group-interval` (`Year`, `Quarter`, `Month`, `Day`, `DayOfWeek`) collapses a
+date column into header groups — see [Date grouping](#date-grouping).
+
+`area`, `role`, `aggregation`, `show-as`, `sort-order`, and `group-interval`
+bind to the `PivotArea`, `PivotFieldRole`, `PivotAggregation`, `PivotShowAs`,
+`PivotSortDirection`, and `PivotGroupInterval` enums, so a misspelled value such as `area="Roww"` fails
 the Razor compile rather than surfacing in the browser.
 
 A `<pivot-field>` outside a `<pivot-grid>` throws, as does a grid with no
@@ -679,6 +682,50 @@ your own detail UI overrides the packaged one rather than fighting it. Setting
 Labels default to English, come from the `drillDown` section of a locale pack,
 and are overridable per key through `drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
 `summary`, and `columnFilter` are substituted positionally.
+
+### Date grouping
+
+`group-interval` collapses a date column into header groups, so a year over
+month hierarchy needs no second source column:
+
+```html
+<pivot-field field="OrderDate" caption="Yıl"    area="Row"    group-interval="Year" />
+<pivot-field field="OrderDate" caption="Ay"     area="Row"    group-interval="Month" />
+<pivot-field field="OrderDate" caption="Çeyrek" area="Column" group-interval="Quarter" />
+```
+
+The same column is declared three times, which is the point: a level is
+identified by its field **and** its interval, not by the field alone. That
+identity is spelled `OrderDate:month` and is what a sort, a filter, a header
+funnel and a saved layout all name. `PivotFieldBuilder.GroupInterval(...)` is
+the fluent equivalent; `PivotRequest.Rows`/`Columns` carry `PivotFieldRef`
+values, and a plain field name still converts to one on its own.
+
+| Interval | Header reads | Ordered by |
+|---|---|---|
+| `Year` | `2026` | the year |
+| `Quarter` | `Q1` … `Q4` | the quarter |
+| `Month` | the month name in the resolved culture | the month number |
+| `Day` | the day of the month, as a number | the number |
+| `DayOfWeek` | the weekday name in the resolved culture | the culture's first weekday |
+
+Labelling and ordering are one subject: a month reads as a name and sorts as a
+number, or a pivot lists April before August. This is also the one case where
+the column axis does **not** keep the order the data arrived in — the engine
+produced those labels itself, so there is no query intent left to preserve.
+
+Grouping happens where the header value is read, which is why a filter, a
+drill-down and the value picker all collapse the same way: a filter set from a
+month header holds month names, and comparing those against raw timestamps
+would match nothing. `PivotEngine.DistinctValues(records, field, interval)`
+lists the groups rather than the dates behind them.
+
+A value that does not convert to a date keeps its own text and sorts after
+every group, so a column that is not a date under a date interval is visible as
+a mistake rather than silently blank. Text dates are parsed in the resolved
+culture first and invariant second, so a column loaded from CSV or JSON groups
+like one loaded as `DateTime`. `group-interval` is not valid on a `Data` field:
+a measure is aggregated rather than grouped.
 
 ### Localization
 

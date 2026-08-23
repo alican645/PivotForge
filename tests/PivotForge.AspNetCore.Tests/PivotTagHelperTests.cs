@@ -28,7 +28,8 @@ public class PivotTagHelperTests
         bool? Expanded = null,
         bool? ShowTotals = null,
         int? AreaIndex = null,
-        PivotSortDirection? SortOrder = null);
+        PivotSortDirection? SortOrder = null,
+        PivotGroupInterval? GroupInterval = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -118,6 +119,12 @@ public class PivotTagHelperTests
         {
             helper.SortOrder = sortOrder;
             attributes.Add(new TagHelperAttribute("sort-order", sortOrder.ToString()));
+        }
+
+        if (spec.GroupInterval is { } groupInterval)
+        {
+            helper.GroupInterval = groupInterval;
+            attributes.Add(new TagHelperAttribute("group-interval", groupInterval.ToString()));
         }
 
         return (helper, attributes);
@@ -647,6 +654,61 @@ public class PivotTagHelperTests
         // its own default instead of naming the grid "null".
         Assert.False(unnamed.TryGetProperty("rendererOptions", out var renderer) &&
             renderer.TryGetProperty("ariaLabel", out _));
+    }
+
+    [Fact]
+    public async Task WritesADeclaredGroupInterval()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("OrderDate", PivotArea.Row, GroupInterval: PivotGroupInterval.Month),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var field = config.GetProperty("fields")[0];
+        Assert.Equal("OrderDate", field.GetProperty("dataField").GetString());
+        Assert.Equal("month", field.GetProperty("groupInterval").GetString());
+    }
+
+    [Fact]
+    public async Task OmitsAnUndeclaredGroupInterval()
+    {
+        // None is the enum's default, so an undeclared attribute would otherwise
+        // be written as a grouping the author never asked for.
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.GetProperty("fields")[0].TryGetProperty("groupInterval", out _));
+    }
+
+    [Fact]
+    public async Task WritesTheSameColumnAtTwoIntervals()
+    {
+        // The hierarchy a single date column can carry, which is the whole point
+        // of identifying a level by more than its field name.
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("OrderDate", PivotArea.Row, "Yıl", GroupInterval: PivotGroupInterval.Year),
+            new FieldSpec("OrderDate", PivotArea.Row, "Ay", GroupInterval: PivotGroupInterval.Month),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var fields = config.GetProperty("fields");
+        Assert.Equal("year", fields[0].GetProperty("groupInterval").GetString());
+        Assert.Equal("month", fields[1].GetProperty("groupInterval").GetString());
+    }
+
+    [Fact]
+    public void RefusesAGroupIntervalOnAMeasure()
+    {
+        // A measure is aggregated rather than grouped; collapsing it to a month
+        // would leave nothing to sum.
+        var builder = new PivotFieldBuilder()
+            .DataField("Amount")
+            .Area(PivotArea.Data)
+            .GroupInterval(PivotGroupInterval.Month);
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
     [Fact]
