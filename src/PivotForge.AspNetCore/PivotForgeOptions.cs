@@ -3,6 +3,18 @@ namespace PivotForge.AspNetCore;
 /// <summary>Configures PivotForge endpoint limits and cache behavior.</summary>
 public sealed class PivotForgeOptions
 {
+    /// <summary>Gets the source fields the endpoints are allowed to read.</summary>
+    /// <remarks>
+    /// An empty set means every field on the record type is readable, which is what an
+    /// application that never declared a list gets. Declaring one turns the endpoints from
+    /// "read whatever the browser named" into "read only these": a request naming anything
+    /// else is rejected, and drill-down hands back only these fields rather than the whole
+    /// record. Names are compared without regard to case, because the record readers resolve
+    /// them that way too.
+    /// </remarks>
+    public ISet<string> AllowedFields { get; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Gets or sets the sliding expiration used for completed large pivot results.</summary>
     public TimeSpan CacheSlidingExpiration { get; set; } = TimeSpan.FromMinutes(5);
 

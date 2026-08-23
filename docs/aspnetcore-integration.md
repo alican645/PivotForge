@@ -949,6 +949,7 @@ The authenticated user identifier, endpoint path, and query string are included 
 
 | Option | Default |
 | --- | ---: |
+| `AllowedFields` | empty (every field readable) |
 | `CacheSlidingExpiration` | 5 minutes |
 | `MinimumLargeDataSourceRowCount` | 1,000 |
 | `MaximumSourceRowCount` | 500,000 |
@@ -960,6 +961,36 @@ The authenticated user identifier, endpoint path, and query string are included 
 | `MaximumExcelCells` | 200,000 |
 
 Options are validated when resolved. Values must be positive and minimums cannot exceed their corresponding maximums.
+
+### Restricting which fields the endpoints may read
+
+By default the endpoints read whatever field the browser names. That is convenient
+while a report is being built and wrong once the record type carries anything the
+report does not: a request naming `PasswordHash` as a row field gets it as a header,
+and a drill-down returns the whole source record whether the grid showed it or not.
+
+`AllowedFields` turns that around:
+
+```csharp
+builder.Services.AddPivotForge<Sale>(
+    LoadSalesAsync,
+    options => options.AllowedFields.UnionWith(
+        ["Region", "Category", "OrderDate", "Amount", "Quantity"]));
+```
+
+With a list declared:
+
+- `/pivot`, `/large/start`, `/drill-down`, and `/field-values` refuse a request that
+  names anything else, in rows, columns, values, or filters. The refusal is a `400`
+  that does not name the field, so it cannot be used to ask what the record type holds.
+- `/drill-down` returns only the listed fields rather than whole records.
+
+Names are compared without regard to case, matching how the record readers resolve
+them. An empty list — the default — keeps the previous behaviour, so nothing changes
+for an application that does not declare one.
+
+Sorts are not checked: a sort names a header level, which has to be among the rows or
+columns to mean anything, and those are checked.
 
 ## Production Notes
 

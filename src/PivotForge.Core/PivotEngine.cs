@@ -185,6 +185,35 @@ public sealed class PivotEngine
             .ToArray();
     }
 
+    /// <summary>Reduces records to a chosen set of fields.</summary>
+    /// <typeparam name="T">The source record type.</typeparam>
+    /// <param name="records">The records to reduce.</param>
+    /// <param name="fields">The field names to keep.</param>
+    /// <returns>One dictionary per record, holding only the named fields.</returns>
+    /// <remarks>
+    /// A field the record type does not carry is left out rather than reported: the list is
+    /// written once for an application, while a data provider may hand back a narrower record
+    /// type on one page than on another.
+    /// </remarks>
+    public static IReadOnlyList<IReadOnlyDictionary<string, object?>> Project<T>(
+        IEnumerable<T> records,
+        IEnumerable<string> fields)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(fields);
+
+        var reader = new ObjectRecordReader<T>();
+        var kept = fields.Where(reader.HasField).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+        return records
+            .Where(record => record is not null)
+            .Select(record => (IReadOnlyDictionary<string, object?>)kept.ToDictionary(
+                field => field,
+                field => reader.GetValue(record!, field),
+                StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
     /// <summary>Returns the distinct display values of a field in strongly typed records.</summary>
     /// <typeparam name="T">The source record type.</typeparam>
     /// <param name="records">The source records.</param>

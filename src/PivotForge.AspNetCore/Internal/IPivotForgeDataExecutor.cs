@@ -20,5 +20,6 @@ internal interface IPivotForgeDataExecutor
         IReadOnlyList<string?> rowPath,
         IReadOnlyList<string?> columnPath,
         int? sourceRowCount,
+        ICollection<string> projection,
         CancellationToken cancellationToken);
 }

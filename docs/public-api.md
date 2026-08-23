@@ -6,7 +6,7 @@ This document records the supported public surface for `0.6.0-preview.1`. Public
 
 ### Pivot model and engine
 
-- `PivotEngine`: executes object, `DataTable`, and dictionary sources; supports cancellation and drill-down. `DistinctValues` / `DistinctValuesRecords` list the values a filter on a field can accept, in reading order. The parameterless constructor collates row labels with `CultureInfo.CurrentCulture`, resolved per call; `new PivotEngine(CultureInfo)` pins it.
+- `PivotEngine`: executes object, `DataTable`, and dictionary sources; supports cancellation and drill-down. `DistinctValues` / `DistinctValuesRecords` list the values a filter on a field can accept, in reading order. The parameterless constructor collates row labels with `CultureInfo.CurrentCulture`, resolved per call; `new PivotEngine(CultureInfo)` pins it. `PivotEngine.Project` reduces records to a chosen set of fields, which is how the ASP.NET drill-down endpoint honours an allow-list.
 - `PivotRequest`, `PivotFilter`, `PivotValueDefinition`, `PivotSort`, `PivotFieldSort`: define layout, filtering, values, show-as calculations, and ordering. `PivotSort` orders the row axis as a whole; `PivotRequest.FieldSorts` orders one row or column field's own header level within its parent group, and `PivotSort` wins over it on the row axis.
 - `PivotAggregation`, `PivotShowAs`, `PivotSortMode`, `PivotSortDirection`: configure calculations and ordering.
 - `PivotFilterMode`: whether a `PivotFilter`'s values are the ones to keep (`Include`, the default) or the ones to drop (`Exclude`). An empty value list restricts nothing in either mode.
@@ -29,7 +29,7 @@ This document records the supported public surface for `0.6.0-preview.1`. Public
 - `AddPivotForge<TRecord>(dataProvider, configure)` registers the provider, cache, executor, options, and JSON enum support.
 - `MapPivotForgeEndpoints(pattern)` maps the route group. The default prefix is `/pivotforge`; a custom prefix may be supplied with or without a leading or trailing slash.
 - `PivotForgeDataProvider<TRecord>` and `PivotForgeDataRequest` define source loading.
-- `PivotForgeOptions` configures cache duration, paging, source-row, drill-down, Excel, and filter value (`FieldValueLimit`) limits.
+- `PivotForgeOptions` configures cache duration, paging, source-row, drill-down, Excel, and filter value (`FieldValueLimit`) limits, plus `AllowedFields`, the set of source fields the endpoints may read.
 
 ### HTTP models and cache extension point
 

@@ -12,4 +12,8 @@ public sealed record SalesRecord(
     DateTime OrderDate,
     decimal Amount,
     int Quantity,
-    decimal Discount);
+    decimal Discount,
+    // On the record because the source carries it, and off the allow-list in
+    // Program.cs because no report needs it. It is here to be asked for and
+    // refused.
+    string CustomerEmail);
