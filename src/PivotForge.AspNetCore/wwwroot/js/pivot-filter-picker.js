@@ -1,6 +1,18 @@
 (function (root) {
   const PivotForge = root.PivotForge ??= {};
 
+  // Read from the request builder at call time rather than captured here: this
+  // file is loaded before it in some hosts, and a captured undefined would only
+  // show up when someone opened a condition.
+  const COMPARISON_OPERATORS = {
+    includes: operator =>
+      (PivotForge.PivotRequestBuilder?.COMPARISON_OPERATORS ?? []).includes(operator)
+  };
+
+  // What a date control can hold, and so what it can be given back without
+  // erasing it.
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
   const DEFAULT_LABELS = {
     // {0} is replaced with the field caption.
     title: "{0} filter",
@@ -313,9 +325,16 @@
       this.setState(this.labels.loading, false);
 
       if (this.operator !== "Equals") {
-        // A condition compares against values the source may not even hold yet,
-        // so listing them would cost a request that answers nothing.
+        // A text condition compares against values the source may not even hold
+        // yet, so listing them would cost a request that answers nothing. A
+        // comparison still needs them -- not to show, but to see what kind of
+        // value the field holds and hand the reader the right control for it.
         this.setState("", false);
+
+        if (COMPARISON_OPERATORS.includes(this.operator)) {
+          this.loadValues({ list: false });
+        }
+
         return;
       }
 
@@ -472,15 +491,20 @@
       this.renderCondition();
 
       // Switching back to the value list needs the list, which was never
-      // fetched if the picker opened on a condition.
-      if (this.operator === "Equals" && this.values.length === 0) {
-        this.loadValues();
+      // fetched if the picker opened on a condition; switching to a comparison
+      // needs it for the argument control. Fetched once either way.
+      if (this.values.length === 0 &&
+        (this.operator === "Equals" || COMPARISON_OPERATORS.includes(this.operator))) {
+        this.loadValues({ list: this.operator === "Equals" });
       }
     }
 
-    async loadValues() {
+    async loadValues({ list = true } = {}) {
       const requestId = this.requestId;
-      this.setState(this.labels.loading, false);
+
+      if (list) {
+        this.setState(this.labels.loading, false);
+      }
 
       try {
         const response = await this.widget.fieldValues(this.field);
@@ -490,6 +514,14 @@
         }
 
         this.values = response?.values ?? [];
+
+        if (!list) {
+          // Fetched only to decide the argument control, so nothing is drawn
+          // except the condition that was already on screen.
+          this.renderCondition();
+          return;
+        }
+
         this.applySelection([], response);
         this.renderList();
       } catch (error) {
@@ -513,9 +545,18 @@
       elements.operator.value = this.operator;
       elements.toolbar.hidden = !listed;
 
+      const dates = this.comparesDates();
+
       elements.argumentInputs.forEach((input, index) => {
+        const current = this.arguments[index] ?? "";
+        // A date control cannot hold anything but an ISO date, so switching to
+        // one would silently erase an argument the reader had already typed.
+        // What is already there outranks what the field usually holds.
+        const type = dates && (current === "" || ISO_DATE.test(current)) ? "date" : "text";
+
         input.hidden = listed || index >= count;
-        input.value = this.arguments[index] ?? "";
+        input.setAttribute("type", type);
+        input.value = current;
         input.setAttribute("placeholder", count > 1
           ? (index === 0 ? this.labels.argumentFrom : this.labels.argumentTo)
           : this.labels.argument);
@@ -528,6 +569,21 @@
         // the engine's own rule for when a condition restricts anything.
         elements.apply.disabled = this.conditionValues().length < count;
       }
+    }
+
+    // Whether this field's values are ones the engine will compare as dates, read
+    // off the values themselves rather than declared. That is not a shortcut: the
+    // engine decides the same way, so agreeing with the data is agreeing with it.
+    // It also settles the grouped levels for free -- a month level reads "Haziran"
+    // and a year level reads "2024", and neither is a date to either side.
+    comparesDates() {
+      if (!COMPARISON_OPERATORS.includes(this.operator)) {
+        return false;
+      }
+
+      const sample = this.values.find(value => String(value ?? "").trim() !== "");
+      return sample !== undefined &&
+        PivotForge.PivotRequestBuilder.comparisonType(sample) === "date";
     }
 
     // The arguments a condition applies with, trimmed and cut to what its

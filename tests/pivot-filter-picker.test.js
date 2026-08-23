@@ -655,3 +655,36 @@ test("an unknown operator opens as the value list rather than as a broken contro
 
   assert.equal(operatorOf(host).value, "Equals");
 });
+
+test("a blank value does not decide the argument control", () => {
+  // Blank leads the value list whenever the source holds one, so reading the
+  // first entry would tell a date field it holds text.
+  const { picker } = build();
+  picker.operator = "Between";
+  picker.values = ["", "06/05/2026 00:00:00", "07/05/2026 00:00:00"];
+
+  assert.equal(picker.comparesDates(), true);
+});
+
+test("only an operator that orders its argument reads the values as dates", () => {
+  // "contains" matches the argument's text, so a calendar would hand it a
+  // spelling chosen for a comparison that is not happening.
+  const { picker } = build();
+  picker.values = ["06/05/2026 00:00:00"];
+
+  picker.operator = "Between";
+  assert.equal(picker.comparesDates(), true);
+
+  for (const operator of ["Contains", "StartsWith", "EndsWith", "Equals", "Blank"]) {
+    picker.operator = operator;
+    assert.equal(picker.comparesDates(), false, operator);
+  }
+});
+
+test("a field with no values yet asks for no calendar", () => {
+  const { picker } = build();
+  picker.operator = "Between";
+  picker.values = [];
+
+  assert.equal(picker.comparesDates(), false);
+});

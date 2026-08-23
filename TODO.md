@@ -132,7 +132,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 
 ## Bölüm 2 — Filtreleme
 
-**En büyük işlevsel açık.** Bugün filtre modeli şu kadar:
+**Tamamlandı.** Bölüm açıldığında filtre modeli şu kadardı:
 
 ```csharp
 public sealed record PivotFilter(
@@ -141,10 +141,10 @@ public sealed record PivotFilter(
     PivotFilterMode Mode = PivotFilterMode.Include);
 ```
 
-Değer seçici artık pakette (`PivotFilterPicker`): motora `PivotEngine.DistinctValues`,
-uç noktalara `POST /pivotforge/field-values`, tasarımcı çipine `▼` düğmesi eklendi.
-Include/exclude, satır başlığı hunisi, operatörler ve boş satır/sütun eleme tamam.
-Kalan açık: tarih aralığı için hazır UI.
+Bugün: paketlenmiş değer seçici (`PivotEngine.DistinctValues` +
+`POST /pivotforge/field-values`), include/exclude, iki eksende başlık hunisi,
+sekiz operatör, tarih aralığı için takvim kontrolü, boş satır/sütun eleme ve
+Top-N.
 
 - [x] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim,
       "Tümünü seç"/"Temizle", kesme uyarısı — tasarımcıdaki Filtreler bölgesi artık işlevsel
@@ -181,9 +181,19 @@ Kalan açık: tarih aralığı için hazır UI.
       zaman aynı satırları veriyor (büyük veri uç noktası sonucu önbelleğe
       alıyor). `value-key` ile sıralayan ölçü, `mode="Bottom"` ile diğer uç
       seçiliyor
-- [~] Tarih aralığı filtreleri — motor tarafı `Between` ile **çalışıyor**: iki uç
-      da tarih okunuyorsa tarih olarak karşılaştırılıyor. Açık kalan yalnızca UI:
-      seçicideki argüman kutuları düz metin, tarih seçici değil
+- [x] Tarih aralığı filtreleri — motor tarafı `Between` ile zaten çalışıyordu;
+      eksik olan seçicideki kontroldü. Argüman kutusu artık tarih tutan bir
+      alanda `<input type="date">`. Bu kozmetik değil: takvim `2026-06-05`
+      döndürüyor ve karşılaştırmanın iki tarafının da tarih olarak okuduğu tek
+      yazım bu — metin kutusuna `05.06.2026` yazan bir okuyucu **metin**
+      karşılaştırması alıyordu. Hangi alanın takvim alacağı bildirilmiyor,
+      **değerlerin kendisinden** okunuyor: motor da aynı şekilde karar veriyor,
+      yani veriyle anlaşmak motorla anlaşmak demek. Sayı tarihten önce
+      deneniyor, bu yüzden `2024` bir yıl değil sayı; gruplu seviyeler de
+      kendiliğinden çözülüyor (`Haziran` ve `Pazartesi` iki taraf için de tarih
+      değil). Zaten yazılmış ama takvimin gösteremeyeceği bir argüman silinmek
+      yerine metin kutusunda kalıyor
+
 - [x] `hideEmptySummaryCells` — hiç veri düşmeyen satır ve sütunları düşürür.
       Sütun ekseni seviyelerinin çarpımı olduğu için seyrek veride hiç
       gerçekleşmemiş sütunlar kalır; satır ekseni yalnızca verinin gösterdiğini
@@ -382,8 +392,7 @@ Sizin önceliğiniz "az kodla çok iş" olduğu için sıralama işlevsel büyü
 1. **Bölüm 0** — bildirimsel yüzey. Yeni özellik yok, mevcut motorun önüne bildirim.
    Tag helper'ı kendi kendine yeterli hale getiren tek adım bu.
 2. **Bölüm 1'in ucuz kalemleri** — `show-as`, `area-index`, `expanded`, alan başına toplamlar.
-3. **Bölüm 2** — filtre değer seçici. Tasarımcının Filtreler bölgesi bugün işlevsiz;
-   bu onu tamamlayan parça.
+3. ~~**Bölüm 2** — filtreleme.~~ Tamamlandı.
 4. **Bölüm 8** — ~~dokunmatik + klavye + ARIA~~ tamam; kalan yalnızca mobil düzen.
 5. **Bölüm 3** — hesaplanmış alanlar. En büyük tasarım işi, en sona.
 
