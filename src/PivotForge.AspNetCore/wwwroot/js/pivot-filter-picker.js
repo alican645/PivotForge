@@ -11,6 +11,12 @@
     selectAll: "Tümünü seç",
     clear: "Temizle",
     blank: "(Boş)",
+    // The mode's only observable effect is on values the source does not have
+    // yet, so the control says that rather than "include"/"exclude" -- which
+    // describes the storage and tells the reader nothing about the outcome.
+    modeLabel: "Sonradan eklenen değerler",
+    modeInclude: "Gizlensin",
+    modeExclude: "Gösterilsin",
     loading: "Değerler yükleniyor...",
     noValues: "Bu alan için değer bulunamadı",
     noMatches: "Aramayla eşleşen değer yok",
@@ -49,9 +55,10 @@
       this.onApply = null;
       this.values = [];
       this.selected = new Set();
+      this.mode = "Include";
       // Values the caller had selected that the server did not list, because
       // the response was truncated. Applying must not silently drop them.
-      this.hiddenSelected = [];
+      this.hiddenValues = [];
       this.searchTerm = "";
       this.isOpen = false;
       this.disposed = false;
@@ -126,6 +133,25 @@
       toolbar.appendChild(selectAll);
       toolbar.appendChild(clear);
 
+      // Checking a box always means "shown", in both modes. What the mode picks
+      // is which side of the list is stored -- and therefore what happens to a
+      // value that is not on either side yet.
+      const modeRow = create("div", "pivot-filter-picker__mode");
+      const modeLabel = create("span", "pivot-filter-picker__mode-label");
+      modeLabel.textContent = this.labels.modeLabel;
+      modeRow.appendChild(modeLabel);
+
+      const modeButtons = ["Include", "Exclude"].map(mode => {
+        const button = create("button", "pivot-button");
+        button.dataset.action = "filter-mode";
+        button.dataset.mode = mode;
+        button.setAttribute("type", "button");
+        button.textContent = mode === "Include" ? this.labels.modeInclude : this.labels.modeExclude;
+        button.addEventListener("click", () => this.setMode(mode));
+        modeRow.appendChild(button);
+        return button;
+      });
+
       const notice = create("div", "pivot-filter-picker__notice");
       notice.hidden = true;
       const state = create("div", "pivot-filter-picker__state");
@@ -150,6 +176,7 @@
       foot.appendChild(apply);
 
       body.appendChild(toolbar);
+      body.appendChild(modeRow);
       body.appendChild(notice);
       body.appendChild(state);
       body.appendChild(list);
@@ -175,11 +202,11 @@
       root.document.addEventListener("keydown", this.keydownHandler);
 
       this.host.appendChild(overlay);
-      this.elements = { overlay, title, summary, search, notice, state, list, apply };
+      this.elements = { overlay, title, summary, search, notice, state, list, apply, modeButtons };
       return this.elements;
     }
 
-    async open({ field, caption, selected = [], onApply } = {}) {
+    async open({ field, caption, selected = [], mode = "Include", onApply } = {}) {
       if (this.disposed || !field) {
         return;
       }
@@ -194,9 +221,13 @@
       this.field = field;
       this.onApply = onApply;
       this.values = [];
-      this.hiddenSelected = [];
+      this.hiddenValues = [];
       this.searchTerm = "";
       this.isOpen = true;
+      // Anything that is not Exclude is Include; the strict check belongs to
+      // the layout state, which is what a stored view is adopted through.
+      this.mode = mode === "Exclude" ? "Exclude" : "Include";
+      this.renderMode();
 
       elements.search.value = "";
       elements.apply.disabled = true;
@@ -227,19 +258,23 @@
       }
     }
 
-    // An empty incoming selection means "no restriction", which is every value
-    // checked — not an empty list. Storing it the other way round would show a
-    // freshly placed filter field as excluding everything.
+    // A checkbox means "shown" in both modes; only which side of the list is
+    // stored differs. An empty incoming list means "no restriction", which is
+    // every value checked — not an empty list. Storing it the other way round
+    // would show a freshly placed filter field as excluding everything.
     applySelection(selected, response) {
       const incoming = (selected ?? []).map(value => (value == null ? "" : String(value)));
+      const listed = new Set(incoming.filter(value => this.values.includes(value)));
 
       this.selected = incoming.length === 0
         ? new Set(this.values)
-        : new Set(incoming.filter(value => this.values.includes(value)));
+        : this.mode === "Exclude"
+          ? new Set(this.values.filter(value => !listed.has(value)))
+          : listed;
 
-      this.hiddenSelected = incoming.length === 0
-        ? []
-        : incoming.filter(value => !this.values.includes(value));
+      // Listed values the server did not return, because the response was
+      // truncated. Applying must carry them back or the list silently shrinks.
+      this.hiddenValues = incoming.filter(value => !this.values.includes(value));
 
       const elements = this.elements;
       if (response?.truncated) {
@@ -341,19 +376,44 @@
       state.classList.toggle("is-error", Boolean(isError));
     }
 
+    setMode(mode) {
+      // Deliberately leaves the selection alone: the checked values are shown
+      // under either mode, so switching changes nothing on screen today. What
+      // it changes is a value the source gains tomorrow — hidden under Include
+      // because it is not on the keep list, shown under Exclude because it is
+      // not on the drop list.
+      this.mode = mode === "Exclude" ? "Exclude" : "Include";
+      this.renderMode();
+    }
+
+    renderMode() {
+      this.elements?.modeButtons.forEach(button => {
+        const active = button.dataset.mode === this.mode;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+    }
+
     apply() {
+      // Include stores the checked values, Exclude the unchecked ones, so the
+      // two describe the same visible rows and differ only over values that are
+      // not in the source yet.
+      const listed = this.values.filter(value =>
+        this.selected.has(value) === (this.mode !== "Exclude"));
       // Every value checked means no restriction at all, which is stored as an
-      // empty list. Freezing the full set instead would silently exclude values
-      // that appear in the source later.
+      // empty list. Freezing the full set under Include instead would silently
+      // exclude values that appear in the source later. Under Exclude the same
+      // case already produces an empty list on its own, so this rule does not
+      // need to ask which mode it is in.
       const everything =
-        this.hiddenSelected.length === 0 && this.selected.size === this.values.length;
-      const values = everything
-        ? []
-        : [...this.hiddenSelected, ...this.values.filter(value => this.selected.has(value))];
+        this.hiddenValues.length === 0 &&
+        this.selected.size === this.values.length;
+      const values = everything ? [] : [...this.hiddenValues, ...listed];
 
       const callback = this.onApply;
+      const mode = this.mode;
       this.close();
-      callback(values);
+      callback(values, mode);
     }
 
     close() {

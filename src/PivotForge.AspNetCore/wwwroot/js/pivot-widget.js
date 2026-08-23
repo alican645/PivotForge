@@ -151,6 +151,9 @@
       this.layoutState = null;
       this.designer = null;
       this.drillDownModal = null;
+      // Built on first use, and only when there is no designer to borrow one
+      // from, so a page that never touches a header funnel pays nothing.
+      this.headerFilterPicker = null;
 
       if (this.options.fieldDesigner) {
         if (!PivotForge.PivotLayoutState || !PivotForge.PivotFieldDesigner) {
@@ -251,12 +254,22 @@
         layout: payload.layout ?? null,
         captions: payload.captions ?? null,
         // A filter naming a field the catalog dropped would be rejected by the
-        // server, so it is discarded here rather than sent.
+        // server, so it is discarded here rather than sent. A mode the vocabulary
+        // does not know is discarded the same way rather than thrown on: a view
+        // stored by an older or a tampered-with client should still open.
         filters: Array.isArray(payload.filters)
           ? payload.filters.filter(filter =>
             this.fields.some(field => field.dataField === filter?.field) &&
-            Array.isArray(filter.values))
-            .map(filter => ({ field: filter.field, values: [...filter.values] }))
+            Array.isArray(filter.values) &&
+            (filter.mode === undefined ||
+              PivotForge.PivotRequestBuilder.FILTER_MODES.includes(filter.mode)))
+            .map(filter => ({
+              field: filter.field,
+              values: [...filter.values],
+              // A view stored before modes existed is an including filter, which
+              // is what it did when it was saved.
+              mode: filter.mode ?? "Include"
+            }))
           : null,
         rowSort: payload.rowSort ?? null
       };
@@ -335,9 +348,15 @@
       return new Renderer(this.container, {
         rowFields: rowFields.map(field => field.dataField),
         rowFieldLabels: rowFields.map(field => field.caption),
+        rowFieldExpanded: rowFields.map(field => field.expanded),
+        rowFieldSubtotals: rowFields.map(field => field.showTotals),
         onSortRequested: this.options.allowSorting
           ? request => { this.sortBy(request); }
           : null,
+        onFilterRequested: this.canHeaderFilter()
+          ? field => { this.openHeaderFilter(field); }
+          : null,
+        filteredFields: this.filteredFields(),
         // Without this the renderer treats every result as unsorted and re-orders
         // rows itself, discarding the ordering the server was just asked for.
         // Declared before the spread so a consumer driving sorting through
@@ -422,6 +441,40 @@
       if (this.renderer) {
         this.renderer.options.sortState = this.rowSort;
       }
+    }
+
+    // The header funnel needs somewhere to fetch values from and something to
+    // show them in. A page that loaded neither gets no funnel at all, the same
+    // bargain the designer's chip funnel makes.
+    canHeaderFilter() {
+      return Boolean(this.options.allowFiltering && PivotForge.PivotFilterPicker);
+    }
+
+    // Which fields are restricted right now, so the header can mark its funnel.
+    // An empty value list is no restriction, so it does not count.
+    filteredFields() {
+      return this.filters.filter(filter => filter.values.length > 0)
+        .map(filter => filter.field);
+    }
+
+    // The row header's funnel and the designer's filter chip open one picker
+    // over one entry; only the way in differs. With a designer attached the
+    // layout state owns the filters, so the picker is opened through it.
+    openHeaderFilter(field) {
+      if (this.designer) {
+        return this.designer.openFilterPicker(field);
+      }
+
+      this.headerFilterPicker ??= new PivotForge.PivotFilterPicker({ widget: this });
+      const current = this.filters.find(filter => filter.field === field) ?? null;
+
+      return this.headerFilterPicker.open({
+        field,
+        caption: this.fields.find(entry => entry.dataField === field)?.caption ?? field,
+        selected: current?.values ?? [],
+        mode: current?.mode ?? "Include",
+        onApply: (values, mode) => this.setFilter(field, values, mode)
+      });
     }
 
     on(eventName, handler) {
@@ -567,7 +620,12 @@
         return;
       }
 
-      this.renderer.render(result);
+      // The renderer outlives every filter change, so which fields are
+      // restricted is passed per draw rather than at construction -- otherwise
+      // the funnel would keep marking whatever was filtered when it was built.
+      // Per-render options rather than a write into renderer.options, because a
+      // renderer supplied from outside need not have that member at all.
+      this.renderer.render(result, { filteredFields: this.filteredFields() });
     }
 
     showError(error) {
@@ -599,7 +657,8 @@
       }
 
       if (filters !== undefined) {
-        this.filters = filters.map(filter => ({ field: filter.field, values: [...filter.values] }));
+        this.filters = filters.map(filter =>
+          ({ field: filter.field, values: [...filter.values], mode: filter.mode }));
       }
 
       if (rowSort !== undefined) {
@@ -769,14 +828,28 @@
       await this.refresh();
     }
 
-    async setFilter(field, values) {
+    async setFilter(field, values, mode = "Include") {
       if (!this.options.allowFiltering) {
         throw new Error("Cannot filter because allowFiltering is disabled.");
       }
 
+      // With a designer attached the layout state owns the filters: writing
+      // here directly would be overwritten by the next update() the designer
+      // sends, and its chip would go on showing the previous selection.
+      if (this.layoutState) {
+        this.layoutState.setFilterMode(field, mode);
+        this.layoutState.setFilterValues(field, values ?? []);
+        this.designer.render();
+        await this.update(this.layoutState.toRequestState());
+        return;
+      }
+
       this.filters = this.filters.filter(filter => filter.field !== field);
+      // An empty list restricts nothing whichever mode it is in, so it is stored
+      // as no filter at all rather than as an empty one.
       if (Array.isArray(values) && values.length > 0) {
-        this.filters.push({ field, values });
+        this.filters.push(
+          PivotForge.PivotRequestBuilder.normalizeFilter({ field, values, mode }, 0));
       }
 
       this.saveState();
@@ -806,6 +879,8 @@
       this.errorNode = null;
       this.designer?.dispose();
       this.designer = null;
+      this.headerFilterPicker?.dispose();
+      this.headerFilterPicker = null;
       this.drillDownModal?.dispose();
       this.drillDownModal = null;
       this.container.replaceChildren();

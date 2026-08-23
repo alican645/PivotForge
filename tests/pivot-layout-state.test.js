@@ -324,7 +324,8 @@ test("toRequestState keeps a filter with selected values but drops one with none
     ]
   });
 
-  assert.deepEqual(state.toRequestState().filters, [{ field: "Quarter", values: ["Q1"] }]);
+  assert.deepEqual(
+    state.toRequestState().filters, [{ field: "Quarter", values: ["Q1"], mode: "Include" }]);
 });
 
 test("each mutation emits exactly one change event", () => {
@@ -715,8 +716,10 @@ test("filter values are written to the filter entry and reach the request", () =
 
   state.setFilterValues("Quarter", ["Q1", "Q3"]);
 
-  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
-  assert.deepEqual(state.toRequestState().filters, [{ field: "Quarter", values: ["Q1", "Q3"] }]);
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Quarter", values: ["Q1", "Q3"], mode: "Include" }]);
+  assert.deepEqual(
+    state.toRequestState().filters, [{ field: "Quarter", values: ["Q1", "Q3"], mode: "Include" }]);
 });
 
 test("an empty filter selection is dropped from the request rather than sent", () => {
@@ -726,7 +729,7 @@ test("an empty filter selection is dropped from the request rather than sent", (
 
   state.setFilterValues("Quarter", []);
 
-  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: [] }]);
+  assert.deepEqual(state.getState().filters, [{ field: "Quarter", values: [], mode: "Include" }]);
   assert.deepEqual(state.toRequestState().filters, []);
 });
 
@@ -739,10 +742,32 @@ test("filter values are stringified, with blank standing in for null", () => {
   assert.deepEqual(state.getState().filters[0].values, ["2025", "", "2026"]);
 });
 
-test("filter values cannot be set on a field outside the filter area", () => {
+test("a row field can be filtered where it stands, without moving zones", () => {
   const state = create();
 
-  assert.throws(() => state.setFilterValues("Region", ["East"]), /not in the filter area/);
+  state.setFilterValues("Region", ["East"]);
+
+  const view = state.getState();
+  assert.deepEqual(view.filters, [{ field: "Region", values: ["East"], mode: "Include" }]);
+  // The filter is the field's, not the Filters zone's: Region stays a row field
+  // and must not be emitted as a filter-area one on top of that.
+  assert.equal(state.areaOf("Region"), "row");
+  assert.deepEqual(
+    state.toFields().filter(field => field.dataField === "Region").map(field => field.area),
+    ["row"]);
+});
+
+test("a measure has nothing to filter", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterValues("Amount", ["1"]), /cannot be filtered/);
+});
+
+test("a refused filter selection leaves no entry behind", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterValues("Region", "East"), /must be an array/);
+  assert.deepEqual(state.getState().filters, []);
 });
 
 test("a non-array filter selection is refused rather than coerced", () => {
@@ -760,7 +785,7 @@ test("setting filter values notifies change subscribers", () => {
 
   state.setFilterValues("Quarter", ["Q1"]);
 
-  assert.deepEqual(seen.filters, [{ field: "Quarter", values: ["Q1"] }]);
+  assert.deepEqual(seen.filters, [{ field: "Quarter", values: ["Q1"], mode: "Include" }]);
 });
 
 // --- Caption round-trip -----------------------------------------------------
@@ -831,4 +856,192 @@ test("a restored caption is trimmed the same way setCaption trims one", () => {
     catalog, savedLayout({ captions: { Region: "  Satış Bölgesi  " } }));
 
   assert.equal(state.field("Region").caption, "Satış Bölgesi");
+});
+
+test("a declared showTotals survives a layout mutation", () => {
+  // Without this, dragging any chip anywhere silently restored the subtotals a
+  // field had opted out of: toFields() rebuilds the field list from the layout,
+  // and whatever it forgets to carry reverts to the normalizeField default.
+  const state = new PivotForge.PivotLayoutState([
+    ...catalog.map(field =>
+      field.dataField === "Category" ? { ...field, showTotals: false, expanded: false } : field)
+  ]);
+
+  state.reorder("row", 0, 1);
+  const [carried] = PivotForge.PivotRequestBuilder
+    .normalizeFields(state.toFields())
+    .filter(field => field.dataField === "Category");
+
+  assert.equal(carried.showTotals, false);
+  assert.equal(carried.expanded, false);
+});
+
+test("a declared sortOrder survives a layout mutation", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Year" ? { ...field, sortOrder: "Descending" } : field));
+
+  state.move("Quarter", "column", 0);
+  const request = PivotForge.PivotRequestBuilder.buildRequest(state.toFields());
+
+  assert.deepEqual(request.fieldSorts, [{ field: "Year", direction: "Descending" }]);
+});
+
+test("a row-only declaration is dropped when the field moves to another area", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Category" ? { ...field, showTotals: false } : field));
+
+  // showTotals means nothing on the column axis and normalizeField refuses it
+  // there, so carrying it along would turn a legal drag into an exception.
+  state.move("Category", "column", 0);
+  const emitted = state.toFields().find(field => field.dataField === "Category");
+
+  assert.equal(emitted.showTotals, undefined);
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
+});
+
+test("areaIndex is not re-emitted, so a move is not undone by the declaration", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Region" ? { ...field, areaIndex: 0 }
+        : field.dataField === "Category" ? { ...field, areaIndex: 1 } : field));
+
+  state.reorder("row", 0, 1);
+  const request = PivotForge.PivotRequestBuilder.buildRequest(state.toFields());
+
+  // areaIndex declares the opening order; once the user has moved a chip the
+  // layout owns the order, and re-applying the declaration would undo the move.
+  assert.deepEqual(request.rows, ["Category", "Region"]);
+});
+
+test("areaIndex decides the opening layout", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Region" ? { ...field, areaIndex: 1 }
+        : field.dataField === "Category" ? { ...field, areaIndex: 0 } : field));
+
+  assert.deepEqual(state.getState().rows, ["Category", "Region"]);
+});
+
+test("a filter placed in the designer starts out including", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+
+  assert.equal(state.getState().filters[0].mode, "Include");
+});
+
+test("a field declared in the filter area starts out including", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Quarter" ? { ...field, area: "filter" } : field));
+
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Quarter", values: [], mode: "Include" }]);
+});
+
+test("setFilterMode switches which side of the list is stored", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  state.setFilterValues("Quarter", ["Q1"]);
+
+  state.setFilterMode("Quarter", "Exclude");
+
+  assert.deepEqual(
+    state.toRequestState().filters,
+    [{ field: "Quarter", values: ["Q1"], mode: "Exclude" }]);
+});
+
+test("setFilterMode refuses a mode the engine has never heard of", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+
+  assert.throws(() => state.setFilterMode("Quarter", "exclude"), /Unknown filter mode/);
+});
+
+test("a row field's filter can exclude just as a filter-zone one can", () => {
+  const state = create();
+
+  state.setFilterMode("Region", "Exclude");
+  state.setFilterValues("Region", ["East"]);
+
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Region", values: ["East"], mode: "Exclude" }]);
+});
+
+test("a refused mode leaves no entry behind", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterMode("Region", "Sadece"), /Unknown filter mode/);
+  assert.deepEqual(state.getState().filters, []);
+});
+
+test("a filter follows its field from one area to another", () => {
+  const state = create();
+  state.setFilterValues("Region", ["East"]);
+
+  state.move("Region", "column", 0);
+
+  // Only removing the field drops the restriction; rearranging the layout is
+  // not a way of clearing a filter by accident.
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Region", values: ["East"], mode: "Include" }]);
+  assert.equal(state.areaOf("Region"), "column");
+});
+
+test("a filtered field dragged into the filter zone keeps its selection", () => {
+  const state = create();
+  state.setFilterMode("Region", "Exclude");
+  state.setFilterValues("Region", ["East"]);
+
+  state.move("Region", "filter", 0);
+
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Region", values: ["East"], mode: "Exclude" }]);
+  assert.equal(state.areaOf("Region"), "filter");
+  assert.deepEqual(
+    state.toFields().filter(field => field.dataField === "Region").map(field => field.area),
+    ["filter"]);
+});
+
+test("removing a field does drop its filter", () => {
+  const state = create();
+  state.setFilterValues("Region", ["East"]);
+
+  state.remove("Region");
+
+  assert.deepEqual(state.getState().filters, []);
+  assert.equal(state.areaOf("Region"), "available");
+});
+
+test("a filter's mode survives a reorder of the filter zone", () => {
+  const state = create();
+  state.move("Quarter", "filter");
+  state.move("Year", "filter");
+  state.setFilterMode("Quarter", "Exclude");
+
+  state.move("Quarter", "filter", 1);
+
+  assert.equal(
+    state.getState().filters.find(filter => filter.field === "Quarter").mode, "Exclude");
+});
+
+test("an adopted layout carrying an excluding filter keeps it", () => {
+  const state = new PivotForge.PivotLayoutState(catalog, {
+    rows: ["Region"],
+    columns: [],
+    values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+    filters: [{ field: "Quarter", values: ["Q1"], mode: "Exclude" }]
+  });
+
+  assert.equal(state.getState().filters[0].mode, "Exclude");
+});
+
+test("an adopted layout carrying an unknown filter mode is refused at construction", () => {
+  assert.throws(() => new PivotForge.PivotLayoutState(catalog, {
+    rows: ["Region"],
+    columns: [],
+    values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+    filters: [{ field: "Quarter", values: ["Q1"], mode: "exclude" }]
+  }), /Unknown filter mode/);
 });

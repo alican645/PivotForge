@@ -171,8 +171,10 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | `role` | inferred from `area` | One of `dimension`, `measure`. **Required** when `area` is `available`, because there is no placement to infer it from. Elsewhere it is inferred (`data` → `measure`, everything else → `dimension`); an explicit `role` that contradicts its `area` — e.g., `measure` outside `data` — is a validation error. See [role rules](#field-designer). |
 | `aggregation` | `"sum"` (only on `data` fields) | One of `sum`, `count`, `average`, `min`, `max`. Setting `aggregation` on a non-`data` field is a validation error. |
 | `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`. Setting `showAs` on a non-`data` field is a validation error. |
-| `format` | `null` | Number formatting for a `data` field's values: `{ type, decimals, useGrouping, currency }`, where `type` is `"number"` (default), `"currency"`, or `"percent"`, `decimals` is the fraction-digit count from 0 to 6 (default `2`), `useGrouping` toggles the thousands separator (default `true`), and `currency` is an ISO code used when `type` is `"currency"` (default `"TRY"`). Values are rendered with `Intl.NumberFormat` in the `tr-TR` locale. Declared from C# with `FormatType`/`FormatDecimals`/`FormatGrouping`/`FormatCurrency`, or from markup with `format-type`/`format-decimals`/`format-grouping`/`format-currency`. Setting a format on a non-`data` field is a validation error. |
+| `format` | `null` | Number formatting for a `data` field's values: `{ type, decimals, useGrouping, currency }`, where `type` is `"number"` (default), `"currency"`, or `"percent"`, `decimals` is the fraction-digit count from 0 to 6 (default `2`), `useGrouping` toggles the thousands separator (default `true`), and `currency` is an ISO code used when `type` is `"currency"` (default `"TRY"`). Values are rendered with `Intl.NumberFormat` in the reader's own locale unless the grid declares a `culture` — see [Localization](#localization). Declared from C# with `FormatType`/`FormatDecimals`/`FormatGrouping`/`FormatCurrency`, or from markup with `format-type`/`format-decimals`/`format-grouping`/`format-currency`. Setting a format on a non-`data` field is a validation error. |
 | `visible` | `true` | `false` configures a field without including it in the rendered request. |
+| `expanded` | `true` | Only on `row` fields. `false` collapses this level's groups at the grid's **first** render; after that the state belongs to the user, and a restored `state-storing` view wins. Declaring it on the deepest row field does nothing — that level's rows are the detail rows and have no groups. |
+| `showTotals` | `true` | Only on `row` fields. `false` leaves the group header in place without its sums, which is the same shape the grid uses when `subtotals` is off entirely — so a deep hierarchy can total the levels worth totalling and nowhere else. The grid-wide `subtotals="false"` still wins. |
 
 ### `PivotGridBuilder` (Razor)
 
@@ -258,6 +260,7 @@ Three child elements declare the state a grid starts in. Each has a
   <pivot-field field="Amount" area="Data" aggregation="Sum" />
 
   <pivot-filter field="Region" values="Marmara, Ege" />
+  <pivot-filter field="Year" type="Exclude" values="2019" />
   <pivot-sort mode="RowTotalValue" value-field="Amount" direction="Descending" />
   <pivot-conditional-rule value-field="Amount" operator="GreaterThanOrEqual"
                           threshold="900000" color="Green" id="high" />
@@ -266,7 +269,7 @@ Three child elements declare the state a grid starts in. Each has a
 
 | Element | Builder | Notes |
 | --- | --- | --- |
-| `pivot-filter` | `Filter(string, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. |
+| `pivot-filter` | `Filter(string, params string[])`, `Filter(string, PivotFilterMode, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. `type="Exclude"` turns the list into the values to drop; the default `Include` keeps only the listed ones. |
 | `pivot-sort` | `RowSort(PivotSort)` | At most one per grid — rows order one way, so a second is refused rather than merged. |
 | `pivot-conditional-rule` | `ConditionalRule(...)` | Repeatable. Later rules win over earlier ones on the same cell. |
 
@@ -373,13 +376,28 @@ Anything not listed here still needs `rendererOptions` through
 
 
 `<pivot-field>` attributes are `field` (the source column, required),
-`caption`, `area`, `role`, `aggregation`, `show-as`, `format`, and `visible`.
-`area` defaults to `Data`, matching `PivotFieldBuilder`.
+`caption`, `area`, `role`, `aggregation`, `show-as`, the four `format-*`
+attributes, `visible`, `area-index`, `sort-order`, and — on `Row` fields
+only — `expanded` and `show-totals`. `area` defaults to `Data`, matching
+`PivotFieldBuilder`.
 
-`area`, `role`, `aggregation`, and `show-as` bind to the `PivotArea`,
-`PivotFieldRole`, `PivotAggregation`, and `PivotShowAs` enums, so a misspelled
-value such as `area="Roww"` fails the Razor compile rather than surfacing in
-the browser.
+`area-index` gives the field an explicit position among the fields sharing its
+area, instead of taking the declaration order. It is the opening order only:
+once the user moves a chip the layout owns the order, and a restored
+`state-storing` view is loaded as it was saved.
+
+`sort-order` (`Ascending` / `Descending`, valid on `Row` and `Column` fields)
+orders that field's own header level inside its parent group, so the hierarchy
+survives the ordering. The two axes differ in what "undeclared" means: the row
+axis is ascending unless told otherwise, while an undeclared column level keeps
+the order the data arrived in — a query that ordered months by month number
+would be ruined by alphabetical ordering, so the engine does not impose one. A
+sort the user applies by clicking a header still wins over the declaration.
+
+`area`, `role`, `aggregation`, `show-as`, and `sort-order` bind to the
+`PivotArea`, `PivotFieldRole`, `PivotAggregation`, `PivotShowAs`, and
+`PivotSortDirection` enums, so a misspelled value such as `area="Roww"` fails
+the Razor compile rather than surfacing in the browser.
 
 A `<pivot-field>` outside a `<pivot-grid>` throws, as does a grid with no
 fields or no `id`. The tag helpers hold no pivot logic of their own — they
@@ -415,7 +433,7 @@ emit identical markup.
 | `updateFields(fields)` | Validates and replaces the field set, rebuilds the renderer, and refreshes. |
 | `update({ fields, filters, rowSort })` | Applies whichever of `fields`, `filters`, and `rowSort` are given (each is left untouched when omitted) and refreshes exactly once, instead of once per piece the way calling `updateFields`, `setFilter`, and `sortBy` in sequence would. This is what `PivotFieldDesigner` calls after every drag-and-drop mutation. |
 | `sortBy(sort)` | Sets `rowSort` and refreshes. Throws if `allowSorting` is `false`. |
-| `setFilter(field, values)` | Replaces the filter for `field` (removes it when `values` is empty) and refreshes. Throws if `allowFiltering` is `false`. |
+| `setFilter(field, values, mode = "Include")` | Replaces the filter for `field` (removes it when `values` is empty, in either mode) and refreshes. Under `"Exclude"` the list names the values to drop instead of the ones to keep. Throws if `allowFiltering` is `false`. With a `fieldDesigner` attached the write goes through the layout state, so the designer's chips and a header funnel always agree — and the filter survives the next drag. |
 | `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
 | `drillDown({ rowPath, columnPath, valueKey })` | Returns the source records behind a pivot coordinate. Throws if `allowDrillDown` is `false`. |
 | `saveState()` / `clearState()` / `readState()` | Write, forget, and read the persisted state by hand. All three return `false`/`null` rather than throwing when persistence is off or storage is unavailable. |
@@ -488,14 +506,15 @@ Pure state — no DOM access. Constructed with `new PivotLayoutState(catalog, la
 | Method | Behavior |
 | --- | --- |
 | `canDrop(name, area)` | Whether `name` may move into `area` (`"row"`, `"column"`, `"data"`, or `"filter"`), per the role rules above. A field's own area is allowed, because dropping a chip back into its own zone is how repositioning is expressed. |
-| `move(name, area, index)` | Moves a catalog field into `area` at `index` (default: end), detaching it from wherever it was. Throws if `canDrop` would be `false`. Placing into `"data"` defaults `aggregation` to `"sum"`; placing into `"filter"` starts with no selected values. When the field is already in `area` this repositions it: `index` is read against the zone as it looks before the move, and the entry keeps its aggregation, showAs, and selected filter values. |
+| `move(name, area, index)` | Moves a catalog field into `area` at `index` (default: end), detaching it from wherever it was. Throws if `canDrop` would be `false`. Placing into `"data"` defaults `aggregation` to `"sum"`; placing into `"filter"` starts with no selected values. When the field is already in `area` this repositions it: `index` is read against the zone as it looks before the move, and the entry keeps its aggregation, showAs, and selected filter values. A filtered field carries its filter along, whichever area it moves to; only `remove` drops it. |
 | `remove(name)` | Detaches a field back to the available list. A no-op if the field is already available. Throws if `name` is the only field in the data area — a pivot always needs at least one. |
 | `reorder(area, fromIndex, toIndex)` | Reorders a placed field within its own zone. |
 | `setFormat(name, format)` | Sets a data field's number format, or clears it with `null`. Validates `type`, `decimals` (0-6), `useGrouping`, and `currency`, throwing rather than coercing, and leaves the existing format untouched when it refuses. Throws if the field is not in the data area. |
 | `setAggregation(name, aggregation)` | Sets the aggregation (`"sum"`, `"count"`, `"average"`, `"min"`, `"max"`) of a field already in the data area. Throws otherwise. |
-| `setFilterValues(name, values)` | Sets the values a filter accepts, for a field already in the filter area. Values are stringified, with `null` stored as `""` — the form the engine compares a null source value as. An empty array means no restriction, which is also how an untouched filter starts, so clearing a filter and never setting one are the same state. Throws if the field is not in the filter area or `values` is not an array. |
+| `setFilterValues(name, values)` | Sets the values a filter accepts. The field does not have to be in the filter area: a filter belongs to the field, so a row or column field can be filtered where it stands (which is what the table's header funnel does), and it keeps its seat. Values are stringified, with `null` stored as `""` — the form the engine compares a null source value as. An empty array means no restriction, which is also how an untouched filter starts, so clearing a filter and never setting one are the same state. Throws if `name` is a measure or `values` is not an array. |
+| `setFilterMode(name, mode)` | Sets `"Include"` or `"Exclude"` for the field's filter, under the same ownership rule as `setFilterValues`. Throws on an unknown mode or a measure. |
 | `field(name)` | Returns the catalog entry for `name`. Throws if unknown. |
-| `getState()` | Returns `{ rows, columns, values, filters, available, captions }` — `available` is every catalog field not currently placed, and `captions` holds the renames applied through `setCaption`. The whole object can be passed straight back to the constructor to restore it. |
+| `getState()` | Returns `{ rows, columns, values, filters, available, captions }` — `available` is every catalog field not currently placed, and `captions` holds the renames applied through `setCaption`. The whole object can be passed straight back to the constructor to restore it. `filters` holds every filter, including those on fields seated in another area; the designer's Filters zone shows only the entries whose field is not seated elsewhere. |
 | `toFields()` | Converts the current layout into the field-array shape `PivotForge.create`/`updateFields` accept. |
 | `toRequestState()` | Returns `{ fields, filters }` shaped for `widget.update(...)` — `filters` is pre-filtered to entries that actually have selected values. |
 | `on("change", handler)` | Subscribes to layout mutations; fires once per successful `move`/`remove`/`reorder`/`setAggregation` call, with the current `getState()` as the payload. Returns an unsubscribe function. `remove()` on a field already in `available` is a no-op — it does not fire `change`, because it did not actually move or remove anything. |
@@ -516,6 +535,8 @@ The catalog is fixed at construction — it is every field the grid declared, re
 The designer renders a **search input** above the available-field list that filters it case-insensitively by matching the field's **caption**, not its `dataField` name. Search is a display-only filter — it never touches `PivotLayoutState` and never triggers `widget.update()`.
 
 A chip in the **Filters** zone carries a third control, `▼`, which opens the packaged `PivotFilterPicker`. The button is rendered only when the widget exposes `fieldValues()` and `pivot-filter-picker.js` was loaded, so an older host gets no control rather than a broken one. Once a filter accepts fewer than all values, its chip shows the count — `Çeyrek (3)` — because a Filters zone that shows only field names gives no clue that anything is being restricted.
+
+The picker also carries the filter's **mode**. A checkbox always means "shown", in both modes; what the mode picks is which side of the list gets stored, and therefore what happens to a value the source gains later — under `Include` a new value is hidden, under `Exclude` it is shown. That is why the control is labelled by its outcome (*Sonradan eklenen değerler: Gizlensin / Gösterilsin*) rather than by the storage. Switching modes never changes what is currently checked, because both descriptions cover the same rows. An excluding chip counts what it drops — `Çeyrek (2 hariç)` — and with every value checked the filter is stored as an empty list in both modes, which means no restriction at all.
 
 Removing the last field from the data area is refused by `PivotLayoutState.remove`, and the designer reflects this in the UI: that chip's remove (`×`) button is rendered `disabled`, with a `title` explaining why.
 
@@ -593,6 +614,16 @@ like a filter rather than a frozen snapshot:
 **Tümünü seç** and **Temizle** act on what the search is currently showing, the
 way a spreadsheet filter does — searching and then selecting all is how a subset
 gets picked out of a long list.
+
+### Header filter
+
+Every row field's header cell in the table itself carries the same `▼`. It opens the same `PivotFilterPicker` over the same filter entry the Filters zone would — the funnel and the chip are two ways into one filter, not two filters — and the field stays where it is: filtering `Bölge` from its header leaves it a row field and adds no chip to the Filters zone. A funnel whose field is currently restricted is marked (`is-active`).
+
+The control is rendered only where there is something behind it: the renderer draws it when `onFilterRequested` is a function, and the widget supplies that callback only when `allowFiltering` is on and `pivot-filter-picker.js` was loaded. A host that renders through its own `PivotTableRenderer` options gets the same bargain — no callback, no funnel.
+
+Two limits worth knowing. The **column axis has no field-name cell** — column headers render values — so column fields are still filtered from their designer chip. And in `compact` layout mode the row fields share one header cell, so only the first of them is reachable from the table.
+
+Because a filter belongs to the field, `PivotLayoutState.move` carries it along: dragging a header-filtered row field into the Filters zone shows the selection it already had, and dragging it back out keeps it. Only `remove` drops a filter.
 
 ### Detail modal
 
@@ -685,7 +716,7 @@ positionally.
 PivotForge.create("#pivotGrid", {
   rendererOptions: {
     culture: "en-GB",
-    texts: { noData: "No data", sortField: "Sort by {0}" }
+    texts: { noData: "No data", sortField: "Sort by {0}", filterField: "Filter {0}" }
   }
 });
 ```

@@ -7,8 +7,9 @@ This document records the supported public surface for `0.5.0-preview.1`. Public
 ### Pivot model and engine
 
 - `PivotEngine`: executes object, `DataTable`, and dictionary sources; supports cancellation and drill-down. `DistinctValues` / `DistinctValuesRecords` list the values a filter on a field can accept, in reading order. The parameterless constructor collates row labels with `CultureInfo.CurrentCulture`, resolved per call; `new PivotEngine(CultureInfo)` pins it.
-- `PivotRequest`, `PivotFilter`, `PivotValueDefinition`, `PivotSort`: define layout, filtering, values, show-as calculations, and row ordering.
+- `PivotRequest`, `PivotFilter`, `PivotValueDefinition`, `PivotSort`, `PivotFieldSort`: define layout, filtering, values, show-as calculations, and ordering. `PivotSort` orders the row axis as a whole; `PivotRequest.FieldSorts` orders one row or column field's own header level within its parent group, and `PivotSort` wins over it on the row axis.
 - `PivotAggregation`, `PivotShowAs`, `PivotSortMode`, `PivotSortDirection`: configure calculations and ordering.
+- `PivotFilterMode`: whether a `PivotFilter`'s values are the ones to keep (`Include`, the default) or the ones to drop (`Exclude`). An empty value list restricts nothing in either mode.
 - `PivotResult`, `PivotCell`, `PivotTotal`, `PivotSubtotal`, `PivotMetadata`: represent completed pivot output.
 - `PivotResultPaginator`, `PivotResultPage`: create row-based pages from a completed result.
 - `PivotFieldNotFoundException`, `PivotFieldTypeException`: report invalid fields and incompatible aggregation values.
@@ -44,7 +45,7 @@ This document records the supported public surface for `0.5.0-preview.1`. Public
 - `PivotForge.AspNetCore.Rendering.PivotForgeFactory`: creates component builders; `PivotGrid()` returns a `PivotGridBuilder`.
 - `PivotForge.AspNetCore.Rendering.PivotGridBuilder`: declares a pivot grid's container, options, and fields, and renders its markup plus the `PivotForge.create` initialization script. `FieldDesigner(string selector)` renders an interactive field designer into the matching host element.
 - `PivotForge.AspNetCore.Rendering.PivotFieldCollectionBuilder`: collects fields in declaration order via `Add()`.
-- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, role, aggregation, show-as, caption, visibility, and number format (`FormatType`, `FormatDecimals`, `FormatGrouping`, `FormatCurrency`).
+- `PivotForge.AspNetCore.Rendering.PivotFieldBuilder`: configures a single field's data source, area, role, aggregation, show-as, caption, visibility, number format (`FormatType`, `FormatDecimals`, `FormatGrouping`, `FormatCurrency`), its position within its area (`AreaIndex`), its own level's ordering on the `Row` and `Column` axes (`SortOrder`), and — on `Row` fields — its initial expansion (`Expanded`) and whether its groups carry a total (`ShowTotals`).
 - `PivotForge.AspNetCore.Rendering.PivotArea`: `Row`, `Column`, `Data`, `Filter`, `Available`.
 - `PivotForge.AspNetCore.Rendering.PivotFieldRole`: `Dimension`, `Measure`. Required on `PivotArea.Available` fields; inferred elsewhere from `Area`.
 - `PivotForge.AspNetCore.Rendering.PivotValueFormatType`: `Number`, `Currency`, `Percent`. Selects how a data field's values are formatted in the browser.
@@ -80,13 +81,42 @@ Razor Class Library scripts expose these constructors and helpers under `window.
 - `PivotForge.PivotDrillDownModal`
 - `PivotForge.PivotVirtualDataSource`
 
-`PivotForge.create(target, options)` builds and returns a `PivotWidget` from a declarative field list; see the [ASP.NET Core integration guide](aspnetcore-integration.md#declarative-api) for its full contract. `PivotForge.PivotRequestBuilder` normalizes and validates the field model shared by the declarative Razor and JavaScript APIs. `PivotWidget.update({ fields, filters, rowSort })` applies any combination of those pieces and refreshes exactly once, alongside the existing `updateFields(fields)`. `PivotForge.PivotLayoutState` and `PivotForge.PivotFieldDesigner` implement the interactive field designer described in the [ASP.NET Core integration guide](aspnetcore-integration.md#field-designer), including positional drag-and-drop: `move(name, area, index)` places a field at a specific slot, and dropping a chip into the zone it already occupies reorders it. `setFormat(name, format)` sets or clears a data field's number format, `setShowAs(name, showAs)` sets a value's show-as calculation, and `setCaption(name, caption)` overrides a field's display caption (`declaredCaption(name)` recovers the declared one, and an empty caption clears the override). The designer edits all of them, plus position and removal, through a per-field settings modal opened with the button on a placed chip; a widget built with the `fieldDesigner` option exposes them as `widget.layoutState` and `widget.designer`. `PivotForge.PivotDrillDownModal` renders the source records behind a cell — search, per-column filters, CSV export and truncation notice — deriving its columns, captions and number formats from the declared fields; `PivotWidget` builds one on first cell activation unless `drillDownModal` is `false` or the consumer supplied its own `rendererOptions.onCellDoubleClick`. `PivotForge.PivotDrillDownData.createFormatter(format, culture)` turns a declared value format into a column formatter. `PivotForge.PivotFilterPicker` lists a filter field's distinct values as a searchable checkbox modal, fetched through `widget.fieldValues(field)`; the designer builds one on first use, so a declarative page needs only the script tag.
+`PivotForge.create(target, options)` builds and returns a `PivotWidget` from a declarative field list; see the [ASP.NET Core integration guide](aspnetcore-integration.md#declarative-api) for its full contract. `PivotForge.PivotRequestBuilder` normalizes and validates the field model shared by the declarative Razor and JavaScript APIs. `PivotWidget.update({ fields, filters, rowSort })` applies any combination of those pieces and refreshes exactly once, alongside the existing `updateFields(fields)`. `PivotForge.PivotLayoutState` and `PivotForge.PivotFieldDesigner` implement the interactive field designer described in the [ASP.NET Core integration guide](aspnetcore-integration.md#field-designer), including positional drag-and-drop: `move(name, area, index)` places a field at a specific slot, and dropping a chip into the zone it already occupies reorders it. `setFormat(name, format)` sets or clears a data field's number format, `setShowAs(name, showAs)` sets a value's show-as calculation, and `setCaption(name, caption)` overrides a field's display caption (`declaredCaption(name)` recovers the declared one, and an empty caption clears the override). The designer edits all of them, plus position and removal, through a per-field settings modal opened with the button on a placed chip; a widget built with the `fieldDesigner` option exposes them as `widget.layoutState` and `widget.designer`. `PivotForge.PivotDrillDownModal` renders the source records behind a cell — search, per-column filters, CSV export and truncation notice — deriving its columns, captions and number formats from the declared fields; `PivotWidget` builds one on first cell activation unless `drillDownModal` is `false` or the consumer supplied its own `rendererOptions.onCellDoubleClick`. `PivotForge.PivotDrillDownData.createFormatter(format, culture)` turns a declared value format into a column formatter. `PivotForge.PivotFilterPicker` lists a filter field's distinct values as a searchable checkbox modal, fetched through `widget.fieldValues(field)`; the designer builds one on first use, so a declarative page needs only the script tag. It also carries the filter's mode: `open({ ..., mode })` is the mode to open on, and `onApply(values, mode)` reports back both. `PivotLayoutState.setFilterMode(name, mode)` sets it, `widget.setFilter(field, values, mode)` applies it, and a stored view carries it — one saved before modes existed restores as `Include`.
 
 Static assets are served from `/_content/PivotForge.AspNetCore/`.
 
 ## Compatibility Policy
 
 PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking changes may be made when necessary and will be called out in release notes. After `1.0.0`, incompatible public API changes require a new major version. Additive members and behavior-preserving fixes may ship in minor or patch releases as appropriate.
+
+### Behaviour changes since `0.5.0-preview.1`
+
+- **A filter belongs to the field, not to the Filters zone.** Every row field's
+  header cell in the rendered table carries a `▼` that opens the same
+  `PivotFilterPicker` over the same entry, so a row or column field can be
+  filtered where it stands. `PivotLayoutState.setFilterValues`/`setFilterMode`
+  therefore no longer require the field to be in the filter area (they refuse a
+  measure instead), `getState().filters` can hold an entry for a field seated
+  elsewhere — the designer's Filters zone shows only the ones seated there —
+  `move` carries a filter across areas, and `widget.setFilter` writes through
+  `widget.layoutState` when a designer is attached. The renderer gained
+  `onFilterRequested(field)` and `filteredFields`, wired like `onSortRequested`:
+  no callback, no funnel. The column axis has no field-name cell and is
+  unaffected.
+
+- **A filter now carries a mode, and so does a saved view.** `PivotFilter` gained
+  `Mode`, the request JSON gained `filters[].mode`, and the persisted state
+  stores it. Everything defaults to `Include`, which is what the previous
+  behaviour was, and a view saved before modes existed restores as `Include`.
+  A consumer that reads persisted filter entries or supplies its own
+  `PivotFilterPicker.onApply` will see the extra member and the extra argument.
+
+- **The rendered table no longer re-sorts rows in the browser.** It drew them in
+  a hard-coded `tr` collation of its own, which overrode both the culture the
+  request was executed in and any order the engine had been asked for. Rows are
+  now drawn in the order the engine sent. A grid whose ambient culture is not
+  `tr-TR` will therefore see its rows collated in that culture, as the
+  `0.5.0-preview.1` culture fix already intended.
 
 ### Behaviour changes in `0.5.0-preview.1`
 

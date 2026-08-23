@@ -245,6 +245,161 @@ public sealed class PivotForgeAspNetCoreTests
     }
 
     [Fact]
+    public async Task PivotEndpoint_AppliesADeclaredFieldSortToTheRowOrder()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>(
+        [
+            new("North", 120m),
+            new("South", 90m)
+        ]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        // The whole wire path in one assertion: the browser's camelCase payload,
+        // the record's constructor binding, the string enum, and the engine.
+        var json = """
+            {
+              "rows": ["Region"],
+              "columns": [],
+              "values": [{ "field": "Amount", "aggregation": "sum" }],
+              "filters": [],
+              "fieldSorts": [{ "field": "Region", "direction": "Descending" }]
+            }
+            """;
+
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var httpResponse = await client.PostAsync("/pivotforge/pivot", content);
+            await using var responseStream = await httpResponse.Content.ReadAsStreamAsync();
+            using var response = await JsonDocument.ParseAsync(responseStream);
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, httpResponse.StatusCode);
+            Assert.Equal(
+                ["South", "North"],
+                response.RootElement.GetProperty("rowHeaders")
+                    .EnumerateArray()
+                    .Select(header => header[0].GetString()!)
+                    .ToArray());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PivotEndpoint_AppliesAnExcludingFilter()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>(
+        [
+            new("North", 120m),
+            new("South", 90m),
+            new("East", 10m)
+        ]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        // The whole wire path for the mode: the browser's camelCase payload, the
+        // record's optional constructor parameter, and the string enum.
+        var json = """
+            {
+              "rows": ["Region"],
+              "columns": [],
+              "values": [{ "field": "Amount", "aggregation": "sum" }],
+              "filters": [{ "field": "Region", "values": ["North"], "mode": "Exclude" }]
+            }
+            """;
+
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var httpResponse = await client.PostAsync("/pivotforge/pivot", content);
+            await using var responseStream = await httpResponse.Content.ReadAsStreamAsync();
+            using var response = await JsonDocument.ParseAsync(responseStream);
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, httpResponse.StatusCode);
+            Assert.Equal(
+                ["East", "South"],
+                response.RootElement.GetProperty("rowHeaders")
+                    .EnumerateArray()
+                    .Select(header => header[0].GetString()!)
+                    .ToArray());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PivotEndpoint_TreatsAFilterWithNoModeAsIncluding()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>(
+        [
+            new("North", 120m),
+            new("South", 90m)
+        ]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        // A payload written before modes existed, which must keep meaning what it
+        // meant when it was written.
+        var json = """
+            {
+              "rows": ["Region"],
+              "columns": [],
+              "values": [{ "field": "Amount", "aggregation": "sum" }],
+              "filters": [{ "field": "Region", "values": ["North"] }]
+            }
+            """;
+
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var httpResponse = await client.PostAsync("/pivotforge/pivot", content);
+            await using var responseStream = await httpResponse.Content.ReadAsStreamAsync();
+            using var response = await JsonDocument.ParseAsync(responseStream);
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, httpResponse.StatusCode);
+            Assert.Equal(
+                ["North"],
+                response.RootElement.GetProperty("rowHeaders")
+                    .EnumerateArray()
+                    .Select(header => header[0].GetString()!)
+                    .ToArray());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task FieldValuesEndpoint_ReturnsDistinctValuesAndReportsTruncation()
     {
         var builder = WebApplication.CreateBuilder();

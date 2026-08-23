@@ -17,4 +17,9 @@ public sealed class PivotRequest
 
     /// <summary>Gets the optional row ordering definition.</summary>
     public PivotSort? RowSort { get; init; }
+
+    /// <summary>Gets the per-field ordering of individual row and column header levels.</summary>
+    /// <remarks><see cref="RowSort"/> orders the row axis as a whole and takes precedence over these
+    /// on that axis; the column axis is governed by these alone.</remarks>
+    public IReadOnlyList<PivotFieldSort> FieldSorts { get; init; } = [];
 }

@@ -433,7 +433,11 @@ public sealed class PivotEngine
             }
         }
 
-        var columnHeaders = CreateColumnHeaders(columnIndex.Headers, columnLevelValues);
+        var columnHeaders = CreateColumnHeaders(
+            columnIndex.Headers,
+            columnLevelValues,
+            ResolveLevelDirections(request.Columns, request.FieldSorts),
+            culture);
         var columnLookup = CreateHeaderLookup(columnHeaders);
         var rawCells = buckets
             .OrderBy(pair => pair.Key.Row)
@@ -845,11 +849,15 @@ public sealed class PivotEngine
 
     private static IReadOnlyList<CompiledFilter> CompileFilters(IReadOnlyList<PivotFilter> filters)
     {
+        // An empty list restricts nothing in either mode: an empty set to keep is
+        // how "no filter" is spelled all the way down from the browser, and an
+        // empty set to drop says the same thing from the other side.
         return filters
             .Where(filter => filter.Values.Count > 0)
             .Select(filter => new CompiledFilter(
                 filter.Field,
-                new HashSet<string?>(filter.Values, StringComparer.Ordinal)))
+                new HashSet<string?>(filter.Values, StringComparer.Ordinal),
+                filter.Mode == PivotFilterMode.Exclude))
             .ToArray();
     }
 
@@ -864,7 +872,7 @@ public sealed class PivotEngine
         {
             var value = Convert.ToString(reader.GetValue(record, filter.Field), System.Globalization.CultureInfo.InvariantCulture);
 
-            if (!filter.Values.Contains(value))
+            if (filter.Values.Contains(value) == filter.Excludes)
             {
                 return false;
             }
@@ -908,16 +916,42 @@ public sealed class PivotEngine
 
     private static IReadOnlyList<IReadOnlyList<string?>> CreateColumnHeaders(
         IReadOnlyList<IReadOnlyList<string?>> observedHeaders,
-        IReadOnlyList<IReadOnlyList<string?>> columnLevelValues)
+        IReadOnlyList<IReadOnlyList<string?>> columnLevelValues,
+        IReadOnlyList<PivotSortDirection?> directions,
+        CultureInfo culture)
     {
-        if (columnLevelValues.Count <= 1 || observedHeaders.Count == 0)
+        if (observedHeaders.Count == 0)
         {
             return observedHeaders;
         }
 
         var headers = new List<IReadOnlyList<string?>>();
-        AppendColumnHeaderProducts(headers, columnLevelValues, [], 0);
+        AppendColumnHeaderProducts(
+            headers, OrderColumnLevels(columnLevelValues, directions, culture), [], 0);
         return headers;
+    }
+
+    /// <summary>Orders the values of each declared column level, leaving the rest as observed.</summary>
+    /// <remarks>An undeclared level keeps the order the data arrived in, which can carry an
+    /// intent the engine cannot see — a query's own ORDER BY on month number, for instance,
+    /// which alphabetical ordering would destroy.</remarks>
+    private static IReadOnlyList<IReadOnlyList<string?>> OrderColumnLevels(
+        IReadOnlyList<IReadOnlyList<string?>> columnLevelValues,
+        IReadOnlyList<PivotSortDirection?> directions,
+        CultureInfo culture)
+    {
+        var comparer = StringComparer.Create(culture, ignoreCase: true);
+
+        return columnLevelValues
+            .Select((values, level) => directions.ElementAtOrDefault(level) switch
+            {
+                PivotSortDirection.Ascending =>
+                    (IReadOnlyList<string?>)values.OrderBy(value => value, comparer).ToArray(),
+                PivotSortDirection.Descending =>
+                    values.OrderByDescending(value => value, comparer).ToArray(),
+                _ => values
+            })
+            .ToArray();
     }
 
     private static void AppendColumnHeaderProducts(
@@ -976,12 +1010,14 @@ public sealed class PivotEngine
         var rowOrder = Enumerable.Range(0, rowHeaders.Count).ToArray();
         var sort = request.RowSort;
 
+        var directions = ResolveLevelDirections(request.Rows, request.FieldSorts);
+
         rowOrder = sort is null
             ? rowOrder
                 .OrderBy(
                     row => rowHeaders[row],
                     Comparer<IReadOnlyList<string?>>.Create(
-                        (left, right) => CompareRowHeaders(left, right, culture)))
+                        (left, right) => CompareRowHeaders(left, right, culture, directions)))
                 .ToArray()
             : sort.Mode switch
         {
@@ -1022,7 +1058,8 @@ public sealed class PivotEngine
     private static int CompareRowHeaders(
         IReadOnlyList<string?> left,
         IReadOnlyList<string?> right,
-        CultureInfo culture)
+        CultureInfo culture,
+        IReadOnlyList<PivotSortDirection?> directions)
     {
         var comparer = StringComparer.Create(culture, ignoreCase: true);
         var depth = Math.Max(left.Count, right.Count);
@@ -1033,11 +1070,34 @@ public sealed class PivotEngine
 
             if (comparison != 0)
             {
-                return comparison;
+                // The comparison is applied level by level, so flipping one level
+                // reverses that level's groups without moving them out of their
+                // parent -- the hierarchy survives the reversal.
+                return directions.ElementAtOrDefault(level) == PivotSortDirection.Descending
+                    ? -comparison
+                    : comparison;
             }
         }
 
         return 0;
+    }
+
+    /// <summary>Maps the declared per-field sorts onto header levels, by position in the axis.</summary>
+    private static IReadOnlyList<PivotSortDirection?> ResolveLevelDirections(
+        IReadOnlyList<string> fields,
+        IReadOnlyList<PivotFieldSort> fieldSorts)
+    {
+        if (fieldSorts.Count == 0)
+        {
+            return [];
+        }
+
+        return fields
+            .Select(field => fieldSorts
+                .Where(sort => string.Equals(sort.Field, field, StringComparison.Ordinal))
+                .Select(sort => (PivotSortDirection?)sort.Direction)
+                .FirstOrDefault())
+            .ToArray();
     }
 
     private static int[] SortRowsByLabel(
@@ -1168,7 +1228,7 @@ public sealed class PivotEngine
         return rows;
     }
 
-    private sealed record CompiledFilter(string Field, HashSet<string?> Values);
+    private sealed record CompiledFilter(string Field, HashSet<string?> Values, bool Excludes);
 
     private sealed record SortedRows(
         IReadOnlyList<IReadOnlyList<string?>> Headers,

@@ -14,8 +14,11 @@
     format: "Biçim",
     settings: "Alan ayarları",
     filterValues: "Filtre değerleri",
-    // {0} is replaced with the number of selected values.
+    // {0} is replaced with the number of listed values.
     filterCount: "({0})",
+    // The same count means the opposite thing under an excluding filter, so it
+    // cannot share the label.
+    filterCountExcluded: "({0} hariç)",
     aggregation: "Değer ayarları",
     showAs: "Değerleri farklı göster",
     formatting: "Biçimlendirme",
@@ -243,11 +246,14 @@
 
       // A filter whose zone shows only the field name gives no clue that it is
       // restricting anything, so an active one carries its selection count.
-      const selectedCount = area === "filter" ? this.filterValuesOf(name).length : 0;
-      if (selectedCount > 0) {
+      const filter = area === "filter" ? this.filterEntryOf(name) : null;
+      if (filter && filter.values.length > 0) {
         const count = document.createElement("span");
         count.className = "pivot-chip__filter-count";
-        count.textContent = format(this.labels.filterCount, selectedCount);
+        count.classList.toggle("is-excluding", filter.mode === "Exclude");
+        count.textContent = format(
+          filter.mode === "Exclude" ? this.labels.filterCountExcluded : this.labels.filterCount,
+          filter.values.length);
         chip.appendChild(count);
       }
 
@@ -676,8 +682,12 @@
         (this.filterPicker !== null || typeof PivotForge.PivotFilterPicker === "function");
     }
 
-    filterValuesOf(name) {
-      return this.state.getState().filters.find(entry => entry.field === name)?.values ?? [];
+    // A chip in the Filters zone always has an entry. A field filtered from its
+    // row header does not until the first apply, and an absent entry is exactly
+    // the unrestricted filter the picker should open with.
+    filterEntryOf(name) {
+      return this.state.getState().filters.find(filter => filter.field === name)
+        ?? { field: name, values: [], mode: "Include" };
     }
 
     openFilterPicker(name) {
@@ -686,11 +696,18 @@
         labels: this.labels.filterPicker
       });
 
+      const filter = this.filterEntryOf(name);
+
       return this.filterPicker.open({
         field: name,
         caption: this.state.field(name).caption,
-        selected: this.filterValuesOf(name),
-        onApply: values => this.apply(() => this.state.setFilterValues(name, values))
+        selected: filter.values,
+        mode: filter.mode,
+        // One apply(), so a picker that changed both produces a single refresh.
+        onApply: (values, mode) => this.apply(() => {
+          this.state.setFilterMode(name, mode);
+          this.state.setFilterValues(name, values);
+        })
       });
     }
 
@@ -1037,7 +1054,12 @@
         case "row": return state.rows;
         case "column": return state.columns;
         case "data": return state.values.map(value => value.field);
-        case "filter": return state.filters.map(filter => filter.field);
+        // A filter entry can belong to a field seated in another zone -- one
+        // filtered from its row header -- and that field's chip is already
+        // there, so only the entries actually seated here become chips.
+        case "filter": return state.filters
+          .filter(filter => this.state.areaOf(filter.field) === "filter")
+          .map(filter => filter.field);
         default: return state.available;
       }
     }

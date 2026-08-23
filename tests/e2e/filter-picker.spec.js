@@ -132,6 +132,42 @@ test("re-checking everything clears the filter rather than freezing the value se
     .toHaveCount(0);
 });
 
+test("switching to exclude reaches the chip and the request", async ({ page }) => {
+  // Only the pivot requests matter here; /field-values is what fills the picker.
+  const requests = [];
+  page.on("request", request => {
+    if (request.method() === "POST" && request.url().includes("/pivotforge/") &&
+      !request.url().includes("/field-values")) {
+      requests.push(request.postDataJSON());
+    }
+  });
+
+  await openPicker(page);
+  await page.locator(`${picker} [data-action="filter-mode"][data-mode="Exclude"]`).click();
+  // Checking a box means "shown" in both modes, so unchecking Ç1 is what an
+  // excluding filter stores.
+  await page.locator(`${pickerValue} input`).nth(0).uncheck();
+  await page.locator(`${picker} [data-action="filter-apply"]`).click();
+
+  await expect(page.locator(`${chipIn("filter", "Quarter")} .pivot-chip__filter-count`))
+    .toHaveText("(1 hariç)");
+  await expect(page.locator(`${chipIn("filter", "Quarter")} .pivot-chip__filter-count`))
+    .toHaveClass(/is-excluding/);
+  await expect.poll(() => requests.at(-1)?.filters)
+    .toEqual([{ field: "Quarter", values: ["Ç1"], mode: "Exclude" }]);
+
+  // Reopening reads the stored list back through the mode: the excluded value
+  // is the unchecked one, and the button it was applied under is still active.
+  await page.locator(`${chipIn("filter", "Quarter")} [data-action="filter"]`).click();
+  await expect(page.locator(pickerValue)).toHaveCount(4);
+  await expect(page.locator(`${picker} [data-action="filter-mode"][data-mode="Exclude"]`))
+    .toHaveClass(/is-active/);
+  const checked = await page.locator(`${pickerValue} input`).evaluateAll(
+    boxes => boxes.map(box => box.checked));
+  expect(checked).toEqual([false, true, true, true]);
+  expect(page.errors).toEqual([]);
+});
+
 test("cancelling and escape both leave the filter alone", async ({ page }) => {
   await openPicker(page);
 

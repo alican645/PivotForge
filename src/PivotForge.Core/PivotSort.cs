@@ -39,6 +39,16 @@ public sealed record PivotSort(
         new(PivotSortMode.RowTotalValue, direction, ValueKey: valueKey, ColumnPath: columnPath);
 }
 
+/// <summary>Defines the ordering of one row or column field's own header level.</summary>
+/// <remarks>
+/// Unlike <see cref="PivotSort"/>, which orders the whole row axis by one criterion, this orders a
+/// single level within its parent group, so the hierarchy stays intact. Levels left undeclared keep
+/// the engine's default: ascending on the row axis, discovery order on the column axis.
+/// </remarks>
+/// <param name="Field">The row or column field whose level is ordered.</param>
+/// <param name="Direction">The sort direction applied to that level.</param>
+public sealed record PivotFieldSort(string Field, PivotSortDirection Direction);
+
 /// <summary>Specifies the source used to order pivot rows.</summary>
 public enum PivotSortMode
 {

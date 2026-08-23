@@ -78,11 +78,13 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `summaryType` (aggregation) | ✅ | ✅ | 5 tür: sum/count/average/min/max |
 | `summaryDisplayMode` (`showAs`) | ✅ | ✅ | `show-as` niteliği ve `ShowAs()` metodu mevcut |
 | `format` / `precision` | ✅ | ✅ | `0.4.0-preview.1`'de eklendi |
-| `areaIndex` | ✅ | ❌ | Sıra bildirim sırasından geliyor, açıkça verilemiyor |
-| `sortOrder`, `sortBy` | ⚠️ | ❌ | Alan başına sıralama yok; yalnızca tablo geneli |
+| `areaIndex` | ✅ | ✅ | `area-index` niteliği ve `AreaIndex()` metodu |
+| `sortOrder` | ✅ | ✅ | `sort-order` niteliği; satır ve sütun ekseninde seviye başına yön |
+| `sortBy` | ⚠️ | ❌ | Özet değere göre seviye sıralaması yok; yalnızca tablo geneli |
 | `sortBySummaryField` / `Path` | ⚠️ | ⚠️ | `RowTotalValue` var ama sütun yoluna göre değil |
-| `expanded` | ⚠️ | ❌ | `expandAll`/`collapseAll` var, alan başına başlangıç durumu yok |
-| `showTotals` / `showGrandTotals` (alan başına) | ❌ | ❌ | Yalnızca tablo geneli |
+| `expanded` | ✅ | ✅ | Alan başına başlangıç durumu; yalnızca ilk çizimde |
+| `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
+| `showGrandTotals` (alan başına) | ❌ | ❌ | Yalnızca tablo geneli |
 | `dataType` | ❌ | ❌ | Tür dönüşümü yok |
 | `groupInterval` (yıl/çeyrek/ay/gün) | ❌ | ❌ | **Önemli** — tarih gruplaması için ayrı alan açmak gerekiyor |
 | `selector` / `sortingMethod` | ❌ | ❌ | Özel gruplama/sıralama fonksiyonu |
@@ -96,10 +98,25 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 
 ### Yapılacaklar
 
-- [ ] `area-index` ile açık sıra
-- [ ] Alan başına `sort-order` / `sort-by`
-- [ ] `expanded` başlangıç durumu
-- [ ] Alan başına `show-totals` / `show-grand-totals`
+- [x] `area-index` ile açık sıra — yalnızca açılış düzenini kurar; kullanıcı bir
+      çipi taşıdıktan sonra düzen sıranın sahibidir, bu yüzden `toFields()` bunu
+      geri yaymaz
+- [x] Alan başına `sort-order` — seviyeyi kendi üst grubunun içinde sıralar,
+      hiyerarşi bozulmaz. İki eksen "bildirilmemiş"i farklı yorumluyor: satır
+      ekseni aksi söylenmedikçe artan, sütun ekseni verinin geliş sırasını korur
+      (ay adlarını ay numarasına göre sıralayan bir sorgu alfabetik sıralamayla
+      bozulurdu). Kullanıcının başlığa tıklayarak kurduğu sıralama bildirime
+      üstün gelir
+- [ ] Alan başına `sort-by` — özet değere göre seviye sıralaması
+- [x] `expanded` başlangıç durumu — `Row` alanında `expanded="false"` o seviyenin
+      gruplarını **ilk** çizimde kapatıyor; sonrası kullanıcıya ait ve geri
+      yüklenen `state-storing` görünümü ona üstün geliyor
+- [x] Alan başına `show-totals` — `false` grup başlığını yerinde bırakıp
+      toplamlarını kaldırıyor; bu, ara toplamlar tümüyle kapalıyken zaten
+      kullanılan satır şeklinin aynısı, yani derin bir hiyerarşi yalnızca
+      toplanmaya değer seviyelerde toplam gösterebiliyor
+- [ ] Alan başına `show-grand-totals` — DevExpress'te sütun yönünde de anlamı
+      var, renderer'da karşılığı yok; ayrı bir tasarım kararı gerektiriyor
 - [ ] `group-interval` — tarih alanlarını yıl/çeyrek/ay/gün olarak gruplama
 - [ ] `data-type` ve tür dönüşümü
 - [ ] `width`, `word-wrap`
@@ -112,17 +129,26 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 **En büyük işlevsel açık.** Bugün filtre modeli şu kadar:
 
 ```csharp
-public sealed record PivotFilter(string Field, IReadOnlyList<string?> Values);
+public sealed record PivotFilter(
+    string Field,
+    IReadOnlyList<string?> Values,
+    PivotFilterMode Mode = PivotFilterMode.Include);
 ```
 
 Değer seçici artık pakette (`PivotFilterPicker`): motora `PivotEngine.DistinctValues`,
 uç noktalara `POST /pivotforge/field-values`, tasarımcı çipine `▼` düğmesi eklendi.
-Kalan açık operatörler ve include/exclude tarafında.
+Include/exclude ve satır başlığı hunisi de tamam. Kalan açık operatörler tarafında.
 
 - [x] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim,
       "Tümünü seç"/"Temizle", kesme uyarısı — tasarımcıdaki Filtreler bölgesi artık işlevsel
-- [ ] `filterType` — include / exclude
-- [ ] Excel benzeri başlık filtresi (`headerFilter`) — sütun/satır başlığından filtreleme
+- [x] `filterType` — include / exclude — `<pivot-filter type="Exclude">`, seçicide mod
+      düğmeleri, `setFilterMode`, kaydedilen görünümde saklanır
+- [x] Excel benzeri başlık filtresi (`headerFilter`) — satır başlığındaki huni aynı
+      `PivotFilterPicker`'ı aynı filtre girdisi üzerinde açar; filtre bölgeye değil
+      alana ait olduğu için alan yerinde kalır ve taşınırken filtresini de taşır.
+      Sütun ekseninde alan adı hücresi yok — orası ayrı bir iş (aşağıda)
+- [ ] Sütun ekseninde başlık filtresi — alan adı satırı gerektirir (colSpan/rowSpan,
+      sticky sütunlar, sanal boşluklar, Excel dışa aktarma modeli)
 - [ ] Filtre operatörleri: içerir, başlar, arasında, boş/boş değil, Top-N
 - [ ] Tarih aralığı filtreleri
 - [ ] `hideEmptySummaryCells` — boş satır/sütunları gizle

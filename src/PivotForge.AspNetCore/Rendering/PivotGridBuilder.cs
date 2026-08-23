@@ -287,17 +287,35 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">The field name is null or blank.</exception>
     /// <exception cref="ArgumentNullException">The values are null.</exception>
-    public PivotGridBuilder Filter(string field, params string[] values)
+    public PivotGridBuilder Filter(string field, params string[] values) =>
+        Filter(field, PivotFilterMode.Include, values);
+
+    /// <summary>Restricts a field to, or away from, the given values before aggregation.</summary>
+    /// <param name="field">The source field to filter.</param>
+    /// <param name="mode">Whether the values are the ones kept or the ones dropped.</param>
+    /// <param name="values">The listed values. An empty set filters nothing, in either mode.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The field name is null or blank.</exception>
+    /// <exception cref="ArgumentNullException">The values are null.</exception>
+    public PivotGridBuilder Filter(string field, PivotFilterMode mode, params string[] values)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
         ArgumentNullException.ThrowIfNull(values);
 
-        _filters.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
+        var filter = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["field"] = field,
             ["values"] = values
-        });
+        };
 
+        // Omitted when it is the default, so a payload only carries the mode of a
+        // filter that actually declared one.
+        if (mode != PivotFilterMode.Include)
+        {
+            filter["mode"] = mode.ToString();
+        }
+
+        _filters.Add(filter);
         return this;
     }
 

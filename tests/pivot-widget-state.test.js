@@ -202,7 +202,8 @@ test("the payload carries the layout, captions, filters and sort", async () => {
   const payload = saved(store);
   assert.equal(payload.version, 1);
   assert.deepEqual(payload.layout.rows, ["Region"]);
-  assert.deepEqual(payload.layout.filters, [{ field: "Quarter", values: ["Ç1"] }]);
+  assert.deepEqual(
+    payload.layout.filters, [{ field: "Quarter", values: ["Ç1"], mode: "Include" }]);
   assert.deepEqual(payload.captions, { Region: "Satış Bölgesi" });
   assert.equal(payload.rowSort.field, "Region");
   // available is derived from the catalog, so storing it would only let a stale
@@ -219,11 +220,13 @@ test("a filter picked in the designer round-trips through the payload", () => {
   widget.layoutState.move("Quarter", "filter");
   widget.layoutState.setFilterValues("Quarter", ["Ç1", "Ç3"]);
 
-  assert.deepEqual(saved(store).filters, [{ field: "Quarter", values: ["Ç1", "Ç3"] }]);
+  assert.deepEqual(
+    saved(store).filters, [{ field: "Quarter", values: ["Ç1", "Ç3"], mode: "Include" }]);
   widget.dispose();
 
   const reopened = build({ designer: true, storage: store }).widget;
-  assert.deepEqual(reopened.getState().filters, [{ field: "Quarter", values: ["Ç1", "Ç3"] }]);
+  assert.deepEqual(
+    reopened.getState().filters, [{ field: "Quarter", values: ["Ç1", "Ç3"], mode: "Include" }]);
   reopened.dispose();
 });
 
@@ -233,7 +236,81 @@ test("a filter accepting everything is not written as a restriction", () => {
   widget.layoutState.move("Quarter", "filter");
 
   assert.deepEqual(saved(store).filters, []);
-  assert.deepEqual(saved(store).layout.filters, [{ field: "Quarter", values: [] }]);
+  assert.deepEqual(
+    saved(store).layout.filters, [{ field: "Quarter", values: [], mode: "Include" }]);
+  widget.dispose();
+});
+
+// What a row header's funnel does. The designer's next update() sends the
+// layout state's filters, so a header filter that never reached the layout
+// state would be wiped by the next drag.
+test("a filter set on a row field survives the next designer edit", async () => {
+  const { widget, store } = build({ designer: true });
+
+  await widget.setFilter("Region", ["Ege"], "Exclude");
+
+  assert.deepEqual(
+    widget.layoutState.getState().filters,
+    [{ field: "Region", values: ["Ege"], mode: "Exclude" }]);
+  assert.deepEqual(
+    saved(store).filters, [{ field: "Region", values: ["Ege"], mode: "Exclude" }]);
+  // The field is filtered where it stands: it must not be re-seated in the
+  // Filters zone, nor sent to the server twice.
+  assert.equal(widget.layoutState.areaOf("Region"), "row");
+  assert.deepEqual(
+    widget.getState().fields.filter(field => field.dataField === "Region")
+      .map(field => field.area),
+    ["row"]);
+
+  await widget.designer.apply(() => widget.layoutState.move("Quarter", "row", 1));
+
+  assert.deepEqual(
+    widget.getState().filters, [{ field: "Region", values: ["Ege"], mode: "Exclude" }]);
+  widget.dispose();
+});
+
+// Finds the text of a chip's filter count, at any depth, or null when the chip
+// carries none.
+function filterCountText(node, field) {
+  if (node.dataset?.field === field) {
+    const count = Array.from(node.children)
+      .find(child => child.className === "pivot-chip__filter-count");
+    return count?.textContent ?? null;
+  }
+
+  for (const child of node.children) {
+    const found = filterCountText(child, field);
+    if (found !== null) {
+      return found;
+    }
+  }
+  return null;
+}
+
+test("a filter applied through the widget redraws the designer's chip", async () => {
+  // The chip is where a Filters-zone selection is visible at all, so a widget
+  // that wrote the layout state without redrawing would leave it showing the
+  // previous selection.
+  const { widget } = build({ designer: true });
+  await widget.designer.apply(() => widget.layoutState.move("Region", "filter", 0));
+  assert.equal(filterCountText(designerHost, "Region"), null);
+
+  await widget.setFilter("Region", ["Ege", "Marmara"]);
+
+  assert.equal(filterCountText(designerHost, "Region"), "(2)");
+  widget.dispose();
+});
+
+test("clearing a row field's filter through setFilter reaches the layout state", async () => {
+  const { widget } = build({ designer: true });
+
+  await widget.setFilter("Region", ["Ege"]);
+  await widget.setFilter("Region", []);
+
+  assert.deepEqual(widget.getState().filters, []);
+  assert.deepEqual(
+    widget.layoutState.getState().filters,
+    [{ field: "Region", values: [], mode: "Include" }]);
   widget.dispose();
 });
 
@@ -243,7 +320,7 @@ test("a widget without a designer persists only what it owns", async () => {
   await widget.setFilter("Region", ["Ege"]);
 
   const payload = saved(store);
-  assert.deepEqual(payload.filters, [{ field: "Region", values: ["Ege"] }]);
+  assert.deepEqual(payload.filters, [{ field: "Region", values: ["Ege"], mode: "Include" }]);
   assert.equal(payload.layout, undefined);
   assert.equal(payload.captions, undefined);
   widget.dispose();
@@ -253,7 +330,7 @@ test("every mutating path writes, not just the first", async () => {
   const { widget, store } = build();
 
   await widget.setFilter("Region", ["Ege"]);
-  assert.deepEqual(saved(store).filters, [{ field: "Region", values: ["Ege"] }]);
+  assert.deepEqual(saved(store).filters, [{ field: "Region", values: ["Ege"], mode: "Include" }]);
 
   await widget.sortBy({ mode: "RowLabel", direction: "Descending", field: "Region" });
   assert.equal(saved(store).rowSort.direction, "Descending");
@@ -306,7 +383,10 @@ test("stored filters and sort are adopted with no designer in play", () => {
     })
   });
 
-  assert.deepEqual(widget.getState().filters, [{ field: "Region", values: ["Ege"] }]);
+  // Stored before modes existed, so it is adopted as the including filter it
+  // was when it was saved.
+  assert.deepEqual(
+    widget.getState().filters, [{ field: "Region", values: ["Ege"], mode: "Include" }]);
   assert.equal(widget.getState().rowSort.direction, "Descending");
   widget.dispose();
 });
@@ -316,7 +396,21 @@ test("a stored filter on a field the catalog no longer has is dropped", () => {
     seed: seedWith({ filters: [{ field: "Gone", values: ["x"] }, { field: "Region", values: ["Ege"] }] })
   });
 
-  assert.deepEqual(widget.getState().filters, [{ field: "Region", values: ["Ege"] }]);
+  assert.deepEqual(
+    widget.getState().filters, [{ field: "Region", values: ["Ege"], mode: "Include" }]);
+  widget.dispose();
+});
+
+test("a stored filter carrying a mode the vocabulary does not know is dropped", () => {
+  const { widget } = build({
+    seed: seedWith({
+      filters: [{ field: "Region", values: ["Ege"], mode: "exclude" }]
+    })
+  });
+
+  // Dropped rather than thrown on, like every other unusable stored entry: a
+  // view saved by a tampered-with or newer client must still open the page.
+  assert.deepEqual(widget.getState().filters, []);
   widget.dispose();
 });
 

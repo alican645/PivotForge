@@ -24,7 +24,11 @@ public class PivotTagHelperTests
         int? FormatDecimals = null,
         bool? FormatGrouping = null,
         string? FormatCurrency = null,
-        bool? Visible = null);
+        bool? Visible = null,
+        bool? Expanded = null,
+        bool? ShowTotals = null,
+        int? AreaIndex = null,
+        PivotSortDirection? SortOrder = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -90,6 +94,30 @@ public class PivotTagHelperTests
         {
             helper.Visible = visible;
             attributes.Add(new TagHelperAttribute("visible", visible));
+        }
+
+        if (spec.Expanded is { } expanded)
+        {
+            helper.Expanded = expanded;
+            attributes.Add(new TagHelperAttribute("expanded", expanded));
+        }
+
+        if (spec.ShowTotals is { } showTotals)
+        {
+            helper.ShowTotals = showTotals;
+            attributes.Add(new TagHelperAttribute("show-totals", showTotals));
+        }
+
+        if (spec.AreaIndex is { } areaIndex)
+        {
+            helper.AreaIndex = areaIndex;
+            attributes.Add(new TagHelperAttribute("area-index", areaIndex));
+        }
+
+        if (spec.SortOrder is { } sortOrder)
+        {
+            helper.SortOrder = sortOrder;
+            attributes.Add(new TagHelperAttribute("sort-order", sortOrder.ToString()));
         }
 
         return (helper, attributes);
@@ -643,6 +671,95 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesExpandedAndShowTotalsOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge", Expanded: false, ShowTotals: false),
+            new FieldSpec("Category", PivotArea.Row, "Kategori"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var fields = declared.GetProperty("fields");
+        Assert.False(fields[0].GetProperty("expanded").GetBoolean());
+        Assert.False(fields[0].GetProperty("showTotals").GetBoolean());
+
+        // Omitted rather than written as true, so the browser's own default
+        // applies and the payload does not grow for every undeclared field.
+        Assert.False(fields[1].TryGetProperty("expanded", out _));
+        Assert.False(fields[1].TryGetProperty("showTotals", out _));
+    }
+
+    [Fact]
+    public void RefusesExpandedAndShowTotalsOutsideTheRowArea()
+    {
+        // Subtotals and collapsible groups are drawn on the row axis only.
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Year").Area(PivotArea.Column).Expanded(false).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build());
+
+        // The row area accepts both.
+        new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
+            .Expanded(false).ShowTotals(false).Build();
+    }
+
+    [Fact]
+    public async Task WritesAreaIndexAndSortOrderOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge",
+                AreaIndex: 1, SortOrder: PivotSortDirection.Descending),
+            new FieldSpec("Category", PivotArea.Row, "Kategori"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var fields = declared.GetProperty("fields");
+        Assert.Equal(1, fields[0].GetProperty("areaIndex").GetInt32());
+        Assert.Equal("Descending", fields[0].GetProperty("sortOrder").GetString());
+
+        Assert.False(fields[1].TryGetProperty("areaIndex", out _));
+        Assert.False(fields[1].TryGetProperty("sortOrder", out _));
+    }
+
+    [Fact]
+    public async Task WritesADeclaredAscendingSortOrder()
+    {
+        // Ascending is the enum's default value, so an unwritten attribute and a
+        // deliberate sort-order="Ascending" arrive at the tag helper identically.
+        // They differ on the column axis, where undeclared means discovery order.
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Year", PivotArea.Column, "Yıl", SortOrder: PivotSortDirection.Ascending),
+            new FieldSpec("Region", PivotArea.Row, "Bölge"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal("Ascending", declared.GetProperty("fields")[0].GetProperty("sortOrder").GetString());
+    }
+
+    [Fact]
+    public void RefusesSortOrderOutsideTheRowAndColumnAreas()
+    {
+        // Only those two axes draw a header level there is an order to declare.
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Data)
+            .SortOrder(PivotSortDirection.Ascending).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Filter)
+            .SortOrder(PivotSortDirection.Ascending).Build());
+
+        new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
+            .SortOrder(PivotSortDirection.Descending).Build();
+        new PivotFieldBuilder().DataField("Year").Area(PivotArea.Column)
+            .SortOrder(PivotSortDirection.Ascending).Build();
+    }
+
+    [Fact]
+    public void RefusesANegativeAreaIndex()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotFieldBuilder().AreaIndex(-1));
+    }
+
+    [Fact]
     public void RefusesABlankCulture()
     {
         Assert.Throws<ArgumentException>(() => new PivotGridBuilder().Culture("  "));
@@ -738,6 +855,64 @@ public class PivotTagHelperTests
         Assert.Equal(
             new[] { "Marmara", "Ege" },
             filter.GetProperty("values").EnumerateArray().Select(v => v.GetString()).ToArray());
+    }
+
+    [Fact]
+    public async Task WritesAnExcludingFilterMode()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotFilterTagHelper
+            {
+                Field = "Region",
+                Values = "Marmara, Ege",
+                Type = PivotFilterMode.Exclude
+            }],
+            MinimalFields));
+
+        Assert.Equal("Exclude", config.GetProperty("filters")[0].GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task OmitsTheFilterModeWhenItIsTheDefault()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotFilterTagHelper { Field = "Region", Values = "Marmara" }],
+            MinimalFields));
+
+        // Omitted rather than written as Include, so a payload only carries the
+        // mode of a filter that actually declared one.
+        Assert.False(config.GetProperty("filters")[0].TryGetProperty("mode", out _));
+    }
+
+    /// <summary>The builder equivalent of <see cref="MinimalFields"/>.</summary>
+    private static void FillMinimalFields(PivotFieldCollectionBuilder fields) =>
+        fields.Add().DataField("Amount").Area(PivotArea.Data).Caption("Tutar")
+            .Aggregation(PivotAggregation.Sum);
+
+    [Fact]
+    public void TheFilterOverloadsAgreeOnTheDefaultMode()
+    {
+        var withoutMode = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid").Filter("Region", "Marmara").Fields(FillMinimalFields));
+        var withMode = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid").Filter("Region", PivotFilterMode.Include, "Marmara")
+            .Fields(FillMinimalFields));
+
+        Assert.Equal(withoutMode, withMode);
+    }
+
+    [Fact]
+    public void TheBuilderWritesAnExcludingFilter()
+    {
+        var html = RenderBuilder(new PivotGridBuilder()
+            .Id("pivotGrid").Filter("Region", PivotFilterMode.Exclude, "Marmara")
+            .Fields(FillMinimalFields));
+
+        Assert.Equal(
+            "Exclude",
+            ConfigOf(html).GetProperty("filters")[0].GetProperty("mode").GetString());
     }
 
     [Fact]

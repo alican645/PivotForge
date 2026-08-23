@@ -1776,6 +1776,41 @@ select {
   color: var(--pt-accent-strong);
 }
 
+/* A sortable corner gives its whole width to the sort button, so a funnel
+   standing beside it has to be made room for. */
+.pivot-table__corner.is-sortable.is-filterable .pivot-table__sort-button {
+  width: calc(100% - 26px);
+}
+
+.pivot-table__filter-button {
+  width: 24px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #647084;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.pivot-table__filter-button:hover,
+.pivot-table__filter-button:focus-visible {
+  background: #dde6f0;
+  color: var(--pt-accent-strong);
+  outline: none;
+}
+
+.pivot-table__filter-button.is-active {
+  color: var(--pt-accent-strong);
+  background: #dcf7f2;
+}
+
 .pivot-table__resize-handle {
   position: absolute;
   top: 0;
