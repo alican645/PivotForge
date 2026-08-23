@@ -1864,3 +1864,36 @@ test("applying writes the mode and the values in one widget update", async () =>
   // the page two requests.
   assert.equal(updates.length, before + 1);
 });
+
+test("a row field filtered from its header gets no second chip in the Filters zone", async () => {
+  const { designer, state, host } = buildWithFilter();
+
+  // What a row header's funnel does, seen from the designer's side.
+  state.setFilterValues("Region", ["Ege"]);
+  designer.render();
+
+  assert.deepEqual(
+    chips(zone(host, "filter")).map(chip => chip.dataset.field), ["Quarter"]);
+  assert.deepEqual(
+    chips(zone(host, "row")).map(chip => chip.dataset.field), ["Region"]);
+});
+
+test("the picker opens for a field that has no filter entry yet", async () => {
+  const { designer, state } = buildWithFilter();
+
+  // Region sits in the rows zone and has never been filtered, which is exactly
+  // the state a row header's funnel is first clicked in.
+  await designer.openFilterPicker("Region");
+
+  assert.deepEqual(pickerByAction("filter-value").map(box => box.checked), [true, true, true]);
+
+  const boxes = pickerByAction("filter-value");
+  boxes[0].checked = false;
+  boxes[0].dispatch("change", {});
+  pickerByAction("filter-apply")[0].dispatch("click", {});
+
+  assert.deepEqual(
+    state.getState().filters.find(filter => filter.field === "Region"),
+    { field: "Region", values: ["Q2", "Q3"], mode: "Include" });
+  assert.equal(state.areaOf("Region"), "row");
+});

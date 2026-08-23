@@ -241,6 +241,79 @@ test("a filter accepting everything is not written as a restriction", () => {
   widget.dispose();
 });
 
+// What a row header's funnel does. The designer's next update() sends the
+// layout state's filters, so a header filter that never reached the layout
+// state would be wiped by the next drag.
+test("a filter set on a row field survives the next designer edit", async () => {
+  const { widget, store } = build({ designer: true });
+
+  await widget.setFilter("Region", ["Ege"], "Exclude");
+
+  assert.deepEqual(
+    widget.layoutState.getState().filters,
+    [{ field: "Region", values: ["Ege"], mode: "Exclude" }]);
+  assert.deepEqual(
+    saved(store).filters, [{ field: "Region", values: ["Ege"], mode: "Exclude" }]);
+  // The field is filtered where it stands: it must not be re-seated in the
+  // Filters zone, nor sent to the server twice.
+  assert.equal(widget.layoutState.areaOf("Region"), "row");
+  assert.deepEqual(
+    widget.getState().fields.filter(field => field.dataField === "Region")
+      .map(field => field.area),
+    ["row"]);
+
+  await widget.designer.apply(() => widget.layoutState.move("Quarter", "row", 1));
+
+  assert.deepEqual(
+    widget.getState().filters, [{ field: "Region", values: ["Ege"], mode: "Exclude" }]);
+  widget.dispose();
+});
+
+// Finds the text of a chip's filter count, at any depth, or null when the chip
+// carries none.
+function filterCountText(node, field) {
+  if (node.dataset?.field === field) {
+    const count = Array.from(node.children)
+      .find(child => child.className === "pivot-chip__filter-count");
+    return count?.textContent ?? null;
+  }
+
+  for (const child of node.children) {
+    const found = filterCountText(child, field);
+    if (found !== null) {
+      return found;
+    }
+  }
+  return null;
+}
+
+test("a filter applied through the widget redraws the designer's chip", async () => {
+  // The chip is where a Filters-zone selection is visible at all, so a widget
+  // that wrote the layout state without redrawing would leave it showing the
+  // previous selection.
+  const { widget } = build({ designer: true });
+  await widget.designer.apply(() => widget.layoutState.move("Region", "filter", 0));
+  assert.equal(filterCountText(designerHost, "Region"), null);
+
+  await widget.setFilter("Region", ["Ege", "Marmara"]);
+
+  assert.equal(filterCountText(designerHost, "Region"), "(2)");
+  widget.dispose();
+});
+
+test("clearing a row field's filter through setFilter reaches the layout state", async () => {
+  const { widget } = build({ designer: true });
+
+  await widget.setFilter("Region", ["Ege"]);
+  await widget.setFilter("Region", []);
+
+  assert.deepEqual(widget.getState().filters, []);
+  assert.deepEqual(
+    widget.layoutState.getState().filters,
+    [{ field: "Region", values: [], mode: "Include" }]);
+  widget.dispose();
+});
+
 test("a widget without a designer persists only what it owns", async () => {
   const { widget, store } = build();
 

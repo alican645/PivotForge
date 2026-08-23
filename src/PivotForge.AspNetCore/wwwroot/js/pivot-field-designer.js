@@ -682,11 +682,12 @@
         (this.filterPicker !== null || typeof PivotForge.PivotFilterPicker === "function");
     }
 
-    // Both callers ask about a field seated in the filter area, and the layout
-    // state gives every one of those an entry carrying values and a mode, so
-    // there is nothing here to default.
+    // A chip in the Filters zone always has an entry. A field filtered from its
+    // row header does not until the first apply, and an absent entry is exactly
+    // the unrestricted filter the picker should open with.
     filterEntryOf(name) {
-      return this.state.getState().filters.find(filter => filter.field === name);
+      return this.state.getState().filters.find(filter => filter.field === name)
+        ?? { field: name, values: [], mode: "Include" };
     }
 
     openFilterPicker(name) {
@@ -1053,7 +1054,12 @@
         case "row": return state.rows;
         case "column": return state.columns;
         case "data": return state.values.map(value => value.field);
-        case "filter": return state.filters.map(filter => filter.field);
+        // A filter entry can belong to a field seated in another zone -- one
+        // filtered from its row header -- and that field's chip is already
+        // there, so only the entries actually seated here become chips.
+        case "filter": return state.filters
+          .filter(filter => this.state.areaOf(filter.field) === "filter")
+          .map(filter => filter.field);
         default: return state.available;
       }
     }

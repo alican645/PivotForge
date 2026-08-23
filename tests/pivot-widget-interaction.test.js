@@ -124,6 +124,118 @@ test("setFilter is rejected when filtering is disabled", async () => {
   widget.dispose();
 });
 
+// Captures what the widget hands its renderer, at construction and per render.
+async function withFakeRenderer(run, options = {}, { picker = true } = {}) {
+  const captured = { renders: [] };
+  class FakeRenderer {
+    constructor(container, rendererOptions) { Object.assign(captured, rendererOptions); }
+    render(result, perRender) { captured.renders.push(perRender ?? {}); }
+  }
+  const previousRenderer = PivotForge.PivotTableRenderer;
+  const previousPicker = PivotForge.PivotFilterPicker;
+  PivotForge.PivotTableRenderer = FakeRenderer;
+
+  // The funnel is only offered where there is something to show values in, so
+  // a picker has to be in place for the enabled cases.
+  const opened = [];
+  PivotForge.PivotFilterPicker = picker
+    ? class {
+      open(request) { opened.push(request); return request; }
+      dispose() {}
+    }
+    : undefined;
+
+  const widget = PivotForge.create(createContainer(), {
+    fields,
+    autoLoad: false,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ cells: [], grandTotals: {} }) }),
+    ...options
+  });
+
+  try {
+    return await run(widget, captured, opened);
+  } finally {
+    widget.dispose();
+    PivotForge.PivotTableRenderer = previousRenderer;
+    PivotForge.PivotFilterPicker = previousPicker;
+  }
+}
+
+test("the renderer receives a filter callback when filtering is enabled", async () => {
+  await withFakeRenderer((widget, captured) => {
+    assert.equal(typeof captured.onFilterRequested, "function");
+  });
+});
+
+test("a widget that cannot filter offers no header funnel", async () => {
+  await withFakeRenderer((widget, captured) => {
+    assert.equal(captured.onFilterRequested, null);
+  }, { allowFiltering: false });
+});
+
+test("a page without the filter picker gets no funnel rather than a broken one", async () => {
+  await withFakeRenderer((widget, captured) => {
+    assert.equal(captured.onFilterRequested, null);
+  }, {}, { picker: false });
+});
+
+test("the header funnel opens the picker over the field's current filter", async () => {
+  await withFakeRenderer(async (widget, captured, opened) => {
+    await widget.setFilter("urun", ["Lokum"], "Exclude");
+
+    captured.onFilterRequested("urun");
+
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0].field, "urun");
+    assert.equal(opened[0].caption, "Ürün");
+    assert.deepEqual(opened[0].selected, ["Lokum"]);
+    assert.equal(opened[0].mode, "Exclude");
+  });
+});
+
+test("applying the header picker filters the widget", async () => {
+  await withFakeRenderer(async (widget, captured, opened) => {
+    captured.onFilterRequested("urun");
+    await opened[0].onApply(["Lokum"], "Exclude");
+
+    assert.deepEqual(widget.getState().filters,
+      [{ field: "urun", values: ["Lokum"], mode: "Exclude" }]);
+  });
+});
+
+test("each draw tells the renderer which fields are restricted", async () => {
+  await withFakeRenderer(async (widget, captured) => {
+    await widget.refresh();
+    assert.deepEqual(captured.renders.at(-1).filteredFields, []);
+
+    await widget.setFilter("urun", ["Lokum"]);
+
+    assert.deepEqual(captured.renders.at(-1).filteredFields, ["urun"]);
+  });
+});
+
+test("a declared filter with nothing excluded is no restriction", async () => {
+  // An empty value list restricts nothing in either mode, so a funnel that
+  // marked itself active for one would be lying about the table on screen.
+  await withFakeRenderer((widget, captured) => {
+    assert.deepEqual(captured.filteredFields, []);
+  }, { filters: [{ field: "urun", values: [], mode: "Include" }] });
+});
+
+test("the header funnel defers to an attached designer", async () => {
+  // One picker per page: with a designer present the funnel borrows its picker
+  // rather than building a second one that would show a stale selection.
+  await withFakeRenderer((widget, captured) => {
+    const asked = [];
+    widget.designer = { openFilterPicker: field => asked.push(field), dispose() {} };
+
+    captured.onFilterRequested("urun");
+
+    assert.deepEqual(asked, ["urun"]);
+    assert.equal(widget.headerFilterPicker, null);
+  });
+});
+
 test("the renderer receives a sort callback when sorting is enabled", () => {
   const captured = {};
   class FakeRenderer {

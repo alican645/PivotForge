@@ -137,13 +137,18 @@ public sealed record PivotFilter(
 
 Değer seçici artık pakette (`PivotFilterPicker`): motora `PivotEngine.DistinctValues`,
 uç noktalara `POST /pivotforge/field-values`, tasarımcı çipine `▼` düğmesi eklendi.
-Include/exclude de tamam. Kalan açık operatörler tarafında.
+Include/exclude ve satır başlığı hunisi de tamam. Kalan açık operatörler tarafında.
 
 - [x] **Filtre değer seçici UI** (paketlenmiş) — arama kutulu, çoklu seçim,
       "Tümünü seç"/"Temizle", kesme uyarısı — tasarımcıdaki Filtreler bölgesi artık işlevsel
 - [x] `filterType` — include / exclude — `<pivot-filter type="Exclude">`, seçicide mod
       düğmeleri, `setFilterMode`, kaydedilen görünümde saklanır
-- [ ] Excel benzeri başlık filtresi (`headerFilter`) — sütun/satır başlığından filtreleme
+- [x] Excel benzeri başlık filtresi (`headerFilter`) — satır başlığındaki huni aynı
+      `PivotFilterPicker`'ı aynı filtre girdisi üzerinde açar; filtre bölgeye değil
+      alana ait olduğu için alan yerinde kalır ve taşınırken filtresini de taşır.
+      Sütun ekseninde alan adı hücresi yok — orası ayrı bir iş (aşağıda)
+- [ ] Sütun ekseninde başlık filtresi — alan adı satırı gerektirir (colSpan/rowSpan,
+      sticky sütunlar, sanal boşluklar, Excel dışa aktarma modeli)
 - [ ] Filtre operatörleri: içerir, başlar, arasında, boş/boş değil, Top-N
 - [ ] Tarih aralığı filtreleri
 - [ ] `hideEmptySummaryCells` — boş satır/sütunları gizle

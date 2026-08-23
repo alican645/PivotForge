@@ -91,6 +91,19 @@ PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking 
 
 ### Behaviour changes since `0.5.0-preview.1`
 
+- **A filter belongs to the field, not to the Filters zone.** Every row field's
+  header cell in the rendered table carries a `▼` that opens the same
+  `PivotFilterPicker` over the same entry, so a row or column field can be
+  filtered where it stands. `PivotLayoutState.setFilterValues`/`setFilterMode`
+  therefore no longer require the field to be in the filter area (they refuse a
+  measure instead), `getState().filters` can hold an entry for a field seated
+  elsewhere — the designer's Filters zone shows only the ones seated there —
+  `move` carries a filter across areas, and `widget.setFilter` writes through
+  `widget.layoutState` when a designer is attached. The renderer gained
+  `onFilterRequested(field)` and `filteredFields`, wired like `onSortRequested`:
+  no callback, no funnel. The column axis has no field-name cell and is
+  unaffected.
+
 - **A filter now carries a mode, and so does a saved view.** `PivotFilter` gained
   `Mode`, the request JSON gained `filters[].mode`, and the persisted state
   stores it. Everything defaults to `Include`, which is what the previous

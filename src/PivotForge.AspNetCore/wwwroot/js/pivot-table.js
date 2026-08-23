@@ -19,7 +19,9 @@ const TEXTS = {
   addConditionalFormat: "Koşullu biçimlendirme ekle",
   resizeColumn: "Sütun genişliğini değiştir",
   sortField: "{0} alanını sırala",
-  sortActive: "{0} sıralaması aktif"
+  sortActive: "{0} sıralaması aktif",
+  filterField: "{0} alanını filtrele",
+  filterActive: "{0} filtresi etkin"
 };
 
 function formatText(template, ...values) {
@@ -53,6 +55,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       aggregation: "sum",
       sortState: null,
       onSortRequested: null,
+      // The row header's funnel, wired the same way sorting is: without a
+      // handler the control is not drawn at all, so a host that cannot filter
+      // gets no funnel rather than a broken one. filteredFields names the
+      // fields currently restricted, which is all the header has to show.
+      onFilterRequested: null,
+      filteredFields: [],
       onViewStateChanged: null,
       onCellDoubleClick: null,
       onCellCopied: null,
@@ -415,10 +423,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
           corner.rowSpan = columnDepth + measureDepth;
           corner.dataset.stickyColumn = String(rowLevel);
           corner.dataset.columnIndex = String(rowLevel);
+          const rowField = settings.rowFields[rowLevel] ?? null;
           this.decorateSortableHeader(corner, displayLabel, {
             mode: "RowLabel",
-            field: settings.rowFields[rowLevel] ?? null
+            field: rowField
           }, settings);
+          // After the sort button, which replaces the cell's children: the
+          // funnel has to survive that, and the two controls sit side by side.
+          this.decorateFilterableHeader(corner, displayLabel, rowField, settings);
           row.appendChild(corner);
         }
       }
@@ -1883,6 +1895,39 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       event.preventDefault();
       event.stopPropagation();
       settings.onSortRequested(request);
+    });
+
+    cell.appendChild(button);
+  }
+
+  // The funnel on a row field's header. Appended rather than replacing the
+  // cell's contents, so a header can be sortable, filterable, both or neither.
+  // In compact mode the row fields share one header cell, so only the first of
+  // them is reachable from here -- the rest stay a designer-chip job.
+  decorateFilterableHeader(cell, label, field, settings) {
+    if (typeof settings.onFilterRequested !== "function" || !field) {
+      return;
+    }
+
+    cell.classList.add("is-filterable");
+
+    const button = document.createElement("button");
+    button.className = "pivot-table__filter-button";
+    button.type = "button";
+    button.dataset.action = "header-filter";
+    button.dataset.field = field;
+    button.textContent = "▼";
+
+    const active = (settings.filteredFields ?? []).includes(field);
+    button.classList.toggle("is-active", active);
+    button.title = formatText(
+      active ? settings.texts.filterActive : settings.texts.filterField, label);
+    button.setAttribute("aria-label", button.title);
+
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      settings.onFilterRequested(field);
     });
 
     cell.appendChild(button);

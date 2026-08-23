@@ -433,7 +433,7 @@ emit identical markup.
 | `updateFields(fields)` | Validates and replaces the field set, rebuilds the renderer, and refreshes. |
 | `update({ fields, filters, rowSort })` | Applies whichever of `fields`, `filters`, and `rowSort` are given (each is left untouched when omitted) and refreshes exactly once, instead of once per piece the way calling `updateFields`, `setFilter`, and `sortBy` in sequence would. This is what `PivotFieldDesigner` calls after every drag-and-drop mutation. |
 | `sortBy(sort)` | Sets `rowSort` and refreshes. Throws if `allowSorting` is `false`. |
-| `setFilter(field, values, mode = "Include")` | Replaces the filter for `field` (removes it when `values` is empty, in either mode) and refreshes. Under `"Exclude"` the list names the values to drop instead of the ones to keep. Throws if `allowFiltering` is `false`. |
+| `setFilter(field, values, mode = "Include")` | Replaces the filter for `field` (removes it when `values` is empty, in either mode) and refreshes. Under `"Exclude"` the list names the values to drop instead of the ones to keep. Throws if `allowFiltering` is `false`. With a `fieldDesigner` attached the write goes through the layout state, so the designer's chips and a header funnel always agree — and the filter survives the next drag. |
 | `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
 | `drillDown({ rowPath, columnPath, valueKey })` | Returns the source records behind a pivot coordinate. Throws if `allowDrillDown` is `false`. |
 | `saveState()` / `clearState()` / `readState()` | Write, forget, and read the persisted state by hand. All three return `false`/`null` rather than throwing when persistence is off or storage is unavailable. |
@@ -506,14 +506,15 @@ Pure state — no DOM access. Constructed with `new PivotLayoutState(catalog, la
 | Method | Behavior |
 | --- | --- |
 | `canDrop(name, area)` | Whether `name` may move into `area` (`"row"`, `"column"`, `"data"`, or `"filter"`), per the role rules above. A field's own area is allowed, because dropping a chip back into its own zone is how repositioning is expressed. |
-| `move(name, area, index)` | Moves a catalog field into `area` at `index` (default: end), detaching it from wherever it was. Throws if `canDrop` would be `false`. Placing into `"data"` defaults `aggregation` to `"sum"`; placing into `"filter"` starts with no selected values. When the field is already in `area` this repositions it: `index` is read against the zone as it looks before the move, and the entry keeps its aggregation, showAs, and selected filter values. |
+| `move(name, area, index)` | Moves a catalog field into `area` at `index` (default: end), detaching it from wherever it was. Throws if `canDrop` would be `false`. Placing into `"data"` defaults `aggregation` to `"sum"`; placing into `"filter"` starts with no selected values. When the field is already in `area` this repositions it: `index` is read against the zone as it looks before the move, and the entry keeps its aggregation, showAs, and selected filter values. A filtered field carries its filter along, whichever area it moves to; only `remove` drops it. |
 | `remove(name)` | Detaches a field back to the available list. A no-op if the field is already available. Throws if `name` is the only field in the data area — a pivot always needs at least one. |
 | `reorder(area, fromIndex, toIndex)` | Reorders a placed field within its own zone. |
 | `setFormat(name, format)` | Sets a data field's number format, or clears it with `null`. Validates `type`, `decimals` (0-6), `useGrouping`, and `currency`, throwing rather than coercing, and leaves the existing format untouched when it refuses. Throws if the field is not in the data area. |
 | `setAggregation(name, aggregation)` | Sets the aggregation (`"sum"`, `"count"`, `"average"`, `"min"`, `"max"`) of a field already in the data area. Throws otherwise. |
-| `setFilterValues(name, values)` | Sets the values a filter accepts, for a field already in the filter area. Values are stringified, with `null` stored as `""` — the form the engine compares a null source value as. An empty array means no restriction, which is also how an untouched filter starts, so clearing a filter and never setting one are the same state. Throws if the field is not in the filter area or `values` is not an array. |
+| `setFilterValues(name, values)` | Sets the values a filter accepts. The field does not have to be in the filter area: a filter belongs to the field, so a row or column field can be filtered where it stands (which is what the table's header funnel does), and it keeps its seat. Values are stringified, with `null` stored as `""` — the form the engine compares a null source value as. An empty array means no restriction, which is also how an untouched filter starts, so clearing a filter and never setting one are the same state. Throws if `name` is a measure or `values` is not an array. |
+| `setFilterMode(name, mode)` | Sets `"Include"` or `"Exclude"` for the field's filter, under the same ownership rule as `setFilterValues`. Throws on an unknown mode or a measure. |
 | `field(name)` | Returns the catalog entry for `name`. Throws if unknown. |
-| `getState()` | Returns `{ rows, columns, values, filters, available, captions }` — `available` is every catalog field not currently placed, and `captions` holds the renames applied through `setCaption`. The whole object can be passed straight back to the constructor to restore it. |
+| `getState()` | Returns `{ rows, columns, values, filters, available, captions }` — `available` is every catalog field not currently placed, and `captions` holds the renames applied through `setCaption`. The whole object can be passed straight back to the constructor to restore it. `filters` holds every filter, including those on fields seated in another area; the designer's Filters zone shows only the entries whose field is not seated elsewhere. |
 | `toFields()` | Converts the current layout into the field-array shape `PivotForge.create`/`updateFields` accept. |
 | `toRequestState()` | Returns `{ fields, filters }` shaped for `widget.update(...)` — `filters` is pre-filtered to entries that actually have selected values. |
 | `on("change", handler)` | Subscribes to layout mutations; fires once per successful `move`/`remove`/`reorder`/`setAggregation` call, with the current `getState()` as the payload. Returns an unsubscribe function. `remove()` on a field already in `available` is a no-op — it does not fire `change`, because it did not actually move or remove anything. |
@@ -614,6 +615,16 @@ like a filter rather than a frozen snapshot:
 way a spreadsheet filter does — searching and then selecting all is how a subset
 gets picked out of a long list.
 
+### Header filter
+
+Every row field's header cell in the table itself carries the same `▼`. It opens the same `PivotFilterPicker` over the same filter entry the Filters zone would — the funnel and the chip are two ways into one filter, not two filters — and the field stays where it is: filtering `Bölge` from its header leaves it a row field and adds no chip to the Filters zone. A funnel whose field is currently restricted is marked (`is-active`).
+
+The control is rendered only where there is something behind it: the renderer draws it when `onFilterRequested` is a function, and the widget supplies that callback only when `allowFiltering` is on and `pivot-filter-picker.js` was loaded. A host that renders through its own `PivotTableRenderer` options gets the same bargain — no callback, no funnel.
+
+Two limits worth knowing. The **column axis has no field-name cell** — column headers render values — so column fields are still filtered from their designer chip. And in `compact` layout mode the row fields share one header cell, so only the first of them is reachable from the table.
+
+Because a filter belongs to the field, `PivotLayoutState.move` carries it along: dragging a header-filtered row field into the Filters zone shows the selection it already had, and dragging it back out keeps it. Only `remove` drops a filter.
+
 ### Detail modal
 
 Double-clicking a data cell (or choosing **Detayı aç** from its context menu)
@@ -705,7 +716,7 @@ positionally.
 PivotForge.create("#pivotGrid", {
   rendererOptions: {
     culture: "en-GB",
-    texts: { noData: "No data", sortField: "Sort by {0}" }
+    texts: { noData: "No data", sortField: "Sort by {0}", filterField: "Filter {0}" }
   }
 });
 ```

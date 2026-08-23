@@ -214,6 +214,10 @@
       });
     }
 
+    // A filter belongs to the field, not to the Filters zone: the zone's chip
+    // and a row header's funnel are two ways into the same entry. Which of them
+    // a field is filtered through is therefore not stored -- it follows from
+    // where the field is seated, which is what areaOf answers.
     areaOf(name) {
       if (this.layout.rows.includes(name)) return "row";
       if (this.layout.columns.includes(name)) return "column";
@@ -265,6 +269,13 @@
       // reorder would silently reset a value's aggregation and showAs, or drop
       // a filter's selected values.
       const existing = fromIndex >= 0 ? this.layout[key][fromIndex] : null;
+      // Moving a filtered field between areas carries its restriction along,
+      // because the filter is the field's rather than the zone's. Only removing
+      // the field outright drops it. A move into the filter zone needs nothing
+      // here: the entry it would carry is the one it is being re-seated as.
+      const carried = area === "filter"
+        ? null
+        : this.layout.filters.find(filter => filter.field === name) ?? null;
 
       this.detach(name);
 
@@ -289,6 +300,10 @@
         : fromIndex >= 0 && index > fromIndex ? index - 1 : index;
 
       target.splice(insertAt, 0, entry);
+      if (carried) {
+        this.layout.filters.push(carried);
+      }
+
       this.emitChange();
     }
 
@@ -384,18 +399,37 @@
       this.emitChange();
     }
 
+    // The filter entry for a field, created on first use. A field filtered from
+    // a row header keeps its seat there and gains an entry all the same; only a
+    // measure has nothing to filter, which is the rule the filter area already
+    // applies to what may be dropped into it.
+    filterEntry(name) {
+      const found = this.layout.filters.find(entry => entry.field === name);
+      if (found) {
+        return found;
+      }
+
+      if (!this.canPlaceByRole(name, "filter")) {
+        throw new Error(`Field "${name}" cannot be filtered because it is a measure.`);
+      }
+
+      const created = { field: name, values: [], mode: "Include" };
+      this.layout.filters.push(created);
+      return created;
+    }
+
     // The values a filter accepts. An empty list is how "no restriction" is
     // spelled all the way down to the engine, so clearing a filter and never
     // setting one are deliberately the same state.
     setFilterValues(name, values) {
-      const filter = this.layout.filters.find(entry => entry.field === name);
-      if (!filter) {
-        throw new Error(`Field "${name}" is not in the filter area.`);
-      }
-
+      // Validated before the entry is asked for, so a refused call cannot leave
+      // an empty filter behind -- which would seat an unplaced field in the
+      // Filters zone for nothing.
       if (!Array.isArray(values)) {
         throw new Error(`Filter values for "${name}" must be an array.`);
       }
+
+      const filter = this.filterEntry(name);
 
       // Values reach the engine as strings; a null source value is compared as
       // the empty string, so that is what blank is stored as.
@@ -407,16 +441,11 @@
     // nothing about the values themselves: what it decides is where a value the
     // source gains later lands -- hidden under Include, visible under Exclude.
     setFilterMode(name, mode) {
-      const filter = this.layout.filters.find(entry => entry.field === name);
-      if (!filter) {
-        throw new Error(`Field "${name}" is not in the filter area.`);
-      }
-
       if (!PivotForge.PivotRequestBuilder.FILTER_MODES.includes(mode)) {
         throw new Error(`Unknown filter mode "${mode}" for field "${name}".`);
       }
 
-      filter.mode = mode;
+      this.filterEntry(name).mode = mode;
       this.emitChange();
     }
 
@@ -496,7 +525,10 @@
           format: value.format ?? null,
           visible: visibleOf(value.field)
         })),
-        ...state.filters.map(filter => ({
+        // Only the entries whose field is not seated elsewhere: a row field
+        // filtered from its header has an entry too, and emitting that as a
+        // filter-area field would place the same field twice.
+        ...state.filters.filter(filter => this.areaOf(filter.field) === "filter").map(filter => ({
           dataField: filter.field,
           caption: captionOf(filter.field),
           area: "filter",

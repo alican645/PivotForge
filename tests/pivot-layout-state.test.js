@@ -742,10 +742,32 @@ test("filter values are stringified, with blank standing in for null", () => {
   assert.deepEqual(state.getState().filters[0].values, ["2025", "", "2026"]);
 });
 
-test("filter values cannot be set on a field outside the filter area", () => {
+test("a row field can be filtered where it stands, without moving zones", () => {
   const state = create();
 
-  assert.throws(() => state.setFilterValues("Region", ["East"]), /not in the filter area/);
+  state.setFilterValues("Region", ["East"]);
+
+  const view = state.getState();
+  assert.deepEqual(view.filters, [{ field: "Region", values: ["East"], mode: "Include" }]);
+  // The filter is the field's, not the Filters zone's: Region stays a row field
+  // and must not be emitted as a filter-area one on top of that.
+  assert.equal(state.areaOf("Region"), "row");
+  assert.deepEqual(
+    state.toFields().filter(field => field.dataField === "Region").map(field => field.area),
+    ["row"]);
+});
+
+test("a measure has nothing to filter", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterValues("Amount", ["1"]), /cannot be filtered/);
+});
+
+test("a refused filter selection leaves no entry behind", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterValues("Region", "East"), /must be an array/);
+  assert.deepEqual(state.getState().filters, []);
 });
 
 test("a non-array filter selection is refused rather than coerced", () => {
@@ -937,10 +959,59 @@ test("setFilterMode refuses a mode the engine has never heard of", () => {
   assert.throws(() => state.setFilterMode("Quarter", "exclude"), /Unknown filter mode/);
 });
 
-test("setFilterMode refuses a field outside the filter area", () => {
+test("a row field's filter can exclude just as a filter-zone one can", () => {
   const state = create();
 
-  assert.throws(() => state.setFilterMode("Region", "Exclude"), /not in the filter area/);
+  state.setFilterMode("Region", "Exclude");
+  state.setFilterValues("Region", ["East"]);
+
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Region", values: ["East"], mode: "Exclude" }]);
+});
+
+test("a refused mode leaves no entry behind", () => {
+  const state = create();
+
+  assert.throws(() => state.setFilterMode("Region", "Sadece"), /Unknown filter mode/);
+  assert.deepEqual(state.getState().filters, []);
+});
+
+test("a filter follows its field from one area to another", () => {
+  const state = create();
+  state.setFilterValues("Region", ["East"]);
+
+  state.move("Region", "column", 0);
+
+  // Only removing the field drops the restriction; rearranging the layout is
+  // not a way of clearing a filter by accident.
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Region", values: ["East"], mode: "Include" }]);
+  assert.equal(state.areaOf("Region"), "column");
+});
+
+test("a filtered field dragged into the filter zone keeps its selection", () => {
+  const state = create();
+  state.setFilterMode("Region", "Exclude");
+  state.setFilterValues("Region", ["East"]);
+
+  state.move("Region", "filter", 0);
+
+  assert.deepEqual(
+    state.getState().filters, [{ field: "Region", values: ["East"], mode: "Exclude" }]);
+  assert.equal(state.areaOf("Region"), "filter");
+  assert.deepEqual(
+    state.toFields().filter(field => field.dataField === "Region").map(field => field.area),
+    ["filter"]);
+});
+
+test("removing a field does drop its filter", () => {
+  const state = create();
+  state.setFilterValues("Region", ["East"]);
+
+  state.remove("Region");
+
+  assert.deepEqual(state.getState().filters, []);
+  assert.equal(state.areaOf("Region"), "available");
 });
 
 test("a filter's mode survives a reorder of the filter zone", () => {
