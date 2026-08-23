@@ -21,6 +21,29 @@
     Blank: 0
   };
   const FILTER_OPERATORS = Object.keys(FILTER_ARGUMENTS);
+
+  // The operators that put their argument in order rather than matching its text,
+  // and so the only ones for which "what kind of value is this" changes anything.
+  const COMPARISON_OPERATORS = ["Between", "GreaterThan", "LessThan"];
+
+  // What the engine will read a value as. It tries an invariant number first, then
+  // an invariant date, and falls back to collated text -- so "2024" is a number
+  // rather than a year, and a picker that decided otherwise would offer a control
+  // whose output the comparison ignores. Mirrored here rather than guessed at,
+  // because the two have to agree for the argument to mean anything.
+  const INVARIANT_NUMBER = /^[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)?(?:\.\d+)?$/;
+
+  function comparisonType(value) {
+    const text = String(value ?? "").trim();
+
+    // Blank needs no branch of its own: it holds no digit and Date.parse rejects
+    // it, so it falls through to text the way anything unreadable does.
+    if (/\d/.test(text) && INVARIANT_NUMBER.test(text)) {
+      return "number";
+    }
+
+    return Number.isNaN(Date.parse(text)) ? "text" : "date";
+  }
   // Date groupings. Spelled as the engine's enum reads them, lowercased, because
   // that spelling is also half of a grouped level's identity.
   const GROUP_INTERVALS = ["year", "quarter", "month", "day", "dayOfWeek"];
@@ -359,9 +382,9 @@
 
   PivotForge.PivotRequestBuilder = {
     normalizeFields, normalizeFilter, buildRequest, valueKey, restricts,
-    normalizeRankings,
+    normalizeRankings, comparisonType,
     AGGREGATIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS, FILTER_MODES,
-    FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES
+    FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS
   };
 
   if (typeof module !== "undefined" && module.exports) {

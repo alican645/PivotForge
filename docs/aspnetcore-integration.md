@@ -805,6 +805,46 @@ and `layoutState.setFilterOperator(field, operator)` are the programmatic paths,
 and a filter chip in the designer's Filters zone names its condition instead of
 counting values.
 
+#### Ranges over dates
+
+`Between`, `GreaterThan` and `LessThan` are the operators that put a value in
+order rather than matching its text, and they are the only ones for which the kind
+of value matters. When a field holds dates, the picker hands the reader a calendar
+(`<input type="date">`) instead of a text box.
+
+That is not a convenience. A calendar returns `2026-06-05`, and an invariant ISO
+date is the one spelling both sides of the comparison read as a date — a Turkish
+reader typing `05.06.2026` into a text box gets a *text* comparison and a range
+that silently means nothing like what they asked for.
+
+Which fields get one is read off the values themselves rather than declared,
+because the engine decides the same way and the two have to agree:
+
+| The values read as | Engine compares as | Control |
+|---|---|---|
+| `06/05/2026 00:00:00` | dates | calendar |
+| `2024` | numbers | text box |
+| `Haziran` | collated text | text box |
+
+A number is tried before a date, which is what keeps a `Year` level a number
+rather than a year — and it settles the grouped levels for free: a `Month` level
+reads `Haziran` and a `DayOfWeek` level reads `Pazartesi`, neither of which is a
+date to either side. So the calendar appears exactly where a date comparison will
+actually happen.
+
+Two details worth knowing:
+
+- **An argument a calendar cannot hold is kept.** A range typed before this
+  existed, or written by hand into a stored view, keeps its text box rather than
+  being erased by a control that cannot display it.
+- **Both ends are compared as instants.** A source value carrying a time of day
+  sits after that day's midnight, so `Between 2026-06-01 and 2026-06-05` leaves
+  out the afternoon of the fifth. Naming the next day is the way to include it.
+
+A comparison costs one `/field-values` request when the picker opens straight
+into it — the list is not shown, only consulted. A text condition asks for
+nothing.
+
 ### Date grouping
 
 `group-interval` collapses a date column into header groups, so a year over

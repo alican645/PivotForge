@@ -523,3 +523,32 @@ test("an unknown ranking mode is rejected", () => {
     () => PivotRequestBuilder.buildRequest(salesFields, { topN: [{ field: "urun", count: 2, mode: "Middle" }] }),
     /Unknown ranking mode/);
 });
+
+test("a value is read the way the engine will read it", () => {
+  // The engine tries an invariant number first, then an invariant date, then
+  // collated text. A picker that decided otherwise would offer a control whose
+  // output the comparison ignores.
+  const type = PivotRequestBuilder.comparisonType;
+
+  assert.equal(type("06/05/2026 00:00:00"), "date");
+  assert.equal(type("2026-06-05"), "date");
+  // A year is a number before it is a date, which is the order that matters:
+  // Date.parse would happily read "2024" as a year.
+  assert.equal(type("2024"), "number");
+  assert.equal(type("1,250.50"), "number");
+  assert.equal(type("-3"), "number");
+  assert.equal(type("Haziran"), "text");
+  assert.equal(type("Q1"), "text");
+  assert.equal(type(""), "text");
+  assert.equal(type(null), "text");
+});
+
+test("the comparison operators are the ones that put a value in order", () => {
+  assert.deepStrictEqual(
+    PivotRequestBuilder.COMPARISON_OPERATORS, ["Between", "GreaterThan", "LessThan"]);
+  // The text operators match a value rather than ordering it, so the kind of
+  // value it is changes nothing for them.
+  for (const operator of ["Equals", "Contains", "StartsWith", "EndsWith", "Blank"]) {
+    assert.ok(!PivotRequestBuilder.COMPARISON_OPERATORS.includes(operator));
+  }
+});
