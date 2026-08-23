@@ -30,9 +30,12 @@ app.Run();
 
 public sealed class PivotApiRequest
 {
-    public IReadOnlyList<string> Rows { get; init; } = [];
+    // A level is a field name, or {"field","interval"} when it groups dates --
+    // PivotFieldRef carries its own converter, so the payloads this sample
+    // already accepted keep working.
+    public IReadOnlyList<PivotFieldRef> Rows { get; init; } = [];
 
-    public IReadOnlyList<string> Columns { get; init; } = [];
+    public IReadOnlyList<PivotFieldRef> Columns { get; init; } = [];
 
     public IReadOnlyList<PivotValueDefinition> Values { get; init; } = [];
 

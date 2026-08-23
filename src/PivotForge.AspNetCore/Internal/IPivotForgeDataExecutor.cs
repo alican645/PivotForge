@@ -11,6 +11,7 @@ internal interface IPivotForgeDataExecutor
 
     ValueTask<IReadOnlyList<string?>> DistinctValuesAsync(
         string field,
+        PivotGroupInterval interval,
         int? sourceRowCount,
         CancellationToken cancellationToken);
 
