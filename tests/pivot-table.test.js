@@ -249,12 +249,12 @@ test("cell context menu exposes enabled actions for an aggregate cell", () => {
   });
 
   assert.deepEqual(items.map(item => item.label), [
-    "Detayı aç",
-    "Hücreyi kopyala",
-    "Satırı kopyala",
-    "Bu değere göre sırala",
-    "Bu değere göre filtrele",
-    "Koşullu biçimlendirme ekle"
+    "Show details",
+    "Copy cell",
+    "Copy row",
+    "Sort by this value",
+    "Filter by this value",
+    "Add conditional formatting"
   ]);
   assert.equal(items.every(item => item.disabled === false), true);
 });
@@ -456,26 +456,26 @@ test("a percent is rendered in the declared culture too", () => {
 });
 
 test("overriding one text keeps every other default", () => {
-  const renderer = new window.PivotForge.PivotTableRenderer({}, { texts: { noData: "No data" } });
+  const renderer = new window.PivotForge.PivotTableRenderer({}, { texts: { noData: "Veri yok" } });
 
   const resolved = renderer.resolveTexts();
 
   // Spreading the override over the whole map instead of merging would leave
   // every key the caller did not think to repeat rendering as undefined.
-  assert.equal(resolved.noData, "No data");
-  assert.equal(resolved.cellActions, "Hücre işlemleri");
-  assert.equal(resolved.sortByValue, "Bu değere göre sırala");
+  assert.equal(resolved.noData, "Veri yok");
+  assert.equal(resolved.cellActions, "Cell actions");
+  assert.equal(resolved.sortByValue, "Sort by this value");
 });
 
 test("a per-render text override layers over the constructor's, not under it", () => {
   const renderer = new window.PivotForge.PivotTableRenderer(
-    {}, { texts: { noData: "No data", copyCell: "Copy cell" } });
+    {}, { texts: { noData: "Veri yok", copyCell: "Hücreyi kopyala" } });
 
   const resolved = renderer.resolveTexts({ texts: { noData: "Keine Daten" } });
 
   assert.equal(resolved.noData, "Keine Daten");
-  assert.equal(resolved.copyCell, "Copy cell");
-  assert.equal(resolved.cellActions, "Hücre işlemleri");
+  assert.equal(resolved.copyCell, "Hücreyi kopyala");
+  assert.equal(resolved.cellActions, "Cell actions");
 });
 
 test("context menu labels come from the supplied text map", () => {

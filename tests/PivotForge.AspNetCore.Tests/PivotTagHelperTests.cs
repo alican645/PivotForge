@@ -650,6 +650,26 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesTheDeclaredLocaleOverTheRequestsUiCulture()
+    {
+        using var _ = new UiCulture("tr-TR");
+
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", Locale = "en" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal("en", declared.GetProperty("locale").GetString());
+
+        var derived = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        // A Turkish request gets the Turkish pack without the markup asking for
+        // it -- the locale is the one option a page should not have to repeat.
+        Assert.Equal("tr", derived.GetProperty("locale").GetString());
+    }
+
+    [Fact]
     public async Task WritesTheDeclaredCultureAndOmitsItOtherwise()
     {
         var pinned = ConfigOf(await RenderAsync(

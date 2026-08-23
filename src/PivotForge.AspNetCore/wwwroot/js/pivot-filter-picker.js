@@ -3,28 +3,28 @@
 
   const DEFAULT_LABELS = {
     // {0} is replaced with the field caption.
-    title: "{0} filtresi",
-    close: "Kapat",
-    apply: "Uygula",
-    cancel: "İptal",
-    search: "Değerlerde ara",
-    selectAll: "Tümünü seç",
-    clear: "Temizle",
-    blank: "(Boş)",
+    title: "{0} filter",
+    close: "Close",
+    apply: "Apply",
+    cancel: "Cancel",
+    search: "Search values",
+    selectAll: "Select all",
+    clear: "Clear",
+    blank: "(Blank)",
     // The mode's only observable effect is on values the source does not have
     // yet, so the control says that rather than "include"/"exclude" -- which
     // describes the storage and tells the reader nothing about the outcome.
-    modeLabel: "Sonradan eklenen değerler",
-    modeInclude: "Gizlensin",
-    modeExclude: "Gösterilsin",
-    loading: "Değerler yükleniyor...",
-    noValues: "Bu alan için değer bulunamadı",
-    noMatches: "Aramayla eşleşen değer yok",
-    failed: "Değerler alınamadı",
+    modeLabel: "Values added later",
+    modeInclude: "Are hidden",
+    modeExclude: "Are shown",
+    loading: "Loading values...",
+    noValues: "This field has no values",
+    noMatches: "No value matches the search",
+    failed: "The values could not be loaded",
     // {0} selected, {1} total.
-    summary: "{0} / {1} değer seçili",
+    summary: "{0} of {1} values selected",
     // {0} is replaced with the server's value limit.
-    truncated: "İlk {0} değer gösteriliyor. Listede olmayan seçimler korunur."
+    truncated: "Showing the first {0} values. Selections outside the list are kept."
   };
 
   function format(template, ...values) {

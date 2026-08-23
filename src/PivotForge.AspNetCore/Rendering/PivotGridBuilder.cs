@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Html;
@@ -196,6 +197,25 @@ public sealed class PivotGridBuilder : IHtmlContent
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         return SetRenderer("totalText", text);
+    }
+
+    /// <summary>Sets the locale pack supplying the on-screen text.</summary>
+    /// <remarks>
+    /// Every string the grid, the field designer, the value picker and the detail modal put
+    /// on screen defaults to English. A locale pack replaces them in one move: reference
+    /// <c>js/pivot-locale-&lt;name&gt;.js</c> on the page and name it here. Anything declared
+    /// explicitly — <c>total-text</c>, a <c>texts</c> map — still wins over the pack.
+    /// <c>en</c> means the built-in defaults and loads nothing. A name whose pack is not on
+    /// the page leaves the text in English and warns in the browser console, because a
+    /// missing translation file is not a reason to fail the grid.
+    /// </remarks>
+    /// <param name="locale">A locale pack name, such as <c>tr</c>.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The locale is null or blank.</exception>
+    public PivotGridBuilder Locale(string locale)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locale);
+        return Set("locale", locale);
     }
 
     /// <summary>Sets the culture used to format numbers in the browser.</summary>
@@ -455,6 +475,11 @@ public sealed class PivotGridBuilder : IHtmlContent
         {
             ["fields"] = fields
         };
+
+        // Derived here rather than at the call site so every declarative path agrees:
+        // a localized app gets its locale pack without any grid asking for one, and an
+        // explicit Locale still wins because _options was copied first.
+        payload.TryAdd("locale", CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
 
         // Omitted entirely when nothing was declared, so the widget keeps passing
         // its own renderer defaults through untouched.

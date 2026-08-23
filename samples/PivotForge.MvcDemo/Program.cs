@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 using PivotForge.AspNetCore.DependencyInjection;
 using PivotForge.AspNetCore.Endpoints;
@@ -24,6 +25,18 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+
+// A Turkish app pins its culture; PivotForge reads it twice over. Server-side row
+// labels collate with CurrentCulture, and <pivot-grid> derives locale="tr" from
+// CurrentUICulture, which is what puts the Turkish locale pack on screen without any
+// grid saying so.
+var turkish = new CultureInfo("tr-TR");
+app.UseRequestLocalization(new RequestLocalizationOptions
+{
+    DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture(turkish, turkish),
+    SupportedCultures = [turkish],
+    SupportedUICultures = [turkish]
+});
 
 app.UseRouting();
 app.UseStaticFiles();

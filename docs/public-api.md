@@ -1,6 +1,6 @@
 # Public API Surface
 
-This document records the supported public surface for `0.5.0-preview.1`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
+This document records the supported public surface for `0.6.0-preview.1`. Public .NET members also ship with XML documentation for IntelliSense. Types under an `Internal` namespace and unlisted browser implementation details are not compatibility contracts.
 
 ## PivotForge.Core
 
@@ -89,7 +89,22 @@ Static assets are served from `/_content/PivotForge.AspNetCore/`.
 
 PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking changes may be made when necessary and will be called out in release notes. After `1.0.0`, incompatible public API changes require a new major version. Additive members and behavior-preserving fixes may ship in minor or patch releases as appropriate.
 
-### Behaviour changes since `0.5.0-preview.1`
+### Behaviour changes in `0.6.0-preview.1`
+
+- **On-screen text defaults to English.** Every string the grid, the field
+  designer, the filter value picker and the detail modal put on screen was
+  Turkish and is now English. Turkish moves into a locale pack — reference
+  `js/pivot-locale-tr.js` and the text comes back, without any grid naming it:
+  `<pivot-grid>` derives the pack name from `CultureInfo.CurrentUICulture`, so
+  an application with request localization configured keeps its language. A
+  page that hard-codes no culture but expects Turkish must add the script tag.
+  A pack name nothing answers to warns in the console and leaves the text
+  English rather than failing the grid; `en` names the built-in defaults and
+  loads nothing.
+
+  New with it: `locale` / `Locale(string)` on the grid, `designerLabels` on the
+  widget — the field designer's labels had no declarative path at all before,
+  and `designerLabels.filterPicker` reaches the value picker the designer opens.
 
 - **A filter belongs to the field, not to the Filters zone.** Every row field's
   header cell in the rendered table carries a `▼` that opens the same

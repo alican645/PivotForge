@@ -8,9 +8,9 @@
 
 Interactive pivot tables forged for .NET.
 
-PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel export, saved views, selection, conditional formatting, state persistence, and large-data workflows. The rendered grid is operable with a mouse, a touch screen or the keyboard alone, declares `role="grid"` for screen readers, and formats in the reader's own culture unless a page pins one.
+PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel export, saved views, selection, conditional formatting, state persistence, and large-data workflows. The rendered grid is operable with a mouse, a touch screen or the keyboard alone, declares `role="grid"` for screen readers, formats in the reader's own culture unless a page pins one, and speaks English by default — a locale pack, chosen from the request's UI culture, switches every string it shows.
 
-> The current preview is `0.5.0-preview.1`.
+> The current preview is `0.6.0-preview.1`.
 
 ## Packages
 
@@ -26,8 +26,8 @@ Both packages can be consumed by .NET 8, .NET 9, and .NET 10 applications.
 After the preview is published to NuGet:
 
 ```bash
-dotnet add package PivotForge.Core --version 0.5.0-preview.1
-dotnet add package PivotForge.AspNetCore --version 0.5.0-preview.1
+dotnet add package PivotForge.Core --version 0.6.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.6.0-preview.1
 ```
 
 Installing `PivotForge.AspNetCore` brings `PivotForge.Core` transitively.
@@ -92,6 +92,9 @@ Reference the Razor Class Library assets. Load them in `<head>`, not at the end 
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
+
+<!-- Optional: the language every component shows. English needs nothing. -->
+<script src="/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>
 ```
 
 Browser APIs are exposed under `window.PivotForge`. The default server route prefix is `/pivotforge`.

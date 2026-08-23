@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-dotnet add package PivotForge.AspNetCore --version 0.5.0-preview.1
+dotnet add package PivotForge.AspNetCore --version 0.6.0-preview.1
 ```
 
 `PivotForge.Core` is installed transitively at the same version.
@@ -100,9 +100,12 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
+
+<!-- Optional: the language every component shows. English needs nothing. -->
+<script src="/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>
 ```
 
-Load scripts in the order shown: `pivot-table.js`, then `pivot-request-builder.js`, then `pivot-widget.js`, then `pivot-layout-state.js`, then `pivot-field-designer.js`. `pivot-table.js` must load before `pivot-widget.js` because the widget builds its default renderer from `PivotForge.PivotTableRenderer` at construction time, and `pivot-layout-state.js`/`pivot-field-designer.js` must load before `pivot-widget.js` is asked to build a designer (the `fieldDesigner` option), because the widget constructs a `PivotForge.PivotLayoutState` and a `PivotForge.PivotFieldDesigner` at that point. If a Razor helper on the page calls `PivotForge.create` inline (see [Declarative API](#declarative-api) below), load every PivotForge script in `<head>` rather than at the end of `<body>` — the helper's inline script runs while the page body is still being parsed, before a `<body>`-end script block would have executed.
+A locale pack only registers itself, so it may load in any position as long as it precedes the `PivotForge.create` call that names it. Load the rest in the order shown: `pivot-table.js`, then `pivot-request-builder.js`, then `pivot-widget.js`, then `pivot-layout-state.js`, then `pivot-field-designer.js`. `pivot-table.js` must load before `pivot-widget.js` because the widget builds its default renderer from `PivotForge.PivotTableRenderer` at construction time, and `pivot-layout-state.js`/`pivot-field-designer.js` must load before `pivot-widget.js` is asked to build a designer (the `fieldDesigner` option), because the widget constructs a `PivotForge.PivotLayoutState` and a `PivotForge.PivotFieldDesigner` at that point. If a Razor helper on the page calls `PivotForge.create` inline (see [Declarative API](#declarative-api) below), load every PivotForge script in `<head>` rather than at the end of `<body>` — the helper's inline script runs while the page body is still being parsed, before a `<body>`-end script block would have executed.
 
 The scripts add these members to `window.PivotForge`:
 
@@ -243,6 +246,7 @@ the renderer keeps its own default.
 | `total-text` | `TotalText(string)` | `Toplam` | Caption for total rows and columns. Must not be blank. |
 | `aria-label` | `AriaLabel(string)` | `Pivot tablosu` | Accessible name announced for the grid. Must not be blank. Give two pivots on one page two different names, or a screen reader cannot tell them apart. |
 | `culture` | `Culture(string)` | the reader's own locale | BCP 47 tag used to format numbers in the browser. Must not be blank. Server-side collation is separate — see [Localization](#localization). |
+| `locale` | `Locale(string)` | the request's UI culture | Name of the locale pack supplying every on-screen string. Must not be blank. `en` is the built-in English and loads nothing — see [Localization](#localization). |
 
 `selection-mode` and `layout-mode` are non-nullable enums so Razor accepts the
 unqualified member name; whether the attribute was written is recovered from
@@ -528,7 +532,7 @@ The catalog is fixed at construction — it is every field the grid declared, re
 - `host` — an element or a selector matching one. Throws if nothing matches.
 - `state` — a `PivotLayoutState`. Required.
 - `widget` — anything exposing an `update()` method (a `PivotWidget` in practice). Required.
-- `labels` — optional overrides for the panel's zone headings, the remove-button label, the search placeholder, and aggregation names; unset labels keep the built-in Turkish defaults.
+- `labels` — optional overrides for the panel's zone headings, the remove-button label, the search placeholder, and aggregation names; unset labels keep the locale pack's, and failing that the built-in English. A widget builds its designer with the pack's labels merged under `designerLabels` — see [Localization](#localization).
 
 `render()` rebuilds the panel's DOM from the current state — the available-field list (with its search box) and the four drop zones, each showing its placed fields as draggable chips. Every drag-and-drop action, chip removal, and aggregation change calls the state's mutator and then `widget.update(state.toRequestState())`, so the designer never talks to the server directly. `dispose()` empties the host element; it is idempotent.
 
@@ -672,8 +676,8 @@ the widget declares its handler before merging `rendererOptions`, so bringing
 your own detail UI overrides the packaged one rather than fighting it. Setting
 `drillDownModal: false` does the same without needing a handler.
 
-Labels default to Turkish and are overridable through
-`drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
+Labels default to English, come from the `drillDown` section of a locale pack,
+and are overridable per key through `drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
 `summary`, and `columnFilter` are substituted positionally.
 
 ### Localization
@@ -705,24 +709,60 @@ to everyone:
 The detail modal inherits the grid's culture, so it cannot contradict the cell
 it was opened from; `drillDownModalOptions.culture` overrides that on purpose.
 
-**Renderer texts.** Every string the renderer puts on screen — `Veri yok`,
-`Satır Etiketleri`, the cell context menu, the column-resize and sort tooltips —
-comes from a `texts` map passed through `rendererOptions`. A key left out keeps
-its built-in Turkish default, exactly as the designer's `labels` and the detail
-modal's own labels already work. `{0}` placeholders are substituted
-positionally.
+**On-screen text** is English by default, in all four components that show any:
+the rendered grid, the field designer, the filter value picker and the detail
+modal. A **locale pack** replaces the lot in one move. Reference the pack on the
+page and the grid finds it by name:
+
+```html
+<script src="~/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>
+```
+
+The name is not usually declared. `<pivot-grid>` derives it from
+`CultureInfo.CurrentUICulture` — a two-letter code, so `tr-TR` asks for `tr` —
+which means an application with request localization configured is localized
+without any grid saying so. Declare `locale` to pin one regardless of the
+request, and `locale="en"` to pin the built-in English:
+
+```html
+<pivot-grid id="pivotGrid" locale="tr" ...>
+```
+
+`en` names the built-in defaults rather than a pack, so it loads nothing. A name
+whose pack is not on the page leaves the text English and warns in the browser
+console: a missing translation file is not a reason to fail a page.
+
+The shipped packs live in `_content/PivotForge.AspNetCore/js/`:
+
+| Pack | Language |
+|---|---|
+| `pivot-locale-tr.js` | Turkish |
+
+A pack is an ordinary object, so a page can supply its own — `locale` accepts
+one directly — with four optional sections:
+
+| Section | Reaches |
+|---|---|
+| `table` | A partial `rendererOptions`: `texts`, and presentation strings that live outside it such as `totalText` and `ariaLabel` |
+| `designer` | `PivotFieldDesigner` labels |
+| `filterPicker` | `PivotFilterPicker` labels |
+| `drillDown` | `PivotDrillDownModal` labels |
+
+Anything the page declares wins over the pack, key by key: overriding one string
+costs none of the others. `rendererOptions.texts` overrides the grid's,
+`designerLabels` the designer's, and `designerLabels.filterPicker` the value
+picker's. `{0}` placeholders are substituted positionally.
 
 ```js
 PivotForge.create("#pivotGrid", {
-  rendererOptions: {
-    culture: "en-GB",
-    texts: { noData: "No data", sortField: "Sort by {0}", filterField: "Filter {0}" }
-  }
+  locale: "tr",
+  designerLabels: { row: "Satır Alanları" },
+  rendererOptions: { texts: { noData: "Kayıt bulunamadı" } }
 });
 ```
 
-Still open: `IStringLocalizer` integration on the .NET side, so the texts can
-come from resource files rather than being handed over in JavaScript.
+Still open: `IStringLocalizer` integration on the .NET side, so a pack can be
+generated from resource files rather than shipped as a script.
 
 ### Accessibility
 

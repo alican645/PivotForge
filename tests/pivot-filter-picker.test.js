@@ -259,14 +259,14 @@ test("a search matching nothing says so instead of showing an empty list", async
   search.dispatch("input");
 
   assert.equal(rowsOf(host).length, 0);
-  assert.match(byClass(host, "pivot-filter-picker__state")[0].textContent, /eşleşen değer yok/);
+  assert.match(byClass(host, "pivot-filter-picker__state")[0].textContent, /No value matches/);
 });
 
 test("a null value is offered as blank and applies as the empty string", async () => {
   const { picker, host } = build({ values: ["", "Ege"] });
   const applied = await open(host, picker, { selected: [] });
 
-  assert.deepEqual(labelsOf(host), ["(Boş)", "Ege"]);
+  assert.deepEqual(labelsOf(host), ["(Blank)", "Ege"]);
 
   toggle(host, "Ege", false);
   byAction(host, "filter-apply")[0].dispatch("click");
@@ -289,7 +289,7 @@ test("a truncated response warns and preserves selections it could not list", as
 
   const notice = byClass(host, "pivot-filter-picker__notice")[0];
   assert.equal(notice.hidden, false);
-  assert.match(notice.textContent, /İlk 1 değer/);
+  assert.match(notice.textContent, /first 1 values/);
 
   byAction(host, "filter-apply")[0].dispatch("click");
 
@@ -320,7 +320,7 @@ test("a field with no values says so and cannot be applied", async () => {
   const { picker, host } = build({ values: [] });
   const applied = await open(host, picker);
 
-  assert.match(byClass(host, "pivot-filter-picker__state")[0].textContent, /değer bulunamadı/);
+  assert.match(byClass(host, "pivot-filter-picker__state")[0].textContent, /no values/);
   assert.equal(byAction(host, "filter-apply")[0].disabled, true);
   assert.deepEqual(applied, []);
 });

@@ -4,53 +4,53 @@
   const AGGREGATIONS = ["sum", "count", "average", "min", "max"];
 
   const DEFAULT_LABELS = {
-    available: "Alanlar",
-    row: "Satırlar",
-    column: "Sütunlar",
-    data: "Değerler",
-    filter: "Filtreler",
-    remove: "Kaldır",
-    search: "Alan ara...",
-    format: "Biçim",
-    settings: "Alan ayarları",
-    filterValues: "Filtre değerleri",
+    available: "Fields",
+    row: "Rows",
+    column: "Columns",
+    data: "Values",
+    filter: "Filters",
+    remove: "Remove",
+    search: "Search fields...",
+    format: "Format",
+    settings: "Field settings",
+    filterValues: "Filter values",
     // {0} is replaced with the number of listed values.
     filterCount: "({0})",
     // The same count means the opposite thing under an excluding filter, so it
     // cannot share the label.
-    filterCountExcluded: "({0} hariç)",
-    aggregation: "Değer ayarları",
-    showAs: "Değerleri farklı göster",
-    formatting: "Biçimlendirme",
-    formatDecimals: "Ondalık basamak",
-    fieldName: "Alan adı",
-    rename: "Adı değiştir",
-    resetName: "Sıfırla",
-    position: "Konum",
-    moveUp: "Yukarı taşı",
-    moveDown: "Aşağı taşı",
-    removeField: "Alanı kaldır",
-    close: "Kapat",
+    filterCountExcluded: "({0} excluded)",
+    aggregation: "Value settings",
+    showAs: "Show values as",
+    formatting: "Formatting",
+    formatDecimals: "Decimal places",
+    fieldName: "Field name",
+    rename: "Rename",
+    resetName: "Reset",
+    position: "Position",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    removeField: "Remove field",
+    close: "Close",
     showAsLabels: {
       normal: "Normal",
-      percentOfRowTotal: "Satır toplamının %'si",
-      percentOfColumnTotal: "Sütun toplamının %'si",
-      percentOfGrandTotal: "Genel toplamın %'si",
-      differenceFromPrevious: "Öncekinden fark",
-      percentDifferenceFromPrevious: "Öncekinden % fark",
-      runningTotal: "Kümülatif toplam"
+      percentOfRowTotal: "% of row total",
+      percentOfColumnTotal: "% of column total",
+      percentOfGrandTotal: "% of grand total",
+      differenceFromPrevious: "Difference from previous",
+      percentDifferenceFromPrevious: "% difference from previous",
+      runningTotal: "Running total"
     },
-    formatGrouping: "Binlik ayracı",
+    formatGrouping: "Thousands separator",
     formatTypes: {
-      number: "Sayı",
-      currency: "Para birimi",
-      percent: "Yüzde"
+      number: "Number",
+      currency: "Currency",
+      percent: "Percent"
     },
-    lastValue: "Bir pivot en az bir değer alanı gerektirir.",
+    lastValue: "A pivot requires at least one value field.",
     aggregations: {
-      sum: "Toplam",
-      count: "Sayım",
-      average: "Ortalama",
+      sum: "Sum",
+      count: "Count",
+      average: "Average",
       min: "Minimum",
       max: "Maksimum"
     }
@@ -1022,8 +1022,8 @@
 
       const body = document.createElement("div");
       body.className = "pivot-zone__body";
-      // Without this the chips are announced as bare buttons: "Bölge, düğme"
-      // rather than "Satırlar, Bölge, düğme", which is the only part that says
+      // Without this the chips are announced as bare buttons: "Region, button"
+      // rather than "Rows, Region, button", which is the only part that says
       // where the field currently is.
       body.setAttribute("role", "group");
       body.setAttribute("aria-labelledby", head.id);
