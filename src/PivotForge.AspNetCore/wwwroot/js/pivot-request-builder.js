@@ -24,6 +24,8 @@
   // Date groupings. Spelled as the engine's enum reads them, lowercased, because
   // that spelling is also half of a grouped level's identity.
   const GROUP_INTERVALS = ["year", "quarter", "month", "day", "dayOfWeek"];
+
+  const TOP_N_MODES = ["Top", "Bottom"];
   const SHOW_AS = [
     "normal",
     "percentOfRowTotal",
@@ -302,12 +304,50 @@
       // Sent only when asked for, so a request from a page that never declared it
       // is byte-identical to one written before the option existed.
       ...(extras.hideEmptySummaryCells ? { hideEmptySummaryCells: true } : {}),
+      // A ranking names a header level, so a grouped one travels as the level key
+      // the engine matches against -- unlike a filter, it reads no source value of
+      // its own and so needs no interval beside it.
+      ...(normalizeRankings(extras.topN).length > 0
+        ? { topN: normalizeRankings(extras.topN) }
+        : {}),
       // Named rather than positional so the list survives a field moving to
       // another area, and so a later per-field sortBy has somewhere to live.
       fieldSorts: normalized
         .filter(field => field.sortOrder !== null)
         .map(field => ({ field: field.key, direction: field.sortOrder }))
     };
+  }
+
+  // A ranking is validated here rather than on the server so a typo shows up where
+  // it was written, the same way a bad aggregation does.
+  function normalizeRankings(rankings) {
+    return (rankings ?? []).map((ranking, index) => {
+      const field = String(ranking?.field ?? "");
+      const count = Number(ranking?.count);
+      const mode = ranking?.mode ?? "Top";
+
+      if (field === "") {
+        throw new Error(`Ranking at index ${index} requires a "field".`);
+      }
+
+      if (!Number.isInteger(count) || count < 1) {
+        throw new Error(`Ranking on "${field}" requires a whole "count" of at least 1.`);
+      }
+
+      if (!TOP_N_MODES.includes(mode)) {
+        throw new Error(
+          `Unknown ranking mode "${mode}" on "${field}". Expected one of: ${TOP_N_MODES.join(", ")}.`);
+      }
+
+      return {
+        field,
+        count,
+        // Spelled by their absence: a ranking that took the defaults travels as the
+        // two members it actually declared.
+        ...(ranking?.valueKey ? { valueKey: String(ranking.valueKey) } : {}),
+        ...(mode === "Top" ? {} : { mode })
+      };
+    });
   }
 
   // Whether a filter entry actually restricts anything yet. The one rule the
@@ -319,8 +359,9 @@
 
   PivotForge.PivotRequestBuilder = {
     normalizeFields, normalizeFilter, buildRequest, valueKey, restricts,
+    normalizeRankings,
     AGGREGATIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS, FILTER_MODES,
-    FILTER_OPERATORS, FILTER_ARGUMENTS
+    FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES
   };
 
   if (typeof module !== "undefined" && module.exports) {

@@ -216,6 +216,9 @@ public sealed class PivotGridTagHelper : TagHelper
         var declaredFilters = new List<PivotFilterTagHelper>();
         context.Items[PivotFilterTagHelper.FiltersKey] = declaredFilters;
 
+        var declaredRankings = new List<PivotTopNTagHelper>();
+        context.Items[PivotTopNTagHelper.RankingsKey] = declaredRankings;
+
         var declaredSort = new List<PivotSortTagHelper>();
         context.Items[PivotSortTagHelper.SortKey] = declaredSort;
 
@@ -385,6 +388,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (OnViewStateChanged is { } onViewStateChanged)
         {
             builder.OnViewStateChanged(onViewStateChanged);
+        }
+
+        foreach (var ranking in declaredRankings)
+        {
+            ranking.ApplyTo(builder);
         }
 
         foreach (var filter in declaredFilters)

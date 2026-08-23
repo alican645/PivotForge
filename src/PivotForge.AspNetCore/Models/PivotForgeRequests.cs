@@ -28,6 +28,9 @@ public class PivotForgeRequest
     /// <summary>Gets whether rows and columns holding no values at all are dropped.</summary>
     public bool HideEmptySummaryCells { get; init; }
 
+    /// <summary>Gets the row header levels limited to their highest or lowest ranking groups.</summary>
+    public IReadOnlyList<PivotTopN> TopN { get; init; } = [];
+
     internal PivotRequest ToPivotRequest() => new()
     {
         HideEmptySummaryCells = HideEmptySummaryCells,
@@ -35,6 +38,7 @@ public class PivotForgeRequest
         Columns = Columns,
         Values = Values,
         Filters = Filters,
+        TopN = TopN,
         RowSort = RowSort,
         FieldSorts = FieldSorts
     };

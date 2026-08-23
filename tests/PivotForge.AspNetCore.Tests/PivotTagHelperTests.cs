@@ -969,6 +969,95 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesADeclaredRanking()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotTopNTagHelper { Field = "Region", Count = 3 }],
+            MinimalFields));
+
+        var ranking = config.GetProperty("topN")[0];
+        Assert.Equal("Region", ranking.GetProperty("field").GetString());
+        Assert.Equal(3, ranking.GetProperty("count").GetInt32());
+    }
+
+    [Fact]
+    public async Task OmitsARankingsDefaultsRatherThanWritingThem()
+    {
+        // The same rule the filter mode follows: a ranking that took the defaults
+        // travels as the two members it actually declared.
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotTopNTagHelper { Field = "Region", Count = 3 }],
+            MinimalFields));
+
+        var ranking = config.GetProperty("topN")[0];
+        Assert.False(ranking.TryGetProperty("mode", out _));
+        Assert.False(ranking.TryGetProperty("valueKey", out _));
+    }
+
+    [Fact]
+    public async Task WritesARankingsValueKeyAndMode()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotTopNTagHelper
+            {
+                Field = "Region",
+                Count = 2,
+                ValueKey = "Amount_sum",
+                Mode = PivotTopNMode.Bottom
+            }],
+            MinimalFields));
+
+        var ranking = config.GetProperty("topN")[0];
+        Assert.Equal("Amount_sum", ranking.GetProperty("valueKey").GetString());
+        Assert.Equal("Bottom", ranking.GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task OmitsTheRankingListWhenNoneWasDeclared()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" }, [], MinimalFields));
+
+        Assert.False(config.TryGetProperty("topN", out _));
+    }
+
+    [Fact]
+    public async Task ARankingWithoutAFieldIsRejected()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotTopNTagHelper { Count = 3 }],
+            MinimalFields));
+    }
+
+    [Fact]
+    public async Task ARankingKeepingNoGroupsIsRejected()
+    {
+        // A declaration is code, so this fails where it was written rather than
+        // producing an empty table at runtime.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotTopNTagHelper { Field = "Region", Count = 0 }],
+            MinimalFields));
+    }
+
+    [Fact]
+    public async Task ARankingOutsideAGridIsRejected()
+    {
+        var helper = new PivotTopNTagHelper { Field = "Region", Count = 3 };
+        var context = new TagHelperContext([], new Dictionary<object, object>(), "orphan");
+        var output = new TagHelperOutput(
+            "pivot-top-n",
+            [],
+            (_, _) => Task.FromResult<TagHelperContent>(new DefaultTagHelperContent()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => helper.ProcessAsync(context, output));
+    }
+
+    [Fact]
     public async Task WritesHideEmptySummaryCellsAsATopLevelOption()
     {
         // The engine drops them, so it belongs to the request rather than to

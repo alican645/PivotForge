@@ -256,7 +256,7 @@ deliberate `Single`/`Tabular`.
 
 #### Initial state
 
-Three child elements declare the state a grid starts in. Each has a
+Four child elements declare the state a grid starts in. Each has a
 `PivotGridBuilder` equivalent.
 
 ```html
@@ -266,6 +266,7 @@ Three child elements declare the state a grid starts in. Each has a
 
   <pivot-filter field="Region" values="Marmara, Ege" />
   <pivot-filter field="Year" type="Exclude" values="2019" />
+  <pivot-top-n field="Region" count="3" />
   <pivot-sort mode="RowTotalValue" value-field="Amount" direction="Descending" />
   <pivot-conditional-rule value-field="Amount" operator="GreaterThanOrEqual"
                           threshold="900000" color="Green" id="high" />
@@ -275,6 +276,7 @@ Three child elements declare the state a grid starts in. Each has a
 | Element | Builder | Notes |
 | --- | --- | --- |
 | `pivot-filter` | `Filter(string, params string[])`, `Filter(string, PivotFilterMode, params string[])`, `Filter(string, PivotFilterMode, PivotFilterOperator, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. `type="Exclude"` turns the list into the values to drop; the default `Include` keeps only the listed ones. `operator` turns the list into a condition's arguments — see [Filter operators](#filter-operators). |
+| `pivot-top-n` | `TopN(string, int)`, `TopN(string, int, string?, PivotTopNMode)` | Repeatable, one per row level. Runs after aggregation — see [Top-N](#top-n). |
 | `pivot-sort` | `RowSort(PivotSort)` | At most one per grid — rows order one way, so a second is refused rather than merged. |
 | `pivot-conditional-rule` | `ConditionalRule(...)` | Repeatable. Later rules win over earlier ones on the same cell. |
 
@@ -541,6 +543,51 @@ The catalog is fixed at construction — it is every field the grid declared, re
 `render()` rebuilds the panel's DOM from the current state — the available-field list (with its search box) and the four drop zones, each showing its placed fields as draggable chips. Every drag-and-drop action, chip removal, and aggregation change calls the state's mutator and then `widget.update(state.toRequestState())`, so the designer never talks to the server directly. `dispose()` empties the host element; it is idempotent.
 
 The designer renders a **search input** above the available-field list that filters it case-insensitively by matching the field's **caption**, not its `dataField` name. Search is a display-only filter — it never touches `PivotLayoutState` and never triggers `widget.update()`.
+
+### Top-N
+
+`pivot-top-n` limits one row header level to its highest or lowest ranking groups:
+
+```html
+<pivot-grid id="pivotGrid">
+  <pivot-field field="Region" area="Row" />
+  <pivot-field field="Category" area="Row" />
+  <pivot-field field="Amount" area="Data" aggregation="Sum" />
+
+  <!-- The best three regions, and the best two categories inside each of them -->
+  <pivot-top-n field="Region" count="3" />
+  <pivot-top-n field="Category" count="2" />
+</pivot-grid>
+```
+
+| Attribute | Default | Meaning |
+| --- | --- | --- |
+| `field` | required | The row field, or `field:interval` level key, being limited. |
+| `count` | required | How many groups survive **in each parent group**. |
+| `value-key` | first declared value | The measure that ranks them, as `Field_aggregation`. |
+| `mode` | `Top` | `Bottom` keeps the other end of the same ranking. |
+
+Three things separate this from a filter:
+
+- **It runs after aggregation.** A filter decides which source records take part;
+  the groups a ranking compares do not exist until those records have been summed.
+  So a ranking always sees what the filters left behind, never the other way round.
+- **It counts inside the parent group.** `count="2"` on an inner level keeps two
+  groups per outer group, the same way a per-level `sort-order` orders one. Otherwise
+  a single large region would fill the whole quota.
+- **The rows it drops leave the result entirely, totals included.** The grand total
+  equals the rows printed above it. That is the one number a reader checks by hand,
+  and the cost of getting it right is one extra pass over the source records — taken
+  only by a request that declared a ranking, because a subset's average cannot be
+  recovered from the averages of its parts.
+
+A group that aggregated to nothing has no rank, so it sits last in both directions
+rather than winning a `Bottom` ranking by being empty. Ties break on the label, so
+the same data always produces the same rows — which is what lets the large-data
+endpoint cache a ranked result.
+
+A ranking naming no row level, keeping fewer than one group, or ranked by an
+undeclared value is refused rather than quietly showing every row.
 
 A chip in the **Filters** zone carries a third control, `▼`, which opens the packaged `PivotFilterPicker`. The button is rendered only when the widget exposes `fieldValues()` and `pivot-filter-picker.js` was loaded, so an older host gets no control rather than a broken one. Once a filter accepts fewer than all values, its chip shows the count — `Çeyrek (3)` — because a Filters zone that shows only field names gives no clue that anything is being restricted.
 
