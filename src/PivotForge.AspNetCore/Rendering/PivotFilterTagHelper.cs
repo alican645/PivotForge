@@ -33,6 +33,17 @@ public sealed class PivotFilterTagHelper : TagHelper
     [HtmlAttributeName("type")]
     public PivotFilterMode Type { get; set; }
 
+    /// <summary>Gets or sets how the values are compared.</summary>
+    /// <remarks>
+    /// Defaults to <see cref="PivotFilterOperator.Equals"/>, which reads <c>values</c> as the list
+    /// of values to keep. Every other operator reads them as its arguments: one for the text and
+    /// comparison operators, two for <c>Between</c>, none for <c>Blank</c>. A condition given
+    /// fewer arguments than it reads throws, because a declaration is code. There is no
+    /// "does not contain": <c>type="Exclude"</c> negates whichever operator is used.
+    /// </remarks>
+    [HtmlAttributeName("operator")]
+    public PivotFilterOperator Operator { get; set; }
+
     /// <summary>Registers this filter with the enclosing grid and emits nothing itself.</summary>
     /// <param name="context">The tag helper context carrying the grid's filter list.</param>
     /// <param name="output">The output, suppressed because a filter renders no markup.</param>
@@ -68,6 +79,6 @@ public sealed class PivotFilterTagHelper : TagHelper
         var values = (Values ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        builder.Filter(Field, Type, values);
+        builder.Filter(Field, Type, Operator, values);
     }
 }

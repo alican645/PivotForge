@@ -875,16 +875,18 @@ public sealed class PivotEngine
 
     private static IReadOnlyList<CompiledFilter> CompileFilters(IReadOnlyList<PivotFilter> filters)
     {
-        // An empty list restricts nothing in either mode: an empty set to keep is
-        // how "no filter" is spelled all the way down from the browser, and an
-        // empty set to drop says the same thing from the other side.
+        // A condition with nothing to compare against restricts nothing in either
+        // mode: an empty set to keep is how "no filter" is spelled all the way down
+        // from the browser, an empty set to drop says the same from the other side,
+        // and a half-typed range says it too rather than dropping every row.
         return filters
-            .Where(filter => filter.Values.Count > 0)
+            .Where(filter => filter.Values.Count >= PivotFilterPredicates.ArgumentCount(filter.Operator))
             .Select(filter => new CompiledFilter(
                 filter.Field,
-                new HashSet<string?>(filter.Values, StringComparer.Ordinal),
+                filter.Values,
                 filter.Mode == PivotFilterMode.Exclude,
-                filter.Interval))
+                filter.Interval,
+                filter.Operator))
             .ToArray();
     }
 
@@ -906,7 +908,11 @@ public sealed class PivotEngine
             var value = PivotGroupLabels.Label(
                 reader.GetValue(record, filter.Field), filter.Interval, culture);
 
-            if (filter.Values.Contains(value) == filter.Excludes)
+            // Exclude negates whatever the operator decided, which is where "does
+            // not contain" and "is not blank" come from without an operator of
+            // their own.
+            if (PivotFilterPredicates.Matches(value, filter.Operator, filter.Values, culture)
+                == filter.Excludes)
             {
                 return false;
             }
@@ -1304,9 +1310,10 @@ public sealed class PivotEngine
 
     private sealed record CompiledFilter(
         string Field,
-        HashSet<string?> Values,
+        IReadOnlyList<string?> Values,
         bool Excludes,
-        PivotGroupInterval Interval);
+        PivotGroupInterval Interval,
+        PivotFilterOperator Operator);
 
     private sealed record SortedRows(
         IReadOnlyList<IReadOnlyList<string?>> Headers,

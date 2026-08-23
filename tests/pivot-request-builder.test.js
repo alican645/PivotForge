@@ -433,3 +433,26 @@ test("filter values are stringified, with blank standing in for null", () => {
 
   assert.deepEqual(request.filters[0].values, ["2025", "", "Ege"]);
 });
+
+// --- operators --------------------------------------------------------------
+
+test("an unknown filter operator is refused rather than passed through", () => {
+  // Passing it on would produce a request the engine rejects, blaming the server
+  // for a spelling mistake made in the page.
+  assert.throws(
+    () => PivotForge.PivotRequestBuilder.normalizeFilter(
+      { field: "Region", values: ["x"], operator: "Sometimes" }, 0),
+    /Unknown filter operator/);
+});
+
+test("a condition restricts once it has the arguments its operator reads", () => {
+  const { restricts } = PivotForge.PivotRequestBuilder;
+
+  // Blank carries no values and still restricts; counting values would leave its
+  // funnel and its chip looking inactive.
+  assert.equal(restricts({ field: "Note", values: [], operator: "Blank" }), true);
+  assert.equal(restricts({ field: "Amount", values: ["100"], operator: "Between" }), false);
+  assert.equal(restricts({ field: "Amount", values: ["100", "500"], operator: "Between" }), true);
+  assert.equal(restricts({ field: "Region", values: [] }), false);
+  assert.equal(restricts({ field: "Region", values: ["Ege"] }), true);
+});

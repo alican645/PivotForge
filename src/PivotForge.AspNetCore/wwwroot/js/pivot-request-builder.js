@@ -7,6 +7,20 @@
   const FORMAT_TYPES = ["number", "currency", "percent"];
   const SORT_ORDERS = ["Ascending", "Descending"];
   const FILTER_MODES = ["Include", "Exclude"];
+  // How many arguments each operator reads out of a filter's values, and with it
+  // the list of operators there are. Below that count a condition restricts
+  // nothing -- which is what a range looks like while it is being typed in.
+  const FILTER_ARGUMENTS = {
+    Equals: 1,
+    Contains: 1,
+    StartsWith: 1,
+    EndsWith: 1,
+    Between: 2,
+    GreaterThan: 1,
+    LessThan: 1,
+    Blank: 0
+  };
+  const FILTER_OPERATORS = Object.keys(FILTER_ARGUMENTS);
   // Date groupings. Spelled as the engine's enum reads them, lowercased, because
   // that spelling is also half of a grouped level's identity.
   const GROUP_INTERVALS = ["year", "quarter", "month", "day", "dayOfWeek"];
@@ -224,12 +238,23 @@
       );
     }
 
+    const operator = filter.operator ?? "Equals";
+    if (!FILTER_OPERATORS.includes(operator)) {
+      throw new Error(
+        `Unknown filter operator "${operator}" on field "${field}". Expected one of: ${FILTER_OPERATORS.join(", ")}.`
+      );
+    }
+
     return {
       field,
       // A null source value is compared as the empty string all the way down to
       // the engine, so that is what a blank is carried as.
       values: filter.values.map(value => (value == null ? "" : String(value))),
-      mode
+      mode,
+      // Written only when it is not the default, so a payload from a page that
+      // never touched an operator looks exactly as it always did -- and a view
+      // saved before operators existed reads back unchanged.
+      ...(operator === "Equals" ? {} : { operator })
     };
   }
 
@@ -282,9 +307,17 @@
     };
   }
 
+  // Whether a filter entry actually restricts anything yet. The one rule the
+  // renderer's funnel, the designer's chip and the request all consult, so a
+  // blank-value condition is not mistaken for an empty filter.
+  function restricts(filter) {
+    return (filter?.values?.length ?? 0) >= (FILTER_ARGUMENTS[filter?.operator ?? "Equals"] ?? 1);
+  }
+
   PivotForge.PivotRequestBuilder = {
-    normalizeFields, normalizeFilter, buildRequest, valueKey,
-    AGGREGATIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS, FILTER_MODES
+    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts,
+    AGGREGATIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS, FILTER_MODES,
+    FILTER_OPERATORS, FILTER_ARGUMENTS
   };
 
   if (typeof module !== "undefined" && module.exports) {

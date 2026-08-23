@@ -155,7 +155,16 @@ Include/exclude ve satır başlığı hunisi de tamam. Kalan açık operatörler
       Sütun ekseninde alan adı hücresi yok — orası ayrı bir iş (aşağıda)
 - [ ] Sütun ekseninde başlık filtresi — alan adı satırı gerektirir (colSpan/rowSpan,
       sticky sütunlar, sanal boşluklar, Excel dışa aktarma modeli)
-- [ ] Filtre operatörleri: içerir, başlar, arasında, boş/boş değil, Top-N
+- [x] Filtre operatörleri — `Equals` (varsayılan), `Contains`, `StartsWith`,
+      `EndsWith`, `Between`, `GreaterThan`, `LessThan`, `Blank`. Operatör ayrı bir
+      kavram değil: `PivotFilter.Values` operatörün argüman listesi olarak ikinci
+      bir görev üstleniyor. "İçermez"/"boş değil" için ayrı operatör yok —
+      `Exclude` modu hangi operatör kullanıldıysa onu olumsuzluyor. Seçicide
+      koşul satırı, `<pivot-filter operator="...">` ile bildirim, gruplu
+      seviyelerde de çalışıyor
+- [ ] Top-N — diğer operatörlerden farklı olarak **toplama sonrası** çalışır:
+      satır toplamları üzerinde eleme, ara toplamların ve genel toplamın elenen
+      satırları sayıp saymayacağı kararı, sıralamayla etkileşim
 - [ ] Tarih aralığı filtreleri
 - [ ] `hideEmptySummaryCells` — boş satır/sütunları gizle
 

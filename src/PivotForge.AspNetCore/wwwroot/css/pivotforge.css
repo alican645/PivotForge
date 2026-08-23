@@ -2090,6 +2090,58 @@ select {
   overflow: hidden;
 }
 
+/* The condition row sits above the toolbar and replaces it whenever an operator
+   other than "is one of" is chosen, so the picker asks one question at a time. */
+.pivot-filter-picker__condition {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--pt-border);
+  background: #fbfcfe;
+}
+
+.pivot-filter-picker__condition-label {
+  flex: 0 0 auto;
+  color: var(--pt-muted);
+  font-size: 12px;
+}
+
+.pivot-filter-picker__operator,
+.pivot-filter-picker__argument {
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--pt-border);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--pt-text);
+  outline: none;
+}
+
+.pivot-filter-picker__operator {
+  flex: 0 0 auto;
+}
+
+.pivot-filter-picker__argument {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pivot-filter-picker__argument:focus,
+.pivot-filter-picker__operator:focus {
+  border-color: var(--pt-accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+/* display:flex would otherwise beat the hidden attribute, and the picker hides
+   whichever half of itself the chosen operator does not use. */
+.pivot-filter-picker__toolbar[hidden],
+.pivot-filter-picker__condition[hidden],
+.pivot-filter-picker__argument[hidden],
+.pivot-filter-picker__list[hidden] {
+  display: none;
+}
+
 .pivot-filter-picker__toolbar {
   display: flex;
   align-items: center;

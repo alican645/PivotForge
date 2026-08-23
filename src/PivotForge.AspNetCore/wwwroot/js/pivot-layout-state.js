@@ -451,6 +451,28 @@
       this.emitChange();
     }
 
+    // How the entry's values are read: as the list of values to keep, or as the
+    // arguments of a condition. Changing it does not clear the values, because
+    // switching operator by mistake should be undoable by switching back.
+    setFilterOperator(name, operator) {
+      if (!PivotForge.PivotRequestBuilder.FILTER_OPERATORS.includes(operator)) {
+        throw new Error(`Unknown filter operator "${operator}" for field "${name}".`);
+      }
+
+      const entry = this.filterEntry(name);
+
+      // The default is spelled by its absence, so a view saved by a page that
+      // never touched an operator is byte-identical to one saved before
+      // operators existed.
+      if (operator === "Equals") {
+        delete entry.operator;
+      } else {
+        entry.operator = operator;
+      }
+
+      this.emitChange();
+    }
+
     getState() {
       const placed = new Set([
         ...this.layout.rows,
@@ -555,7 +577,7 @@
     toRequestState() {
       return {
         fields: this.toFields(),
-        filters: this.getState().filters.filter(filter => filter.values.length > 0)
+        filters: this.getState().filters.filter(PivotForge.PivotRequestBuilder.restricts)
       };
     }
 
