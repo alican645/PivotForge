@@ -299,8 +299,9 @@ produces the same bytes whichever API declared it and in whatever order.
 
 `state-storing="Local|Session"` (`StateStoring(PivotStateStorage)`) persists what
 the user arrives at — field layout, renamed captions, filter selections,
-aggregations, number formats and row sort — and restores it on the next load. It
-is off by default; persistence is something a page opts into.
+aggregations, number formats, row sort and conditional formatting rules — and
+restores it on the next load. It is off by default; persistence is something a
+page opts into.
 
 ```cshtml
 <pivot-grid id="pivotGrid"
@@ -322,10 +323,22 @@ field catalog can no longer honour (a field that was removed, or one whose role
 no longer allows where it sat) and a filter naming a field that no longer exists
 are each discarded, and the grid falls back to what it declared. A stored layout
 that was rejected takes its filters down with it, rather than leaving the grid
-filtering by a layout it just refused.
+filtering by a layout it just refused. A stored conditional rule the renderer
+could not act on — an unknown comparison or highlight, a missing threshold, a
+`between` without its second bound — is dropped the same way, one rule at a
+time, so one unreadable rule never costs the reader the rest of them.
+
+A stored rule naming a measure that is not on screen right now is **kept**: it
+paints nothing until the reader brings that measure back, which is the behaviour
+they saved. And a stored rule list *replaces* the declared ones rather than
+joining them — the list that was saved already contained whatever the markup
+declared at the time, so adding to it would duplicate every declaration on every
+reload, and a rule the reader cleared would reappear on every load with no way
+to be rid of it. A page whose declared rules have since changed reaches them
+again through `clearState()`.
 
 Persistence works without a field designer too — there is simply no layout to
-save, so only the filters and the sort are.
+save, so only the filters, the sort and the rules are.
 
 `available` is deliberately not stored: it is derived from the catalog on every
 read, so a stale copy could only contradict it.
@@ -450,14 +463,14 @@ emit identical markup.
 | `setFilter(field, values, mode = "Include")` | Replaces the filter for `field` (removes it when `values` is empty, in either mode) and refreshes. Under `"Exclude"` the list names the values to drop instead of the ones to keep. Throws if `allowFiltering` is `false`. With a `fieldDesigner` attached the write goes through the layout state, so the designer's chips and a header funnel always agree — and the filter survives the next drag. |
 | `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
 | `drillDown({ rowPath, columnPath, valueKey })` | Returns the source records behind a pivot coordinate. Throws if `allowDrillDown` is `false`. |
-| `addConditionalRule(rule)` | Appends a conditional formatting rule and redraws. No request is made: a rule decides how a number is painted, never which numbers there are. Throws when the rule names no `valueKey`. |
-| `clearConditionalRules(valueKey = null)` | Drops the rules on one measure, or every rule when called with no argument, and redraws. |
-| `setConditionalRules(rules)` | Replaces the whole list and redraws. Useful for restoring rules alongside a saved view. |
+| `addConditionalRule(rule)` | Appends a conditional formatting rule, redraws, and persists. No request is made: a rule decides how a number is painted, never which numbers there are. Throws when the rule is one the renderer could not act on — no `valueKey`, an unknown operator or color, a non-finite threshold, or `between` without its second bound. |
+| `clearConditionalRules(valueKey = null)` | Drops the rules on one measure, or every rule when called with no argument, then redraws and persists. |
+| `setConditionalRules(rules)` | Replaces the whole list, redraws and persists. Unlike `addConditionalRule` it *drops* what it cannot use rather than throwing, because this is what restores a saved view. |
 | `saveState()` / `clearState()` / `readState()` | Write, forget, and read the persisted state by hand. All three return `false`/`null` rather than throwing when persistence is off or storage is unavailable. |
 | `fieldValues(field)` | Returns `{ field, values, totalCount, truncated, limit }`: the distinct values a filter on `field` can accept, in value order. Deliberately unaffected by the pivot layout and by the filters already applied — a list narrowed by the current filter could never offer back a value the user had excluded. Throws if `allowFiltering` is `false`. |
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
 | `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
-| `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, sessionId, totalRowCount }`. |
+| `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, conditionalRules, sessionId, totalRowCount }`. |
 | `dispose()` | Aborts any in-flight request, detaches all `on()` handlers, empties the container, and — when the widget built a designer — calls `widget.designer.dispose()` too. After disposal, any method that would issue a network request or trigger a refresh (`refresh`, `sortBy`, `setFilter`, `clearFilters`, `updateFields`, `update`, `drillDown`, `loadPage`, `exportToExcel`) throws; `getState()` remains safe to call for a final snapshot. |
 
 ### Events
@@ -810,8 +823,10 @@ A page that brings its own panel keeps it: supply
 `rendererOptions.onConditionalFormatRequested` and the widget hands the request
 there instead of opening the packaged one, so a reader never gets two. The
 widget emits `conditionalFormatRequested` either way. Rules are not part of the
-widget's persisted state; a page that saves views persists
-`widget.conditionalRules` itself and restores them with `setConditionalRules`.
+part of the widget's [persisted state](#state-persistence) when `state-storing`
+is on, so a rule a reader added is still there after a reload. A page that keeps
+its own *named* views (through `PivotViewStore`) reads `widget.conditionalRules`
+into the view and restores it with `setConditionalRules`.
 
 Labels default to English, come from the `conditionalPanel` section of a locale
 pack, and are overridable per key through `conditionalPanelOptions.labels`.

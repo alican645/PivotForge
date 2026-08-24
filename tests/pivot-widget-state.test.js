@@ -1,6 +1,9 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+// Loaded because it defines the conditional-rule vocabulary a stored view is
+// checked against, even though these widgets render through renderImpl.
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-table.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-request-builder.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-layout-state.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-field-designer.js");
@@ -525,4 +528,182 @@ test("disposing keeps what was stored, because persistence outlives the page", (
   widget.dispose();
 
   assert.equal(store.entries.size, 1);
+});
+
+// --- Conditional formatting rules --------------------------------------------
+
+const rule = (overrides = {}) => ({
+  id: "r1",
+  valueKey: "Amount_sum",
+  operator: "greaterThan",
+  threshold: 100,
+  color: "green",
+  ...overrides
+});
+
+test("a rule the reader added is written to storage", () => {
+  const { widget, store } = build();
+
+  widget.addConditionalRule(rule());
+
+  assert.deepEqual(saved(store).conditionalRules, [rule()]);
+  widget.dispose();
+});
+
+test("a stored rule comes back on the next page load", () => {
+  const { widget } = build({ seed: seedWith({ conditionalRules: [rule()] }) });
+
+  assert.deepEqual(widget.conditionalRules, [rule()]);
+  assert.deepEqual(widget.getState().conditionalRules, [rule()]);
+  widget.dispose();
+});
+
+// The stored list already contains whatever the markup declared when it was
+// saved, so adding to it would duplicate every declared rule on every reload.
+test("a stored list replaces the declared rules rather than joining them", () => {
+  const declared = rule({ id: "declared", color: "amber" });
+  const { widget } = build({
+    seed: seedWith({ conditionalRules: [rule({ id: "stored" })] }),
+    options: { rendererOptions: { conditionalRules: [declared] } }
+  });
+
+  assert.deepEqual(widget.conditionalRules.map(entry => entry.id), ["stored"]);
+  widget.dispose();
+});
+
+test("with nothing stored the declared rules stand", () => {
+  const declared = rule({ id: "declared" });
+  const { widget } = build({
+    options: { rendererOptions: { conditionalRules: [declared] } }
+  });
+
+  assert.deepEqual(widget.conditionalRules.map(entry => entry.id), ["declared"]);
+  widget.dispose();
+});
+
+test("clearing rules is written too, so they do not come back", () => {
+  const { widget, store } = build({ seed: seedWith({ conditionalRules: [rule()] }) });
+
+  widget.clearConditionalRules();
+
+  assert.deepEqual(saved(store).conditionalRules, []);
+  widget.dispose();
+});
+
+test("clearing one measure leaves the other measure's rule in storage", () => {
+  const { widget, store } = build();
+  widget.setConditionalRules([rule(), rule({ id: "r2", valueKey: "Quantity_sum" })]);
+
+  widget.clearConditionalRules("Amount_sum");
+
+  assert.deepEqual(saved(store).conditionalRules.map(entry => entry.id), ["r2"]);
+  widget.dispose();
+});
+
+test("setConditionalRules is written as the whole list", () => {
+  const { widget, store } = build({ seed: seedWith({ conditionalRules: [rule()] }) });
+
+  widget.setConditionalRules([rule({ id: "r2", color: "blue" })]);
+
+  assert.deepEqual(saved(store).conditionalRules.map(entry => entry.id), ["r2"]);
+  widget.dispose();
+});
+
+// A stored view must open even when part of it can no longer be honoured --
+// the same bargain the stored filters make.
+test("a stored rule the renderer could not act on is dropped, not thrown on", () => {
+  const cases = [
+    rule({ id: "bad-operator", operator: "roughly" }),
+    rule({ id: "bad-color", color: "purple" }),
+    rule({ id: "no-threshold", threshold: null }),
+    rule({ id: "no-measure", valueKey: "" }),
+    rule({ id: "between-without-bound", operator: "between", threshold2: undefined }),
+    null
+  ];
+
+  const { widget } = build({
+    seed: seedWith({ conditionalRules: [...cases, rule({ id: "good" })] })
+  });
+
+  assert.deepEqual(widget.conditionalRules.map(entry => entry.id), ["good"]);
+  widget.dispose();
+});
+
+test("a stored between rule keeps both of its bounds", () => {
+  const between = rule({ id: "b", operator: "between", threshold: 10, threshold2: 90 });
+  const { widget } = build({ seed: seedWith({ conditionalRules: [between] }) });
+
+  assert.deepEqual(widget.conditionalRules, [between]);
+  widget.dispose();
+});
+
+// A rule naming a measure that is not on screen right now paints nothing and
+// becomes live again when the reader brings that measure back -- which is the
+// behaviour they saved, so it must survive the round trip.
+test("a rule on a measure that is not currently displayed survives", () => {
+  const hidden = rule({ id: "hidden", valueKey: "Quantity_sum" });
+  const { widget } = build({ seed: seedWith({ conditionalRules: [hidden] }) });
+
+  assert.deepEqual(widget.conditionalRules, [hidden]);
+  widget.dispose();
+});
+
+test("a stored entry that is not a list leaves the declared rules alone", () => {
+  const declared = rule({ id: "declared" });
+  const { widget } = build({
+    seed: seedWith({ conditionalRules: "hepsi" }),
+    options: { rendererOptions: { conditionalRules: [declared] } }
+  });
+
+  assert.deepEqual(widget.conditionalRules.map(entry => entry.id), ["declared"]);
+  widget.dispose();
+});
+
+test("a view stored before rules existed opens with none", () => {
+  const { widget } = build({ seed: seedWith({ rowSort: null }) });
+
+  assert.deepEqual(widget.conditionalRules, []);
+  widget.dispose();
+});
+
+test("a rule the renderer could not act on is refused at the call", () => {
+  const { widget, store } = build();
+
+  assert.throws(() => widget.addConditionalRule(rule({ operator: "roughly" })), /operator/);
+  assert.throws(() => widget.addConditionalRule(rule({ color: "purple" })), /color/);
+  assert.throws(() => widget.addConditionalRule(rule({ threshold: "çok" })), /threshold/);
+  assert.deepEqual(widget.conditionalRules, []);
+  assert.equal(store.getItem(STATE_KEY), null);
+  widget.dispose();
+});
+
+// setConditionalRules is what restores a saved view, so one unreadable rule
+// must not cost the reader the rest of them.
+test("setConditionalRules drops what it cannot use instead of refusing", () => {
+  const { widget } = build();
+
+  widget.setConditionalRules([rule({ id: "bad", color: "purple" }), rule({ id: "good" })]);
+
+  assert.deepEqual(widget.conditionalRules.map(entry => entry.id), ["good"]);
+  widget.dispose();
+});
+
+test("rules are not persisted when persistence is off", () => {
+  const { widget, store } = build({ options: { stateStoring: null } });
+
+  widget.addConditionalRule(rule());
+
+  assert.equal(store.getItem(STATE_KEY), null);
+  assert.deepEqual(widget.conditionalRules, [rule()]);
+  widget.dispose();
+});
+
+test("clearState forgets the rules along with the rest", () => {
+  const { widget, store } = build();
+  widget.addConditionalRule(rule());
+
+  widget.clearState();
+
+  assert.equal(store.getItem(STATE_KEY), null);
+  widget.dispose();
 });

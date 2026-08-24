@@ -1,6 +1,10 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+// Loaded because a real page loads it: it is what defines the conditional-rule
+// vocabulary the widget validates against, and the fake renderers below replace
+// the renderer class without touching it.
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-table.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-request-builder.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-widget.js");
 

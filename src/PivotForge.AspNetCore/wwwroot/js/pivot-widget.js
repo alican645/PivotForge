@@ -45,6 +45,10 @@
   const STATE_PREFIX = "pivotforge:state:";
   const STORAGES = { local: "localStorage", session: "sessionStorage" };
 
+  function isConditionalRule(rule) {
+    return PivotForge.isConditionalRule?.(rule) ?? true;
+  }
+
   function resolveTarget(target) {
     if (typeof target === "string") {
       const found = root.document?.querySelector(target);
@@ -162,6 +166,14 @@
 
       if (restored?.rowSort !== undefined) {
         this.rowSort = restored.rowSort;
+      }
+
+      // Replaces the declared rules rather than adding to them, because that is
+      // what was stored: the reader's list already contained whatever the markup
+      // declared when it was saved. A page whose declared rules have since
+      // changed reaches them again through clearState().
+      if (restored?.conditionalRules) {
+        this.conditionalRules = restored.conditionalRules;
       }
 
       // Before the renderer, which is the first thing to put text on screen.
@@ -295,7 +307,16 @@
               mode: filter.mode ?? "Include"
             }))
           : null,
-        rowSort: payload.rowSort ?? null
+        rowSort: payload.rowSort ?? null,
+        // A rule the renderer could not act on is dropped rather than thrown
+        // on, the same bargain the filters above make: a view stored by an
+        // older or a tampered-with client should still open. A rule naming a
+        // measure that is not on screen right now is NOT dropped -- it paints
+        // nothing until the reader brings that measure back, which is the
+        // behaviour they saved.
+        conditionalRules: Array.isArray(payload.conditionalRules)
+          ? payload.conditionalRules.filter(isConditionalRule)
+          : null
       };
     }
 
@@ -324,7 +345,8 @@
         filters: layout
           ? layout.filters.filter(PivotForge.PivotRequestBuilder.restricts)
           : this.filters,
-        rowSort: this.rowSort
+        rowSort: this.rowSort,
+        conditionalRules: this.conditionalRules
       };
 
       try {
@@ -627,12 +649,17 @@
     // Redraws with the rules that exist now. No refetch: a rule decides how a
     // number is painted, never which numbers there are.
     addConditionalRule(rule) {
-      if (!rule?.valueKey) {
-        throw new Error("A conditional rule must name a valueKey.");
+      // Refused rather than stored: a rule the renderer cannot act on would sit
+      // in the list and in storage colouring nothing, which reads as the
+      // feature being broken rather than the call being wrong.
+      if (!isConditionalRule(rule)) {
+        throw new Error(
+          "A conditional rule needs a valueKey, a known operator and color, and a finite threshold.");
       }
 
       this.conditionalRules = [...this.conditionalRules, rule];
       this.rerender();
+      this.saveState();
       return this;
     }
 
@@ -643,12 +670,17 @@
         ? []
         : this.conditionalRules.filter(rule => rule.valueKey !== valueKey);
       this.rerender();
+      this.saveState();
       return this;
     }
 
+    // Anything the renderer could not act on is dropped rather than refused:
+    // this is the call that restores a saved view, and one unreadable rule must
+    // not cost the reader the rest of them.
     setConditionalRules(rules) {
-      this.conditionalRules = [...(rules ?? [])];
+      this.conditionalRules = [...(rules ?? [])].filter(isConditionalRule);
       this.rerender();
+      this.saveState();
       return this;
     }
 
@@ -727,6 +759,7 @@
         loading: this.loading,
         filters: [...this.filters],
         rowSort: this.rowSort,
+        conditionalRules: [...this.conditionalRules],
         sessionId: this.sessionId,
         totalRowCount: this.totalRowCount
       };
