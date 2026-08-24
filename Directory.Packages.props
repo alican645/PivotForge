@@ -1,0 +1,27 @@
+<Project>
+
+  <!--
+    Central package management: a version is declared once here and the projects
+    reference the package by name alone. The test projects had drifted into
+    naming the same four packages in two places, which is the same duplication
+    the package metadata had.
+
+    Nothing under src/ appears here: the two published packages carry no
+    PackageReference at all, only a FrameworkReference and a ProjectReference.
+    That is deliberate and worth keeping visible - PivotForge is meant to be
+    dependency-light, and a first entry here for a shipping project would be a
+    dependency its consumers inherit.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>

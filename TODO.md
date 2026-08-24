@@ -385,6 +385,11 @@ DevExpress denkliğinden gelmeyen, "yayınlanabilir paket" tarafındaki açıkla
 - [x] `Directory.Build.props` — ortak derleme ayarları kökte, paketleme meta
       verisi `src/` altında. İki csproj'da geriye yalnızca gerçekten farklı olan
       kaldı: `PackageId`, `Title`, `Description`, `PackageTags`.
+- [x] `Directory.Packages.props` — test paketlerinin sürümü tek yerde. `src/`
+      altındaki iki paket burada hiç geçmiyor ve bu bilinçli: ikisinin de
+      `PackageReference`'ı yok, buraya düşecek ilk satır tüketiciye miras
+      kalacak bir bağımlılık olurdu. `artifacts/` kendi dosyasıyla dışarıda
+      bırakıldı — smoke projeleri yayınlanmış bir sürümü sabitlemeli.
 - [x] `CHANGELOG.md` — Keep a Changelog biçiminde, on dört sürümün tamamı.
       `PackageReleaseNotes` artık metni kopyalamak yerine buraya bağlanıyor;
       yayın akışına da etiketlenen sürümün günlükte tarihli bir bölümü olduğunu
