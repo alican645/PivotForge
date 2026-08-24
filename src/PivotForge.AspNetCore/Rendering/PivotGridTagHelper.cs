@@ -37,6 +37,10 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("allow-excel-export")]
     public bool? AllowExcelExport { get; set; }
 
+    /// <summary>Gets or sets whether a reader may add conditional formatting rules from the cell menu.</summary>
+    [HtmlAttributeName("allow-conditional-formatting")]
+    public bool? AllowConditionalFormatting { get; set; }
+
     /// <summary>Gets or sets whether the grid loads data as soon as it is created.</summary>
     [HtmlAttributeName("auto-load")]
     public bool? AutoLoad { get; set; }
@@ -258,6 +262,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (AllowExcelExport is { } allowExcelExport)
         {
             builder.AllowExcelExport(allowExcelExport);
+        }
+
+        if (AllowConditionalFormatting is { } allowConditionalFormatting)
+        {
+            builder.AllowConditionalFormatting(allowConditionalFormatting);
         }
 
         if (AutoLoad is { } autoLoad)

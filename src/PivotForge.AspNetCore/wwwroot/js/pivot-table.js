@@ -1329,7 +1329,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", (settings.texts ?? TEXTS).cellActions);
 
-    this.createContextMenuItems(selection, settings.texts ?? TEXTS).forEach(item => {
+    this.createContextMenuItems(selection, settings.texts ?? TEXTS, settings).forEach(item => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "pivot-cell-menu__item";
@@ -1355,7 +1355,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     return menu;
   }
 
-  createContextMenuItems(selection, texts = TEXTS) {
+  // Two different absences, told apart on purpose. An entry whose handler is
+  // missing is left out: the page cannot do that at all, and offering it would
+  // be a button that does nothing. An entry whose handler exists but whose cell
+  // does not qualify is shown disabled: the feature is there, this cell is
+  // simply not eligible, and hiding it would make the menu change shape as the
+  // reader moves around the grid.
+  createContextMenuItems(selection, texts = TEXTS, settings = this.lastSettings ?? this.options) {
     const isNumeric = typeof selection?.value === "number";
     const hasDimensionPath = (selection?.rowHeader?.length ?? 0) + (selection?.columnHeader?.length ?? 0) > 0;
     const canSort = isNumeric && selection?.rowType !== "grandTotal" && selection?.rowType !== "group";
@@ -1364,14 +1370,25 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       { action: "details", label: texts.openDetails, disabled: selection?.drillDownEnabled === false },
       { action: "copy-cell", label: texts.copyCell, disabled: false },
       { action: "copy-row", label: texts.copyRow, disabled: false },
-      { action: "sort", label: texts.sortByValue, disabled: !canSort },
-      { action: "filter", label: texts.filterByValue, disabled: !hasDimensionPath },
+      {
+        action: "sort",
+        label: texts.sortByValue,
+        disabled: !canSort,
+        available: Boolean(settings?.onSortRequested)
+      },
+      {
+        action: "filter",
+        label: texts.filterByValue,
+        disabled: !hasDimensionPath,
+        available: Boolean(settings?.onCellFilterRequested)
+      },
       {
         action: "conditional",
         label: texts.addConditionalFormat,
-        disabled: !isNumeric || !selection?.valueKey
+        disabled: !isNumeric || !selection?.valueKey,
+        available: Boolean(settings?.onConditionalFormatRequested)
       }
-    ];
+    ].filter(item => item.available !== false);
   }
 
   handleContextMenuAction(action, cell, settings = this.lastSettings) {

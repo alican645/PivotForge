@@ -236,8 +236,14 @@ test("rerender does not move focus for a row selection", () => {
   assert.equal(renderer.restoreSelectedCellFocus({ querySelector: () => assert.fail() }), null);
 });
 
+const wiredActions = {
+  onSortRequested() {},
+  onCellFilterRequested() {},
+  onConditionalFormatRequested() {}
+};
+
 test("cell context menu exposes enabled actions for an aggregate cell", () => {
-  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const renderer = new window.PivotForge.PivotTableRenderer({}, wiredActions);
   const items = renderer.createContextMenuItems({
     type: "cell",
     value: 1250,
@@ -260,7 +266,7 @@ test("cell context menu exposes enabled actions for an aggregate cell", () => {
 });
 
 test("cell context menu disables value actions for empty group cells", () => {
-  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const renderer = new window.PivotForge.PivotTableRenderer({}, wiredActions);
   const items = renderer.createContextMenuItems({
     type: "cell",
     value: null,
@@ -490,9 +496,52 @@ test("context menu labels come from the supplied text map", () => {
   };
 
   const items = renderer.createContextMenuItems(
-    { value: 1, rowHeader: ["x"], columnHeader: [], valueKey: "amount" }, english);
+    { value: 1, rowHeader: ["x"], columnHeader: [], valueKey: "amount" },
+    english,
+    wiredActions);
 
   assert.deepEqual(items.map(item => item.label), Object.values(english));
+});
+
+// An action the page cannot perform is left out rather than shown greyed: a
+// disabled entry says "not for this cell", which would be a lie about a whole
+// feature the host never wired.
+test("cell menu leaves out the actions the host did not wire", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+
+  const items = renderer.createContextMenuItems({
+    type: "cell",
+    value: 1250,
+    valueKey: "Amount_sum",
+    rowType: "detail",
+    rowHeader: ["Marmara"],
+    columnHeader: ["2026"],
+    drillDownEnabled: true
+  });
+
+  assert.deepEqual(items.map(item => item.action), ["details", "copy-cell", "copy-row"]);
+});
+
+test("each wired action brings back only its own entry", () => {
+  const selection = {
+    type: "cell",
+    value: 1250,
+    valueKey: "Amount_sum",
+    rowType: "detail",
+    rowHeader: ["Marmara"],
+    columnHeader: ["2026"],
+    drillDownEnabled: true
+  };
+  const actionsFor = options =>
+    new window.PivotForge.PivotTableRenderer({}, options)
+      .createContextMenuItems(selection)
+      .map(item => item.action);
+
+  assert.equal(actionsFor({ onSortRequested() {} }).includes("sort"), true);
+  assert.equal(actionsFor({ onSortRequested() {} }).includes("conditional"), false);
+  assert.equal(actionsFor({ onCellFilterRequested() {} }).includes("filter"), true);
+  assert.equal(actionsFor({ onConditionalFormatRequested() {} }).includes("conditional"), true);
+  assert.equal(actionsFor({ onConditionalFormatRequested() {} }).includes("sort"), false);
 });
 
 // --- Per-field expansion and totals ------------------------------------------

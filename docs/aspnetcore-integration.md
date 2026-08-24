@@ -96,6 +96,7 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-layout-state.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-field-designer.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-filter-picker.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-conditional-panel.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-view-storage.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
@@ -115,6 +116,7 @@ The scripts add these members to `window.PivotForge`:
 - `PivotLayoutState`
 - `PivotFieldDesigner`
 - `PivotFilterPicker`
+- `PivotConditionalPanel`
 - `PivotViewStore`
 - `PivotDrillDownData`
 - `PivotDrillDownModal`
@@ -429,6 +431,8 @@ emit identical markup.
 | `fieldDesigner` | `null` | A CSS selector (or element) for a [field designer](#field-designer) host. When set, `PivotWidget` builds a `PivotLayoutState` from `fields` and a `PivotFieldDesigner` bound to it, exposed as `widget.layoutState` and `widget.designer`. Requires `pivot-layout-state.js` and `pivot-field-designer.js` to be loaded before `pivot-widget.js` runs; omitting either throws. |
 | `drillDownModal` | `true` | Wires cell activation to the packaged `PivotDrillDownModal`. Set to `false` to keep `drillDown()` available while supplying your own detail UI. Ignored when `allowDrillDown` is `false`, and silently inert when `pivot-drill-down-modal.js` was not loaded. |
 | `drillDownModalOptions` | `null` | Passed to the `PivotDrillDownModal` constructor: `columns`, `labels`, `host`. |
+| `allowConditionalFormatting` | `true` | Offers the cell menu's conditional-formatting entry and opens the packaged `PivotConditionalPanel` behind it. Set to `false` to remove the entry. Silently inert when `pivot-conditional-panel.js` was not loaded, in which case the entry is not offered either. |
+| `conditionalPanelOptions` | `null` | Passed to the `PivotConditionalPanel` constructor: `labels`, `host`. |
 | `stateStoring` | `null` | `"local"`, `"session"`, or `null`. See [State persistence](#state-persistence). Any other value throws. |
 | `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
 
@@ -446,6 +450,9 @@ emit identical markup.
 | `setFilter(field, values, mode = "Include")` | Replaces the filter for `field` (removes it when `values` is empty, in either mode) and refreshes. Under `"Exclude"` the list names the values to drop instead of the ones to keep. Throws if `allowFiltering` is `false`. With a `fieldDesigner` attached the write goes through the layout state, so the designer's chips and a header funnel always agree — and the filter survives the next drag. |
 | `clearFilters()` | Clears all filters and refreshes. Throws if `allowFiltering` is `false`. |
 | `drillDown({ rowPath, columnPath, valueKey })` | Returns the source records behind a pivot coordinate. Throws if `allowDrillDown` is `false`. |
+| `addConditionalRule(rule)` | Appends a conditional formatting rule and redraws. No request is made: a rule decides how a number is painted, never which numbers there are. Throws when the rule names no `valueKey`. |
+| `clearConditionalRules(valueKey = null)` | Drops the rules on one measure, or every rule when called with no argument, and redraws. |
+| `setConditionalRules(rules)` | Replaces the whole list and redraws. Useful for restoring rules alongside a saved view. |
 | `saveState()` / `clearState()` / `readState()` | Write, forget, and read the persisted state by hand. All three return `false`/`null` rather than throwing when persistence is off or storage is unavailable. |
 | `fieldValues(field)` | Returns `{ field, values, totalCount, truncated, limit }`: the distinct values a filter on `field` can accept, in value order. Deliberately unaffected by the pivot layout and by the filters already applied — a list narrowed by the current filter could never offer back a value the user had excluded. Throws if `allowFiltering` is `false`. |
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
@@ -758,6 +765,57 @@ Labels default to English, come from the `drillDown` section of a locale pack,
 and are overridable per key through `drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
 `summary`, and `columnFilter` are substituted positionally.
 
+### Conditional formatting
+
+A rule paints a cell whose value satisfies a comparison. Rules come from two
+places and land in the same list: `pivot-conditional-rule` elements (or
+`ConditionalRule(...)`) declare the ones a report always carries, and the
+packaged `PivotConditionalPanel` lets a reader add more while reading.
+
+Right-clicking a value cell offers **Add conditional formatting**. The entry
+appears only when the panel can actually open — `allowConditionalFormatting` is
+on and `pivot-conditional-panel.js` is loaded — so a page that does neither gets
+no entry rather than one that does nothing when clicked. The same rule governs
+the menu's **Sort by this value** and **Filter by this value**: an action whose
+handler is missing is left out, while an action whose handler exists but whose
+cell does not qualify is shown disabled.
+
+The panel opens over the cell it was invoked on, seeds both bounds with that
+cell's own number, and offers the six comparisons and four highlights the
+renderer evaluates — no more, so a rule it produces can never colour nothing.
+A threshold that is blank or not a number is refused rather than applied, for
+the same reason. Applying redraws immediately without going back to the server.
+
+**Clear rules for this measure** removes the rules on the measure the panel was
+opened on, leaving other measures alone. Later rules win over earlier ones on
+the same cell, so a rule added now overrides a declared one it overlaps.
+
+```csharp
+// Rules the report always carries; readers may still add their own on top.
+@(Html.PivotForge().PivotGrid()
+    .Id("pivotGrid")
+    .ConditionalRule("Amount_sum", PivotConditionalOperator.GreaterThanOrEqual, 100000, PivotConditionalColor.Green)
+    .Fields(fields => { /* ... */ }))
+```
+
+```csharp
+// A read-only report: rules are declared, and readers cannot add more.
+@(Html.PivotForge().PivotGrid()
+    .Id("pivotGrid")
+    .AllowConditionalFormatting(false)
+    .Fields(fields => { /* ... */ }))
+```
+
+A page that brings its own panel keeps it: supply
+`rendererOptions.onConditionalFormatRequested` and the widget hands the request
+there instead of opening the packaged one, so a reader never gets two. The
+widget emits `conditionalFormatRequested` either way. Rules are not part of the
+widget's persisted state; a page that saves views persists
+`widget.conditionalRules` itself and restores them with `setConditionalRules`.
+
+Labels default to English, come from the `conditionalPanel` section of a locale
+pack, and are overridable per key through `conditionalPanelOptions.labels`.
+
 ### Filter operators
 
 A filter compares its values with an operator. The default, `Equals`, reads them as
@@ -948,13 +1006,14 @@ The shipped packs live in `_content/PivotForge.AspNetCore/js/`:
 | `pivot-locale-tr.js` | Turkish |
 
 A pack is an ordinary object, so a page can supply its own — `locale` accepts
-one directly — with four optional sections:
+one directly — with five optional sections:
 
 | Section | Reaches |
 |---|---|
 | `table` | A partial `rendererOptions`: `texts`, and presentation strings that live outside it such as `totalText` and `ariaLabel` |
 | `designer` | `PivotFieldDesigner` labels |
 | `filterPicker` | `PivotFilterPicker` labels |
+| `conditionalPanel` | `PivotConditionalPanel` labels |
 | `drillDown` | `PivotDrillDownModal` labels |
 
 Anything the page declares wins over the pack, key by key: overriding one string
@@ -1016,7 +1075,7 @@ picker.
 
 - **Large-data paging is not wired to a virtual-scrolling UI.** `loadPage()` exists and is unit-tested, but `PivotWidget` has no page cache, no cache-hit state, and does not pass a `virtualState` to the renderer. Driving an actual virtual-scrolling grid still requires orchestrating `PivotVirtualDataSource` and `PivotTableRenderer` manually — see the MVC demo, which deliberately keeps its own `/large/start` + `/large/page` code for this reason.
 - **Batching multiple pieces of state into one refresh needs `update()`.** Calling `updateFields`, `setFilter`, and `sortBy` in sequence still works, but each triggers its own `refresh()`. Use `widget.update({ fields, filters, rowSort })` to change several pieces and refresh exactly once — this is how `PivotFieldDesigner` applies drag-and-drop mutations.
-- **Saved views, conditional formatting, and selection/clipboard UI** are not part of the declarative API. They remain lower-level features built on `PivotViewStore`, `PivotTableRenderer`'s `conditionalRules`/`onSelectionChanged`/`onCellCopied` options, and manual request construction — see [Render a Result](#render-a-result) above.
+- **Saved views and selection/clipboard UI** are not part of the declarative API. They remain lower-level features built on `PivotViewStore`, `PivotTableRenderer`'s `onSelectionChanged`/`onCellCopied` options, and manual request construction — see [Render a Result](#render-a-result) above. Conditional formatting is declarative in both directions: rules in markup with `pivot-conditional-rule`, and rules a reader adds through the packaged panel — see [Conditional formatting](#conditional-formatting).
 
 ## Endpoint Contract
 

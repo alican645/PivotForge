@@ -152,3 +152,48 @@ test("the detail modal is built with the pack's labels", () => {
     PivotForge.PivotDrillDownModal = previous;
   }
 });
+
+test("the conditional panel is built with the pack's labels", () => {
+  const previous = PivotForge.PivotConditionalPanel;
+  const captured = [];
+  PivotForge.PivotConditionalPanel = class {
+    constructor(options) { captured.push(options); }
+    open() {}
+    dispose() {}
+  };
+
+  try {
+    withWidget(widget => {
+      widget.openConditionalPanel({ valueKey: "tutar_sum", value: 1 }, {});
+
+      assert.equal(captured[0].labels.title, "Koşullu biçimlendirme");
+      assert.equal(captured[0].labels.operators.between, "arasındadır");
+      assert.equal(captured[0].labels.colors.amber, "Sarı");
+    }, { locale: "tr" });
+  } finally {
+    PivotForge.PivotConditionalPanel = previous;
+  }
+});
+
+// A page translating one term keeps the pack's other twenty rather than
+// dropping back to English for all of them.
+test("a declared panel label wins over the pack, key by key", () => {
+  const previous = PivotForge.PivotConditionalPanel;
+  const captured = [];
+  PivotForge.PivotConditionalPanel = class {
+    constructor(options) { captured.push(options); }
+    open() {}
+    dispose() {}
+  };
+
+  try {
+    withWidget(widget => {
+      widget.openConditionalPanel({ valueKey: "tutar_sum", value: 1 }, {});
+
+      assert.equal(captured[0].labels.apply, "Kaydet");
+      assert.equal(captured[0].labels.close, "Kapat");
+    }, { locale: "tr", conditionalPanelOptions: { labels: { apply: "Kaydet" } } });
+  } finally {
+    PivotForge.PivotConditionalPanel = previous;
+  }
+});

@@ -117,6 +117,30 @@
       summary: "{0} / {1} değer seçili",
       truncated: "İlk {0} değer gösteriliyor. Listede olmayan seçimler korunur."
     },
+    conditionalPanel: {
+      title: "Koşullu biçimlendirme",
+      close: "Kapat",
+      operatorLabel: "Koşul",
+      operators: {
+        greaterThan: "büyüktür",
+        greaterThanOrEqual: "büyük veya eşittir",
+        lessThan: "küçüktür",
+        lessThanOrEqual: "küçük veya eşittir",
+        equal: "eşittir",
+        between: "arasındadır"
+      },
+      threshold: "Değer",
+      threshold2: "İkinci değer",
+      colorLabel: "Vurgu rengi",
+      colors: {
+        green: "Yeşil",
+        amber: "Sarı",
+        red: "Kırmızı",
+        blue: "Mavi"
+      },
+      clear: "Ölçü kurallarını temizle",
+      apply: "Kuralı ekle"
+    },
     drillDown: {
       title: "Kaynak Kayıtlar",
       close: "Kapat",
