@@ -8,7 +8,7 @@
 
 Interactive pivot tables forged for .NET.
 
-PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, date grouping into year, quarter, month, day and weekday levels, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel export, saved views, selection, conditional formatting, state persistence, and large-data workflows. The rendered grid is operable with a mouse, a touch screen or the keyboard alone, declares `role="grid"` for screen readers, formats in the reader's own culture unless a page pins one, and speaks English by default — a locale pack, chosen from the request's UI culture, switches every string it shows.
+PivotForge is a dependency-light pivot engine and ASP.NET Core integration for operational reporting applications. It supports grouping, date grouping into year, quarter, month, day and weekday levels, filtering, sorting, multiple aggregations, show-as calculations, drill-down, paging, cancellation, Excel and CSV export, saved views, selection, conditional formatting, state persistence, and large-data workflows. The rendered grid is operable with a mouse, a touch screen or the keyboard alone, declares `role="grid"` for screen readers, formats in the reader's own culture unless a page pins one, and speaks English by default — a locale pack, chosen from the request's UI culture, switches every string it shows.
 
 > The current preview is `0.6.0-preview.1`.
 
