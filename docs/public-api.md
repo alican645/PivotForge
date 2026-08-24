@@ -89,7 +89,7 @@ Static assets are served from `/_content/PivotForge.AspNetCore/`.
 
 ## Compatibility Policy
 
-PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking changes may be made when necessary and will be called out in release notes. After `1.0.0`, incompatible public API changes require a new major version. Additive members and behavior-preserving fixes may ship in minor or patch releases as appropriate.
+PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking changes may be made when necessary and are called out under **Breaking** in the [changelog](../CHANGELOG.md). After `1.0.0`, incompatible public API changes require a new major version. Additive members and behavior-preserving fixes may ship in minor or patch releases as appropriate.
 
 ### Behaviour changes in `0.6.0-preview.1`
 
