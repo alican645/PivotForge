@@ -1051,7 +1051,10 @@
             }
 
             const csv = PivotForge.PivotDrillDownData.toCsv(visibleDrillDownRecords, drillDownColumns);
-            downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `pivot-detay-${new Date().toISOString().slice(0, 10)}.csv`);
+            PivotForge.download({
+                blob: new Blob([csv], { type: "text/csv;charset=utf-8" }),
+                fileName: `pivot-detay-${new Date().toISOString().slice(0, 10)}.csv`
+            });
         }
 
         function captureCurrentState() {
@@ -1239,17 +1242,12 @@
         }
 
         function exportVisibleTableCsv() {
-            const table = document.querySelector(".pivot-table__table");
-
-            if (!table) {
-                return;
+            try {
+                PivotForge.download(widget.exportToCsv());
+                setStatus("CSV dosyası indirildi", false);
+            } catch (error) {
+                setStatus(error.message || "CSV dosyası oluşturulamadı", true);
             }
-
-            const rows = [...table.querySelectorAll("tr")].map(row =>
-                [...row.children].map(cell => csvEscape(cell.innerText.trim())).join(","));
-            downloadBlob(
-                new Blob([`\uFEFF${rows.join("\n")}`], { type: "text/csv;charset=utf-8" }),
-                `pivot-table-${new Date().toISOString().slice(0, 10)}.csv`);
         }
 
         async function exportExcel() {
@@ -1262,24 +1260,16 @@
                     sheetName: "Pivot Tablo",
                     filterSummary: createExcelFilterSummary()
                 });
-                downloadBlob(blob, fileName ?? `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`);
+                PivotForge.download({
+                    blob,
+                    fileName: fileName ?? `pivot-table-${new Date().toISOString().slice(0, 10)}.xlsx`
+                });
                 setStatus("Excel dosyası indirildi", false);
             } catch (error) {
                 setStatus(error.message || "Excel dosyası oluşturulamadı", true);
             } finally {
                 elements.exportExcelButton.disabled = false;
             }
-        }
-
-        function downloadBlob(blob, fileName) {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
         }
 
         function createExcelFilterSummary() {
@@ -1296,11 +1286,6 @@
                     : filter.values.slice(0, 6).join(", ") + (filter.values.length > 6 ? ` +${filter.values.length - 6}` : "");
                 return `${fieldLabel(filter.field)}: ${values || "(Boş)"}`;
             }).join("; ");
-        }
-
-        function csvEscape(value) {
-            const text = String(value ?? "");
-            return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
         }
 
         async function toggleFullscreen() {

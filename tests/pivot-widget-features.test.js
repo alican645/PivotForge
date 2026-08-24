@@ -1,6 +1,9 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+// Loaded because it defines PivotForge.toCsv, which the widget's CSV export
+// hands its model to.
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-table.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-request-builder.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-widget.js");
 
@@ -274,4 +277,170 @@ test("the widget asks the engine to drop empty rows when told to", () => {
 
   assert.equal(widget.buildRequest().hideEmptySummaryCells, true);
   widget.dispose();
+});
+
+// --- CSV export ----------------------------------------------------------------
+
+// Blob and URL are browser globals the exports need; the stubs record what they
+// were handed so a test can read the file's text back.
+function withBrowserFileApi(run) {
+  const previous = {
+    Blob: globalThis.Blob,
+    URL: globalThis.URL,
+    document: globalThis.document
+  };
+  const clicked = [];
+  const revoked = [];
+
+  globalThis.Blob = class {
+    constructor(parts, options) {
+      this.text = parts.join("");
+      this.type = options?.type;
+      this.size = this.text.length;
+    }
+  };
+  globalThis.URL = {
+    createObjectURL: blob => { blob.url = `blob:${blob.size}`; return blob.url; },
+    revokeObjectURL: url => revoked.push(url)
+  };
+  globalThis.document = {
+    createElement: () => ({
+      click() { clicked.push({ href: this.href, download: this.download }); },
+      remove() { this.removed = true; }
+    }),
+    body: { appendChild: node => node }
+  };
+
+  try {
+    return run({ clicked, revoked });
+  } finally {
+    Object.assign(globalThis, previous);
+  }
+}
+
+const csvModel = {
+  rows: [
+    { cells: [{ text: "Ürün", rowSpan: 1, columnSpan: 1 }, { text: "Tutar", rowSpan: 1, columnSpan: 1 }] },
+    { cells: [{ text: "Lokum", rowSpan: 1, columnSpan: 1 }, { text: "1.250", number: 1250, rowSpan: 1, columnSpan: 1 }] }
+  ]
+};
+
+function withCsvWidget(run, options = {}) {
+  const { widget } = createWidget(() => okJson({}), options);
+  const requested = [];
+  widget.renderer = {
+    getExcelExportModel: request => { requested.push(request); return csvModel; }
+  };
+
+  try {
+    return withBrowserFileApi(files => run(widget, requested, files));
+  } finally {
+    widget.dispose();
+  }
+}
+
+test("exportToCsv builds the file from the rendered table", () => {
+  withCsvWidget((widget, requested) => {
+    const { blob, fileName } = widget.exportToCsv();
+
+    // The BOM leads, or a spreadsheet guesses the encoding and mangles Ürün.
+    assert.equal(blob.text, "﻿Ürün,Tutar\r\nLokum,1.250");
+    assert.equal(blob.type, "text/csv;charset=utf-8");
+    assert.match(fileName, /^pivotforge-\d{4}-\d{2}-\d{2}\.csv$/);
+    assert.deepEqual(requested, [{}]);
+  });
+});
+
+// Nothing here goes to the server: the reader is already looking at the table
+// the file is made of.
+test("exportToCsv makes no request", () => {
+  withCsvWidget(widget => {
+    const before = widget.getState();
+    widget.exportToCsv();
+
+    assert.equal(before.request, widget.getState().request);
+  });
+});
+
+test("exportToCsv passes its options through to the model and the text", () => {
+  withCsvWidget((widget, requested) => {
+    const { blob, fileName } = widget.exportToCsv({
+      delimiter: ";",
+      values: "raw",
+      fileName: "satis.csv",
+      sheetName: "Pivot"
+    });
+
+    assert.equal(blob.text, "﻿Ürün;Tutar\r\nLokum;1250");
+    assert.equal(fileName, "satis.csv");
+    assert.equal(requested[0].sheetName, "Pivot");
+  });
+});
+
+test("exportToCsv throws when the widget has no renderer to export from", () => {
+  const { widget } = createWidget(() => okJson({}));
+
+  assert.throws(() => widget.exportToCsv(), /renderImpl/);
+  widget.dispose();
+});
+
+test("exportToCsv throws when nothing has been rendered yet", () => {
+  const { widget } = createWidget(() => okJson({}));
+  widget.renderer = { getExcelExportModel: () => null };
+
+  assert.throws(() => widget.exportToCsv(), /no pivot table has been rendered/);
+  widget.dispose();
+});
+
+// There is no endpoint to gate and nothing in the file the reader cannot
+// already see, so CSV has no allow flag of its own -- including the Excel one.
+test("exportToCsv works with Excel export switched off", () => {
+  withCsvWidget(widget => {
+    assert.ok(widget.exportToCsv().blob.text.includes("Ürün"));
+  }, { allowExcelExport: false });
+});
+
+test("a disposed widget exports nothing", () => {
+  const { widget } = createWidget(() => okJson({}));
+  widget.renderer = { getExcelExportModel: () => csvModel };
+  widget.dispose();
+
+  assert.throws(() => widget.exportToCsv(), /disposed/);
+});
+
+// --- download -------------------------------------------------------------------
+
+test("download saves what an export handed back", () => {
+  withBrowserFileApi(({ clicked, revoked }) => {
+    const blob = new globalThis.Blob(["a,b"], { type: "text/csv" });
+
+    assert.equal(PivotForge.download({ blob, fileName: "satis.csv" }), true);
+    assert.deepEqual(clicked, [{ href: "blob:3", download: "satis.csv" }]);
+    // Released rather than left behind: a page exporting repeatedly would
+    // otherwise hold every file it ever made.
+    assert.deepEqual(revoked, ["blob:3"]);
+  });
+});
+
+test("download takes an export result directly", () => {
+  withCsvWidget((widget, _requested, { clicked }) => {
+    assert.equal(PivotForge.download(widget.exportToCsv({ fileName: "x.csv" })), true);
+    assert.equal(clicked.at(-1).download, "x.csv");
+  });
+});
+
+test("download falls back to a name rather than saving an unnamed file", () => {
+  withBrowserFileApi(({ clicked }) => {
+    PivotForge.download({ blob: new globalThis.Blob(["a"], {}), fileName: null });
+
+    assert.equal(clicked[0].download, "download");
+  });
+});
+
+test("download reports failure instead of throwing when there is nothing to save", () => {
+  withBrowserFileApi(() => {
+    assert.equal(PivotForge.download(null), false);
+    assert.equal(PivotForge.download({}), false);
+    assert.equal(PivotForge.download({ fileName: "bos.csv" }), false);
+  });
 });

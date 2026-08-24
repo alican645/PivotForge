@@ -468,6 +468,7 @@ emit identical markup.
 | `setConditionalRules(rules)` | Replaces the whole list, redraws and persists. Unlike `addConditionalRule` it *drops* what it cannot use rather than throwing, because this is what restores a saved view. |
 | `saveState()` / `clearState()` / `readState()` | Write, forget, and read the persisted state by hand. All three return `false`/`null` rather than throwing when persistence is off or storage is unavailable. |
 | `fieldValues(field)` | Returns `{ field, values, totalCount, truncated, limit }`: the distinct values a filter on `field` can accept, in value order. Deliberately unaffected by the pivot layout and by the filters already applied — a list narrowed by the current filter could never offer back a value the user had excluded. Throws if `allowFiltering` is `false`. |
+| `exportToCsv(options)` | Returns `{ blob, fileName }` for the visible grid. **Synchronous**, unlike `exportToExcel`: the file is built from the table already on screen, so no request is made — and for the same reason there is no `allowCsvExport`, since there is no endpoint to gate and nothing in the file the reader cannot already see. Options: `delimiter` (default `","`), `values` (`"text"`, the default, keeps the grid's formatting; `"raw"` writes the invariant numbers behind it), `fileName`, plus anything `getExcelExportModel` accepts. Throws for the same two reasons `exportToExcel` does. |
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
 | `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
 | `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, conditionalRules, sessionId, totalRowCount }`. |
@@ -830,6 +831,45 @@ into the view and restores it with `setConditionalRules`.
 
 Labels default to English, come from the `conditionalPanel` section of a locale
 pack, and are overridable per key through `conditionalPanelOptions.labels`.
+
+### Exporting
+
+Two exports, both built from the same model the renderer reads off the visible
+table — so they can never disagree about what the grid says, and both drop the
+sort arrows, resize handles, expand chevrons and header funnels that a naive
+scrape of the table would carry into the file.
+
+```js
+// CSV: built in the browser, nothing is sent anywhere.
+PivotForge.download(widget.exportToCsv());
+
+// Excel: rendered by the /excel endpoint into a real .xlsx.
+PivotForge.download(await widget.exportToExcel({ sheetName: "Satışlar" }));
+```
+
+`PivotForge.download({ blob, fileName })` takes exactly what both exports return
+and saves it. Both hand back a file rather than saving one, because a page may
+want to upload it, preview it, or name it itself; `download` is the last step
+when it does not. It returns `false` rather than throwing when there is nothing
+to save.
+
+CSV has no merged cells, so a header cell spanning several columns or rows is
+written once at its top-left and the positions it covers are left empty; every
+line is padded to the widest row, because a ragged file is one a spreadsheet
+opens with its columns shifted.
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `delimiter` | `","` | What separates the fields, and what gets quoted. A spreadsheet whose locale reads the comma as a decimal separator wants `";"`. |
+| `values` | `"text"` | `"text"` writes what the grid displays, keeping the currency, decimals and show-as percentages it computed. `"raw"` writes the invariant number behind each cell, for feeding another program. |
+| `fileName` | `pivotforge-{date}.csv` | The name the browser saves it under. |
+
+A UTF-8 byte-order mark leads the file: a spreadsheet opening a CSV without one
+guesses the encoding and gets every non-ASCII caption wrong.
+
+Both exports read the table as it currently stands, not the last result — so a
+collapsed group exports collapsed, and a resized or reordered grid exports the
+way it looks.
 
 ### Filter operators
 

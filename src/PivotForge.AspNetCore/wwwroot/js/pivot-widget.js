@@ -45,6 +45,27 @@
   const STATE_PREFIX = "pivotforge:state:";
   const STORAGES = { local: "localStorage", session: "sessionStorage" };
 
+  // Both exports hand back a file without saving it, which left every consuming
+  // page writing the same anchor dance. Takes exactly what they return, so a
+  // download is one call rather than a destructuring plus five lines.
+  PivotForge.download = function download(file) {
+    const document = root.document;
+
+    if (!file?.blob || !document) {
+      return false;
+    }
+
+    const url = root.URL.createObjectURL(file.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.fileName ?? "download";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    root.URL.revokeObjectURL(url);
+    return true;
+  };
+
   function isConditionalRule(rule) {
     return PivotForge.isConditionalRule?.(rule) ?? true;
   }
@@ -1039,6 +1060,34 @@
       const blob = await response.blob();
       const fileName = parseContentDispositionFileName(response.headers?.get?.("Content-Disposition"));
       return { blob, fileName };
+    }
+
+    // Synchronous on purpose, unlike exportToExcel: a CSV is produced entirely
+    // from the table already on screen, so returning a promise would imply a
+    // request that never happens. For the same reason there is no
+    // allowCsvExport -- there is no endpoint to gate, and nothing in the file
+    // that the reader is not already looking at.
+    exportToCsv(options = {}) {
+      this.assertNotDisposed();
+
+      if (!this.renderer) {
+        throw new Error(
+          "Cannot export because this widget renders through renderImpl and has no renderer to export from."
+        );
+      }
+
+      const model = this.renderer.getExcelExportModel(options);
+      if (!model) {
+        throw new Error("Cannot export because no pivot table has been rendered yet.");
+      }
+
+      // A byte-order mark, because a spreadsheet opening a CSV without one
+      // guesses the encoding and gets every non-ASCII caption wrong.
+      const text = `\uFEFF${PivotForge.toCsv(model, options)}`;
+      return {
+        blob: new root.Blob([text], { type: "text/csv;charset=utf-8" }),
+        fileName: options.fileName ?? `pivotforge-${new Date().toISOString().slice(0, 10)}.csv`
+      };
     }
 
     cancel() {

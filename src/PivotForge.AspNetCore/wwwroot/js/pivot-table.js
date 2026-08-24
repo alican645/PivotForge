@@ -40,6 +40,81 @@ const CONDITIONAL_OPERATORS = [
 
 const CONDITIONAL_COLORS = ["green", "amber", "red", "blue"];
 
+// Turns an export model into comma-separated text. Takes the same model the
+// Excel endpoint is sent, so the two exports can never disagree about what the
+// grid says -- and it inherits the model's cleaning, which drops the sort
+// arrows, resize handles and expand chevrons that a naive scrape of the table
+// would carry into the file.
+//
+// CSV has no merged cells, so a cell spanning several columns or rows is
+// written once at its top-left and the covered positions are left empty. Every
+// line is padded to the widest row: a ragged file is one a spreadsheet opens
+// with its columns shifted.
+PivotForge.toCsv = function toCsv(model, options = {}) {
+  // Comma by default, because that is the format's name. A spreadsheet whose
+  // locale reads the comma as a decimal separator wants ";" instead, which is
+  // why this is a choice rather than a constant.
+  const delimiter = options.delimiter ?? ",";
+  // The displayed text by default: a currency, a fixed number of decimals or a
+  // show-as percentage is information the grid computed, and raw numbers would
+  // throw it away. "raw" is for feeding another program rather than a reader.
+  const raw = options.values === "raw";
+  const rows = model?.rows ?? [];
+  const grid = rows.map(() => []);
+
+  rows.forEach((row, rowIndex) => {
+    let column = 0;
+
+    for (const cell of row.cells ?? []) {
+      while (grid[rowIndex][column] !== undefined) {
+        column++;
+      }
+
+      for (let down = 0; down < (cell.rowSpan || 1); down++) {
+        for (let across = 0; across < (cell.columnSpan || 1); across++) {
+          const target = grid[rowIndex + down];
+
+          if (target) {
+            target[column + across] = down === 0 && across === 0
+              ? cellText(cell, raw)
+              : "";
+          }
+        }
+      }
+
+      // No need to advance by the span: the cells it just filled are what the
+      // search above skips over on the next turn.
+    }
+  });
+
+  const width = grid.reduce((widest, row) => Math.max(widest, row.length), 0);
+
+  return grid
+    .map(row => Array.from({ length: width }, (_, index) => escapeCsv(row[index], delimiter))
+      .join(delimiter))
+    // CRLF, as RFC 4180 asks and as spreadsheets expect.
+    .join("\r\n");
+};
+
+// Always a string, never undefined: an undefined entry in the grid is how the
+// search above tells an unoccupied position from a filled one, so a cell with
+// no text has to still occupy its place.
+function cellText(cell, raw) {
+  return raw && typeof cell.number === "number"
+    ? String(cell.number)
+    : String(cell.text ?? "");
+}
+
+function escapeCsv(text, delimiter) {
+  const value = String(text ?? "");
+
+  // A field holding the delimiter, a quote or a line break has to be quoted, and
+  // a quote inside a quoted field is written twice.
+  return value.includes(delimiter) || /["\r\n]/.test(value)
+    ? `"${value.replaceAll('"', '""')}"`
+    : value;
+}
+
 // Whether anything could act on this rule at all. Separate from
 // matchesConditionalRule, which asks about one value: this asks whether the
 // rule is the kind of thing that can ever paint anything. Everything that
@@ -318,7 +393,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }
 
     const clone = cell.cloneNode(true);
-    clone.querySelectorAll(".pivot-table__sort-indicator, .pivot-table__resize-handle, .pivot-table__toggle")
+    // Every control the header carries, so an export is the text a reader sees
+    // rather than the glyphs the controls are drawn with. The funnel belongs
+    // here for the same reason the sort arrow does.
+    clone.querySelectorAll(
+      ".pivot-table__sort-indicator, .pivot-table__resize-handle, .pivot-table__toggle, .pivot-table__filter-button")
       .forEach(element => element.remove());
     return String(clone.textContent ?? "").trim();
   }
