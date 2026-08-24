@@ -91,6 +91,8 @@ Static assets are served from `/_content/PivotForge.AspNetCore/`.
 
 PivotForge follows Semantic Versioning. During the `0.x` preview line, breaking changes may be made when necessary and are called out under **Breaking** in the [changelog](../CHANGELOG.md). After `1.0.0`, incompatible public API changes require a new major version. Additive members and behavior-preserving fixes may ship in minor or patch releases as appropriate.
 
+Both packages target `net8.0` and `net10.0`. `net8.0` is the floor and stays one: it is LTS and what the packages have shipped since the first preview. The `net10.0` assembly carries the same public API — it exists so an application on the current runtime gets an assembly compiled against its own framework rather than one resolved through compatibility, not to offer anything the `net8.0` build does not.
+
 ### Behaviour changes in `0.6.0-preview.1`
 
 - **`hide-empty-summary-cells` / `HideEmptySummaryCells(bool)`** drops rows and

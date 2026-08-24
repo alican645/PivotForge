@@ -394,7 +394,11 @@ DevExpress denkliğinden gelmeyen, "yayınlanabilir paket" tarafındaki açıkla
       `PackageReleaseNotes` artık metni kopyalamak yerine buraya bağlanıyor;
       yayın akışına da etiketlenen sürümün günlükte tarihli bir bölümü olduğunu
       doğrulayan bir adım eklendi.
-- [ ] `net8.0;net10.0` çoklu hedefleme
+- [x] `net8.0;net10.0` çoklu hedefleme — `net8.0` taban olarak kalıyor (LTS ve
+      ilk önizlemeden beri gönderilen), kimse düşmüyor. Test projeleri de aynı
+      iki hedefe alındı: gönderilen ikili test edilmeliydi. `net8.0` ASP.NET
+      testleri ASP.NET Core 8 runtime'ı istiyor — CI'de var, yerel makinede
+      `DOTNET_ROLL_FORWARD=LatestMajor` ile çalıştırılabiliyor.
 - [ ] `IQueryable` / EF Core sağlayıcısı — bugün her şey belleğe çekiliyor
 - [ ] Blazor bileşeni
 - [ ] Benchmark'lar (BenchmarkDotNet)
