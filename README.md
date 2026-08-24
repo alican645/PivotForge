@@ -225,6 +225,7 @@ dotnet pack src/PivotForge.AspNetCore/PivotForge.AspNetCore.csproj -c Release -o
 - [Migration from source copies](docs/migration-from-source.md)
 - [Public API surface](docs/public-api.md)
 - [Product identity and package metadata](docs/pivotforge-product-identity.md)
+- [Changelog](CHANGELOG.md)
 
 ## License
 

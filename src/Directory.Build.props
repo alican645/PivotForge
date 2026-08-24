@@ -1,0 +1,50 @@
+<Project>
+
+  <!--
+    What the two published packages have in common. Their identity - PackageId,
+    Title, Description, PackageTags - stays in each project, because that is
+    what actually differs between them.
+  -->
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove($(MSBuildThisFileName)$(MSBuildThisFileExtension), $(MSBuildThisFileDirectory)../))" />
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EnablePackageValidation>true</EnablePackageValidation>
+
+    <!--
+      The version a local build produces. A release overrides it from the tag
+      (-p:Version=...), so this is the working number rather than the published
+      one; CHANGELOG.md is where a released version is written down.
+    -->
+    <Version>0.6.0-preview.1</Version>
+
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageIcon>pivotforge-icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!--
+      A link rather than the notes themselves. Two packages ship together and
+      their notes were kept by hand in two places, which is how they came to
+      describe different subsets of the same release.
+    -->
+    <PackageReleaseNotes>See https://github.com/alican645/PivotForge/blob/main/CHANGELOG.md for the changes in this and every earlier version.</PackageReleaseNotes>
+    <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)../assets/brand/pivotforge-icon.png" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

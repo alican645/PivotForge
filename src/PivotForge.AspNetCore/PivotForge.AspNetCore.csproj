@@ -1,45 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>true</IsPackable>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <EnablePackageValidation>true</EnablePackageValidation>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <PackageId>PivotForge.AspNetCore</PackageId>
-    <Version>0.6.0-preview.1</Version>
-    <Authors>Alican</Authors>
-    <Copyright>Copyright (c) 2026 Alican</Copyright>
     <Title>PivotForge for ASP.NET Core</Title>
-    <Description>An interactive ASP.NET Core pivot table UI powered by PivotForge. Includes static web assets, endpoint registration, drill-down, Excel export, large-data paging, request cancellation, and caching.</Description>
+    <Description>An interactive ASP.NET Core pivot table UI powered by PivotForge. Includes static web assets, endpoint registration, drill-down, Excel and CSV export, conditional formatting, large-data paging, request cancellation, and caching.</Description>
     <PackageTags>aspnetcore;pivot;pivot-table;pivot-grid;data-grid;virtualization;drill-down;reporting;ui</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageIcon>pivotforge-icon.png</PackageIcon>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Behaviour change: every string the grid, the field designer, the filter value picker and the detail modal put on screen now defaults to English instead of Turkish. Turkish moves into a locale pack (js/pivot-locale-tr.js); reference it and the text comes back. The pack name is derived from CultureInfo.CurrentUICulture, so an application with request localization configured keeps its language without any grid declaring one, and the new locale attribute pins it. Also new: group-interval, which collapses a date column into year, quarter, month, day or weekday header groups and lets the same column carry several levels at once; filter operators (contains, starts with, ends with, between, greater than, less than, blank) declared with the new operator attribute on pivot-filter and reachable from a condition row in the value picker; designerLabels, the first declarative path to the field designer's labels; and a header funnel on row fields that opens the packaged filter picker over the field's own filter entry. Also new: hide-empty-summary-cells, which drops rows and columns holding no values at all in the engine, so paging, Excel export and drill-down all agree on which rows exist.</PackageReleaseNotes>
-    <PackageProjectUrl>https://github.com/alican645/PivotForge</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/alican645/PivotForge.git</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <Deterministic>true</Deterministic>
-    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../PivotForge.Core/PivotForge.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="/" />
-    <None Include="../../assets/brand/pivotforge-icon.png" Pack="true" PackagePath="/" />
-    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
   </ItemGroup>
 
 </Project>

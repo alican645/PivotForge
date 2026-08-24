@@ -35,6 +35,21 @@ jobs:
         shell: bash
         run: echo "PACKAGE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
+      # The release notes on NuGet point at CHANGELOG.md, so a release with no
+      # entry there would ship a link to nothing. Checked before anything is
+      # built, because the fix is a commit rather than a rerun.
+      - name: Require a changelog entry for this version
+        shell: bash
+        run: |
+          if ! grep -qF "## [${PACKAGE_VERSION}]" CHANGELOG.md; then
+            echo "CHANGELOG.md has no '## [${PACKAGE_VERSION}]' section." >&2
+            exit 1
+          fi
+          if grep -qF "## [${PACKAGE_VERSION}] — unreleased" CHANGELOG.md; then
+            echo "CHANGELOG.md still marks ${PACKAGE_VERSION} as unreleased; date the section." >&2
+            exit 1
+          fi
+
       - name: Restore
         run: dotnet restore PivotForge.slnx
 

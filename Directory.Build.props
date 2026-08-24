@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    Settings every project in the repository shares: the two packages, their
+    tests, the samples and the smoke consumers. Anything that describes a
+    package rather than a build lives in src/Directory.Build.props instead,
+    because only what ships needs it.
+
+    MSBuild imports the nearest Directory.Build.props walking up from a project
+    and stops there, which is why src/Directory.Build.props imports this one
+    explicitly rather than inheriting it.
+  -->
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- A warning that reaches a release is a warning nobody read. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Authors>Alican</Authors>
+    <Copyright>Copyright (c) 2026 Alican</Copyright>
+  </PropertyGroup>
+
+</Project>

@@ -382,8 +382,13 @@ DevExpress denkliğinden gelmeyen, "yayınlanabilir paket" tarafındaki açıkla
       "kayıtta şu alan var mı" sorusunun cevabına çevirirdi) ve drill-down
       yalnızca listedeki alanları döndürüyor. Boş liste eski davranış, yani
       yükseltmede kimsenin sayfası bozulmuyor
-- [ ] `Directory.Build.props` — sürüm ve paket meta verisi iki csproj'da kopya
-- [ ] `CHANGELOG.md`
+- [x] `Directory.Build.props` — ortak derleme ayarları kökte, paketleme meta
+      verisi `src/` altında. İki csproj'da geriye yalnızca gerçekten farklı olan
+      kaldı: `PackageId`, `Title`, `Description`, `PackageTags`.
+- [x] `CHANGELOG.md` — Keep a Changelog biçiminde, on dört sürümün tamamı.
+      `PackageReleaseNotes` artık metni kopyalamak yerine buraya bağlanıyor;
+      yayın akışına da etiketlenen sürümün günlükte tarihli bir bölümü olduğunu
+      doğrulayan bir adım eklendi.
 - [ ] `net8.0;net10.0` çoklu hedefleme
 - [ ] `IQueryable` / EF Core sağlayıcısı — bugün her şey belleğe çekiliyor
 - [ ] Blazor bileşeni
