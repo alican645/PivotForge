@@ -1,7 +1,12 @@
 # Build outputs
 **/bin/
 **/obj/
-artifacts/
+# The contents rather than the directory itself: git cannot re-include a file
+# whose parent directory is excluded, and one file in here is configuration.
+artifacts/*
+# Repository configuration rather than build output: without it a fresh clone's
+# smoke projects fail restore under central package management.
+!artifacts/Directory.Packages.props
 
 # IDE and user settings
 .idea/

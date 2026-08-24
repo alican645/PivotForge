@@ -1,0 +1,21 @@
+<Project>
+
+  <!--
+    The smoke consumers under artifacts/smoke restore the two packages the way a
+    stranger would: from a feed, at a version that was actually published. That
+    version is the thing being tested, so it belongs on the PackageReference
+    rather than in the repository's central list - a smoke project pinned to the
+    version currently in development would be testing nothing.
+
+    NuGet stops at the nearest Directory.Packages.props walking up, so this file
+    shadows the one at the root and leaves these projects managing their own
+    versions. Everything else under artifacts/ is build output and is
+    gitignored; this file is the one exception, because without it a fresh
+    clone's smoke projects fail restore with NU1008.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+</Project>
