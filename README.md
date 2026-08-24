@@ -16,8 +16,8 @@ PivotForge is a dependency-light pivot engine and ASP.NET Core integration for o
 
 | Package | Purpose | Target |
 | --- | --- | --- |
-| `PivotForge.Core` | Pivot calculation, record readers, drill-down, paging, cancellation, and Excel export | `net8.0` |
-| `PivotForge.AspNetCore` | Razor Class Library assets, DI registration, endpoints, and large-result caching | `net8.0` |
+| `PivotForge.Core` | Pivot calculation, record readers, drill-down, paging, cancellation, and Excel export | `net8.0`, `net10.0` |
+| `PivotForge.AspNetCore` | Razor Class Library assets, DI registration, endpoints, and large-result caching | `net8.0`, `net10.0` |
 
 Both packages can be consumed by .NET 8, .NET 9, and .NET 10 applications.
 
@@ -210,6 +210,12 @@ dotnet test tests/PivotForge.Core.Tests/PivotForge.Core.Tests.csproj -c Release
 dotnet test tests/PivotForge.AspNetCore.Tests/PivotForge.AspNetCore.Tests.csproj -c Release
 node --test tests/*.test.js
 ```
+
+The test projects target `net8.0` and `net10.0`, so each command runs twice —
+once against each assembly the packages ship. Running the `net8.0` pass needs
+the ASP.NET Core 8 runtime installed; on a machine that only has a newer one,
+`DOTNET_ROLL_FORWARD=LatestMajor` runs the same assembly on the runtime that is
+there.
 
 Create local packages:
 

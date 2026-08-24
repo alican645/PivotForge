@@ -1,6 +1,6 @@
 # PivotForge Core Guide
 
-`PivotForge.Core` calculates pivot results without depending on ASP.NET Core or a browser UI. It targets `net8.0` and can be used from web APIs, workers, console applications, desktop applications, and custom reporting interfaces.
+`PivotForge.Core` calculates pivot results without depending on ASP.NET Core or a browser UI. It targets `net8.0` and `net10.0`, and can be used from web APIs, workers, console applications, desktop applications, and custom reporting interfaces.
 
 ## Supported Inputs
 

@@ -95,6 +95,11 @@ the endpoints a way to say no.
 
 ### Changed
 
+- Both packages now target **`net8.0` and `net10.0`** rather than `net8.0`
+  alone. `net8.0` remains the floor, so no consumer is dropped; the `net10.0`
+  assembly carries the same public API and exists so an application on the
+  current runtime loads a build compiled against its own framework rather than
+  one resolved through compatibility.
 - Package release notes now link to this file. Two packages ship together and
   their notes were kept by hand in two places, which is how they came to
   describe different subsets of the same release.

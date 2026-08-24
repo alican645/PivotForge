@@ -1,6 +1,6 @@
 # ASP.NET Core Integration
 
-`PivotForge.AspNetCore` is a `net8.0` Razor Class Library that packages browser assets, typed data-provider registration, minimal API endpoints, large-result caching, drill-down, and Excel export.
+`PivotForge.AspNetCore` is a Razor Class Library targeting `net8.0` and `net10.0` that packages browser assets, typed data-provider registration, minimal API endpoints, large-result caching, drill-down, and Excel export.
 
 ## Install
 
