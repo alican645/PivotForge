@@ -62,6 +62,9 @@ işleyici adı vermek DOM olayını kapatmıyor.
 - [x] `<pivot-filter field="Region" values="Marmara,Ege" />` — başlangıç filtresi
 - [x] `<pivot-sort mode="RowTotalValue" value-field="Amount" direction="Descending" />`
 - [x] `<pivot-conditional-rule ... />` — koşullu biçimlendirme kuralları
+- [x] `allow-conditional-formatting` + paketlenmiş `PivotConditionalPanel` —
+      okuyucu hücre menüsünden kural ekleyip ölçü kurallarını temizleyebiliyor.
+      Menü, geri çağırması olmayan eylemi artık hiç göstermiyor.
 - [ ] Detay modalı ayarları: `drill-down-labels`. Sütunlar bilinçli olarak
       dışarıda: sütun biçimlendiricileri fonksiyon ve bir nitelikte ifade
       edilemiyor; katalogdan türetilen varsayılan zaten doğru çalışıyor.
@@ -287,10 +290,12 @@ aralarında geçmesi için — kendi durum şeması demoya ait, bildirimsel yol 
       alan düzeni, başlıklar, filtre seçimleri, toplama, biçim ve sıralama
 - [x] `adoptLayout` kaydedilmiş **başlıkları** geri yüklüyor — `getState()` çıktısı
       doğrudan yapıcıya geri verilebiliyor
-- [~] Kaydedilmiş görünümde koşullu biçimlendirme kurallarının taşınması —
-      **kapsam dışı bırakıldı:** kurallar `pivot-conditional-rule` ile bildiriliyor ve
-      tasarımcı onları düzenleyemiyor, yani kullanıcının değiştirdiği, kaybolabilecek
-      bir şey yok. Tasarımcıya kural düzenleme eklenirse bu madde geri açılmalı.
+- [ ] Kaydedilmiş görünümde/`state-storing` içinde koşullu biçimlendirme kurallarının
+      taşınması — **geri açıldı:** erteleme gerekçesi "kullanıcının değiştirdiği bir şey
+      yok" idi; `PivotConditionalPanel` ile artık var. Kurallar şu anda widget'ta
+      (`widget.conditionalRules`) duruyor ama `state-storing` onları yazmıyor, yani
+      okuyucunun eklediği kural sayfa yenilenince kayboluyor. Demo kendi görünüm
+      kaydında `setConditionalRules` ile taşıyor; paketin bunu kendi yapması gerekiyor.
 
 ---
 

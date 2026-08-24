@@ -81,6 +81,17 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder AllowExcelExport(bool allow) => Set("allowExcelExport", allow);
 
+    /// <summary>Enables or disables the interactive conditional formatting panel.</summary>
+    /// <remarks>
+    /// On by default. The cell menu offers the entry only when the panel can open, so
+    /// turning this off removes the entry rather than leaving one that does nothing.
+    /// Rules declared with <see cref="ConditionalRule"/> are drawn either way.
+    /// </remarks>
+    /// <param name="allow">True to let a reader add rules from the cell menu.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder AllowConditionalFormatting(bool allow) =>
+        Set("allowConditionalFormatting", allow);
+
     /// <summary>Enables or disables the initial load performed when the grid is created.</summary>
     /// <param name="autoLoad">True to load data as soon as the grid is created.</param>
     /// <returns>The same builder.</returns>

@@ -222,50 +222,6 @@
     </div>
 </div>
 
-<div class="pivot-conditional-panel" id="conditionalPanel" role="dialog" aria-modal="false" aria-labelledby="conditionalPanelTitle" hidden>
-    <div class="pivot-conditional-panel__head">
-        <div>
-            <strong id="conditionalPanelTitle">Koşullu biçimlendirme</strong>
-            <span id="conditionalPanelSummary"></span>
-        </div>
-        <button type="button" id="closeConditionalPanelButton" aria-label="Koşullu biçimlendirme panelini kapat">×</button>
-    </div>
-    <form id="conditionalForm">
-        <label>
-            <span>Koşul</span>
-            <select id="conditionalOperator">
-                <option value="greaterThan">Büyüktür</option>
-                <option value="greaterThanOrEqual" selected>Büyük veya eşittir</option>
-                <option value="lessThan">Küçüktür</option>
-                <option value="lessThanOrEqual">Küçük veya eşittir</option>
-                <option value="equal">Eşittir</option>
-                <option value="between">Arasındadır</option>
-            </select>
-        </label>
-        <div class="pivot-conditional-panel__values">
-            <label>
-                <span>Değer</span>
-                <input id="conditionalThreshold" type="number" step="any" required>
-            </label>
-            <label id="conditionalThreshold2Label" hidden>
-                <span>İkinci değer</span>
-                <input id="conditionalThreshold2" type="number" step="any">
-            </label>
-        </div>
-        <fieldset class="pivot-conditional-colors">
-            <legend>Vurgu rengi</legend>
-            <label title="Yeşil"><input type="radio" name="conditionalColor" value="green" checked><span class="is-green"></span></label>
-            <label title="Sarı"><input type="radio" name="conditionalColor" value="amber"><span class="is-amber"></span></label>
-            <label title="Kırmızı"><input type="radio" name="conditionalColor" value="red"><span class="is-red"></span></label>
-            <label title="Mavi"><input type="radio" name="conditionalColor" value="blue"><span class="is-blue"></span></label>
-        </fieldset>
-        <div class="pivot-conditional-panel__actions">
-            <button class="is-secondary" type="button" id="clearConditionalRulesButton">Ölçü kurallarını temizle</button>
-            <button class="is-primary" type="submit">Kuralı ekle</button>
-        </div>
-    </form>
-</div>
-
 @section Scripts {
     <script>
         const elements = {
@@ -317,15 +273,6 @@
             drillDownTableHead: document.getElementById("drillDownTableHead"),
             drillDownTableBody: document.getElementById("drillDownTableBody"),
             closeDrillDownButton: document.getElementById("closeDrillDownButton"),
-            conditionalPanel: document.getElementById("conditionalPanel"),
-            conditionalPanelSummary: document.getElementById("conditionalPanelSummary"),
-            conditionalForm: document.getElementById("conditionalForm"),
-            conditionalOperator: document.getElementById("conditionalOperator"),
-            conditionalThreshold: document.getElementById("conditionalThreshold"),
-            conditionalThreshold2: document.getElementById("conditionalThreshold2"),
-            conditionalThreshold2Label: document.getElementById("conditionalThreshold2Label"),
-            closeConditionalPanelButton: document.getElementById("closeConditionalPanelButton"),
-            clearConditionalRulesButton: document.getElementById("clearConditionalRulesButton"),
             pivotCard: document.querySelector(".pivot-card")
         };
 
@@ -428,9 +375,8 @@
         let drillDownResponse = null;
         let drillDownRequestId = 0;
         let cellCopyStatusTimer = null;
-        let conditionalSelection = null;
-        let conditionalAnchorCell = null;
-        let conditionalRules = restoredState?.conditionalRules?.map(rule => ({ ...rule })) ?? [];
+        const restoredConditionalRules =
+            restoredState?.conditionalRules?.map(rule => ({ ...rule })) ?? [];
         const largeSourceRowCount = 100_000;
         const virtualPageSize = 12;
         const virtualRowHeight = 36;
@@ -453,6 +399,7 @@
         widget.update = () => runPivot();
 
         syncRendererOptions();
+        widget.setConditionalRules(restoredConditionalRules);
         activeRenderer().applyViewState(restoredState, { rerender: false, notify: false });
 
         widget.on("dataLoading", () => {
@@ -537,10 +484,6 @@
         });
         elements.drillDownSearch.addEventListener("input", applyDrillDownFilters);
         elements.drillDownCsvButton.addEventListener("click", exportDrillDownCsv);
-        elements.closeConditionalPanelButton.addEventListener("click", closeConditionalPanel);
-        elements.conditionalOperator.addEventListener("change", syncConditionalOperator);
-        elements.conditionalForm.addEventListener("submit", addConditionalRule);
-        elements.clearConditionalRulesButton.addEventListener("click", clearConditionalRulesForSelection);
         elements.closeJsonButton.addEventListener("click", () => toggleJsonModal(false));
         elements.jsonModal.addEventListener("click", event => {
             if (event.target === elements.jsonModal) {
@@ -552,23 +495,12 @@
                 closeAllDropdowns();
             }
         });
-        document.addEventListener("pointerdown", event => {
-            if (!elements.conditionalPanel.hidden &&
-                !elements.conditionalPanel.contains(event.target) &&
-                !event.target.closest(".pivot-cell-menu")) {
-                closeConditionalPanel();
-            }
-        });
         document.addEventListener("fullscreenchange", () => {
             elements.fullscreenButton.textContent = document.fullscreenElement ? "Çık" : "Tam ekran";
         });
         document.addEventListener("keydown", event => {
-            if (event.key === "Escape") {
-                if (!elements.conditionalPanel.hidden) {
-                    closeConditionalPanel();
-                } else if (elements.drillDownModal.classList.contains("is-open")) {
-                    closeDrillDown();
-                }
+            if (event.key === "Escape" && elements.drillDownModal.classList.contains("is-open")) {
+                closeDrillDown();
             }
         });
         syncViewControls();
@@ -656,7 +588,7 @@
         }
 
         // The widget renders with the renderer's own defaults, so the per-run display
-        // settings (layout mode, subtotals, formats, conditional rules) live there.
+        // settings (layout mode, subtotals, formats) live there.
         // They are published on the widget too, because the widget rebuilds the
         // renderer from options whenever the field set changes.
         function syncRendererOptions() {
@@ -730,7 +662,10 @@
                 repeatRowLabels: viewSettings.repeatRowLabels,
                 subtotals: viewSettings.subtotals,
                 sortState: activeRowSort,
-                conditionalRules,
+                // The widget owns the rules and passes them with each draw it
+                // makes; the virtual-scroll path below draws the renderer
+                // directly, so it has to carry them too.
+                conditionalRules: widget.conditionalRules,
                 values: state.values.map(value => ({
                     key: valueKey(value),
                     label: valueDisplayLabel(value),
@@ -744,7 +679,6 @@
                 onCellDoubleClick: openDrillDown,
                 onCellCopied: handleCellCopied,
                 onCellFilterRequested: filterByCellSelection,
-                onConditionalFormatRequested: openConditionalPanel,
                 ...overrides
             };
         }
@@ -907,7 +841,7 @@
             viewSettings.repeatRowLabels = false;
             viewSettings.subtotals = true;
             viewSettings.largeData = false;
-            conditionalRules = [];
+            widget.clearConditionalRules();
             syncViewControls();
             activeRenderer().applyViewState({}, { rerender: false, notify: false });
             activeViewId = null;
@@ -952,86 +886,6 @@
             dimensionValues.forEach(({ field, value }) => cellFilters.set(field, [String(value)]));
             setStatus("Hücre bağlamı filtrelere uygulandı", false);
             runPivot();
-        }
-
-        function openConditionalPanel(selection, cell) {
-            if (selection?.type !== "cell" || typeof selection.value !== "number") {
-                return;
-            }
-
-            conditionalSelection = selection;
-            conditionalAnchorCell = cell;
-            const value = layoutState.getState().values.find(item => valueKey(item) === selection.valueKey);
-            elements.conditionalPanelSummary.textContent = `${value ? valueDisplayLabel(value) : selection.valueKey} · ${cell.textContent.trim()}`;
-            elements.conditionalOperator.value = "greaterThanOrEqual";
-            elements.conditionalThreshold.value = String(selection.value);
-            elements.conditionalThreshold2.value = String(selection.value);
-            elements.conditionalPanel.querySelector('input[name="conditionalColor"][value="green"]').checked = true;
-            elements.conditionalPanel.hidden = false;
-            syncConditionalOperator();
-
-            const rect = cell.getBoundingClientRect();
-            const panelRect = elements.conditionalPanel.getBoundingClientRect();
-            const margin = 10;
-            elements.conditionalPanel.style.left = `${Math.max(margin, Math.min(rect.left, window.innerWidth - panelRect.width - margin))}px`;
-            elements.conditionalPanel.style.top = `${Math.max(margin, Math.min(rect.bottom + 6, window.innerHeight - panelRect.height - margin))}px`;
-            elements.conditionalOperator.focus();
-        }
-
-        function closeConditionalPanel() {
-            if (elements.conditionalPanel.hidden) {
-                return;
-            }
-
-            elements.conditionalPanel.hidden = true;
-            conditionalAnchorCell?.focus({ preventScroll: true });
-            conditionalAnchorCell = null;
-            conditionalSelection = null;
-        }
-
-        function syncConditionalOperator() {
-            const isBetween = elements.conditionalOperator.value === "between";
-            elements.conditionalThreshold2Label.parentElement.classList.toggle("is-between", isBetween);
-            elements.conditionalThreshold2Label.hidden = !isBetween;
-            elements.conditionalThreshold2.required = isBetween;
-        }
-
-        function addConditionalRule(event) {
-            event.preventDefault();
-
-            if (!conditionalSelection || !elements.conditionalForm.reportValidity()) {
-                return;
-            }
-
-            const operator = elements.conditionalOperator.value;
-            conditionalRules.push({
-                id: createConditionalRuleId(),
-                valueKey: conditionalSelection.valueKey,
-                operator,
-                threshold: Number(elements.conditionalThreshold.value),
-                ...(operator === "between" ? { threshold2: Number(elements.conditionalThreshold2.value) } : {}),
-                color: elements.conditionalForm.elements.conditionalColor.value
-            });
-            closeConditionalPanel();
-            setStatus("Koşullu biçimlendirme kuralı eklendi", false);
-            runPivot();
-        }
-
-        function clearConditionalRulesForSelection() {
-            if (!conditionalSelection) {
-                return;
-            }
-
-            const valueKeyToClear = conditionalSelection.valueKey;
-            const previousCount = conditionalRules.length;
-            conditionalRules = conditionalRules.filter(rule => rule.valueKey !== valueKeyToClear);
-            closeConditionalPanel();
-            setStatus(previousCount === conditionalRules.length ? "Bu ölçüde kural yok" : "Ölçü kuralları temizlendi", false);
-            runPivot();
-        }
-
-        function createConditionalRuleId() {
-            return window.crypto?.randomUUID?.() ?? `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         }
 
         async function openDrillDown(selection) {
@@ -1216,7 +1070,7 @@
                 },
                 viewSettings: { ...viewSettings },
                 sort: activeRowSort ? { ...activeRowSort } : null,
-                conditionalRules: conditionalRules.map(rule => ({ ...rule })),
+                conditionalRules: widget.conditionalRules.map(rule => ({ ...rule })),
                 columnWidths: rendererState.columnWidths,
                 collapsedGroups: rendererState.collapsedGroups
             });
@@ -1338,7 +1192,7 @@
             viewSettings.subtotals = view.state.viewSettings.subtotals;
             viewSettings.largeData = view.state.viewSettings.largeData;
             activeRowSort = view.state.sort ? { ...view.state.sort } : null;
-            conditionalRules = view.state.conditionalRules.map(rule => ({ ...rule }));
+            widget.setConditionalRules(view.state.conditionalRules);
             activeRenderer().applyViewState(view.state, { rerender: false, notify: false });
             activeViewId = view.id;
             activeViewBaseline = view.state;

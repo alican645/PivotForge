@@ -286,6 +286,7 @@ public class PivotTagHelperTests
         Assert.False(config.TryGetProperty("allowFiltering", out _));
         Assert.False(config.TryGetProperty("allowDrillDown", out _));
         Assert.False(config.TryGetProperty("allowExcelExport", out _));
+        Assert.False(config.TryGetProperty("allowConditionalFormatting", out _));
         Assert.False(config.TryGetProperty("autoLoad", out _));
         Assert.False(config.TryGetProperty("largeData", out _));
         Assert.False(config.TryGetProperty("pageSize", out _));
@@ -323,6 +324,7 @@ public class PivotTagHelperTests
                 AllowFiltering = true,
                 AllowDrillDown = false,
                 AllowExcelExport = true,
+                AllowConditionalFormatting = false,
                 AutoLoad = false,
                 LargeData = true,
                 PageSize = 75,
@@ -337,6 +339,7 @@ public class PivotTagHelperTests
         Assert.True(config.GetProperty("allowFiltering").GetBoolean());
         Assert.False(config.GetProperty("allowDrillDown").GetBoolean());
         Assert.True(config.GetProperty("allowExcelExport").GetBoolean());
+        Assert.False(config.GetProperty("allowConditionalFormatting").GetBoolean());
         Assert.False(config.GetProperty("autoLoad").GetBoolean());
         Assert.True(config.GetProperty("largeData").GetBoolean());
         Assert.Equal(75, config.GetProperty("pageSize").GetInt32());

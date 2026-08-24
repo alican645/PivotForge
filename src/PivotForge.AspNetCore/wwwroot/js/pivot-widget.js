@@ -10,6 +10,10 @@
     drillDownModal: true,
     drillDownModalOptions: null,
     allowExcelExport: false,
+    // The cell menu's conditional-formatting entry, and the panel behind it. A
+    // page that turns this off gets no entry rather than a dead one.
+    allowConditionalFormatting: true,
+    conditionalPanelOptions: null,
     largeData: false,
     pageSize: 40,
     sourceRowCount: 100000,
@@ -68,6 +72,7 @@
     "cellDoubleClick",
     "cellCopied",
     "cellFilterRequested",
+    "conditionalFormatRequested",
     "viewStateChanged"
   ];
 
@@ -135,6 +140,9 @@
       this.requestToken = 0;
       this.filters = [...(this.options.filters ?? [])];
       this.rowSort = this.options.rowSort ?? null;
+      // Seeded from the declared rules and owned from here on, so a rule added
+      // at runtime and one written in Razor live in the same list.
+      this.conditionalRules = [...(this.options.rendererOptions?.conditionalRules ?? [])];
       this.sessionId = null;
       this.totalRowCount = 0;
 
@@ -435,6 +443,9 @@
         // Declared before the spread so a consumer driving sorting through
         // rendererOptions keeps ownership until this widget actually sorts.
         sortState: this.rowSort,
+        // The renderer outlives every rule change, so this is also passed per
+        // draw in render(); declaring it here is what a first draw reads.
+        conditionalRules: this.conditionalRules,
         // Left unset, the renderer auto-detects a single value key from the
         // payload, labels it with that raw key and applies no format — so
         // captions are lost and a second data field disappears.
@@ -458,6 +469,22 @@
         texts: { ...localeTable.texts, ...(consumer.texts ?? {}) },
         onSelectionChanged: selection => bridge("selectionChanged", selection),
         onCellFilterRequested: selection => bridge("cellFilterRequested", selection),
+        // Announced first, then handled. A page that brought its own panel
+        // through rendererOptions keeps it; one that did not gets the packaged
+        // panel; a page with neither gets no menu entry at all, because the
+        // renderer hides the entry when this is null.
+        onConditionalFormatRequested: this.canEditConditionalFormat() || consumer.onConditionalFormatRequested
+          ? (selection, cell) => {
+            this.emit("conditionalFormatRequested", selection);
+
+            if (consumer.onConditionalFormatRequested) {
+              consumer.onConditionalFormatRequested(selection, cell);
+              return;
+            }
+
+            this.openConditionalPanel(selection, cell);
+          }
+          : null,
         onViewStateChanged: state => bridge("viewStateChanged", state),
         // The renderer reports this as three positional arguments; the event
         // carries them as one object so listeners are not order-dependent.
@@ -558,6 +585,77 @@
         operator: current?.operator ?? "Equals",
         onApply: (values, mode, operator) => this.setFilter(field, values, mode, operator)
       });
+    }
+
+    conditionalPanelLabels() {
+      return {
+        ...this.locale.conditionalPanel,
+        ...(this.options.conditionalPanelOptions?.labels ?? {})
+      };
+    }
+
+    // The same bargain the header funnel makes: a page that turned the feature
+    // off, or never loaded pivot-conditional-panel.js, gets no menu entry
+    // rather than one that does nothing when clicked.
+    canEditConditionalFormat() {
+      return Boolean(
+        this.options.allowConditionalFormatting && PivotForge.PivotConditionalPanel);
+    }
+
+    openConditionalPanel(selection, cell) {
+      if (!this.canEditConditionalFormat() || !selection?.valueKey) {
+        return null;
+      }
+
+      this.conditionalPanel ??= new PivotForge.PivotConditionalPanel({
+        ...(this.options.conditionalPanelOptions ?? {}),
+        labels: this.conditionalPanelLabels()
+      });
+
+      return this.conditionalPanel.open({
+        valueKey: selection.valueKey,
+        caption: this.valueDefinitions()
+          .find(value => value.key === selection.valueKey)?.label ?? selection.valueKey,
+        value: selection.value,
+        valueText: cell?.textContent?.trim() ?? "",
+        anchor: cell,
+        onApply: rule => this.addConditionalRule(rule),
+        onClear: valueKey => this.clearConditionalRules(valueKey)
+      });
+    }
+
+    // Redraws with the rules that exist now. No refetch: a rule decides how a
+    // number is painted, never which numbers there are.
+    addConditionalRule(rule) {
+      if (!rule?.valueKey) {
+        throw new Error("A conditional rule must name a valueKey.");
+      }
+
+      this.conditionalRules = [...this.conditionalRules, rule];
+      this.rerender();
+      return this;
+    }
+
+    // Named by measure rather than by rule id, because that is what the panel
+    // can offer: it is opened on a cell, and a cell knows its measure.
+    clearConditionalRules(valueKey = null) {
+      this.conditionalRules = valueKey === null
+        ? []
+        : this.conditionalRules.filter(rule => rule.valueKey !== valueKey);
+      this.rerender();
+      return this;
+    }
+
+    setConditionalRules(rules) {
+      this.conditionalRules = [...(rules ?? [])];
+      this.rerender();
+      return this;
+    }
+
+    rerender() {
+      if (this.result) {
+        this.render(this.result);
+      }
     }
 
     on(eventName, handler) {
@@ -710,7 +808,10 @@
       // the funnel would keep marking whatever was filtered when it was built.
       // Per-render options rather than a write into renderer.options, because a
       // renderer supplied from outside need not have that member at all.
-      this.renderer.render(result, { filteredFields: this.filteredFields() });
+      this.renderer.render(result, {
+        filteredFields: this.filteredFields(),
+        conditionalRules: this.conditionalRules
+      });
     }
 
     showError(error) {
@@ -981,6 +1082,8 @@
       this.designer?.dispose();
       this.designer = null;
       this.headerFilterPicker?.dispose();
+      this.conditionalPanel?.dispose();
+      this.conditionalPanel = null;
       this.headerFilterPicker = null;
       this.drillDownModal?.dispose();
       this.drillDownModal = null;

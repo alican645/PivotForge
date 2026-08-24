@@ -258,3 +258,216 @@ test("the renderer receives a sort callback when sorting is enabled", () => {
   widget.dispose();
   PivotForge.PivotTableRenderer = previous;
 });
+
+// --- Conditional formatting ---------------------------------------------------
+
+// The panel the widget builds on first use, recorded rather than rendered.
+async function withFakePanel(run, options = {}, { panel = true } = {}) {
+  const previousPanel = PivotForge.PivotConditionalPanel;
+  const opened = [];
+  const disposed = [];
+
+  PivotForge.PivotConditionalPanel = panel
+    ? class {
+      open(request) { opened.push(request); return request; }
+      dispose() { disposed.push(this); }
+    }
+    : undefined;
+
+  try {
+    // Awaited rather than returned: the stub has to stay in place for the whole
+    // of an async body, and returning the promise would restore it at the first
+    // await instead.
+    return await withFakeRenderer(
+      (widget, captured) => run(widget, captured, opened, disposed),
+      options);
+  } finally {
+    PivotForge.PivotConditionalPanel = previousPanel;
+  }
+}
+
+test("the renderer receives a conditional callback when the panel can open", async () => {
+  await withFakePanel((widget, captured) => {
+    assert.equal(typeof captured.onConditionalFormatRequested, "function");
+  });
+});
+
+// The renderer leaves the menu entry out when this is null, so a page that
+// turned the feature off gets no entry rather than one that does nothing.
+test("a widget that cannot format offers no conditional callback", async () => {
+  await withFakePanel((widget, captured) => {
+    assert.equal(captured.onConditionalFormatRequested, null);
+  }, { allowConditionalFormatting: false });
+});
+
+test("a page that never loaded the panel script offers no conditional callback", async () => {
+  await withFakePanel((widget, captured) => {
+    assert.equal(captured.onConditionalFormatRequested, null);
+  }, {}, { panel: false });
+});
+
+test("the cell's measure, number and caption reach the panel", async () => {
+  await withFakePanel((widget, captured, opened) => {
+    const cell = { textContent: " 1.250 " };
+    captured.onConditionalFormatRequested(
+      { valueKey: "tutar_sum", value: 1250 }, cell);
+
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0].valueKey, "tutar_sum");
+    assert.equal(opened[0].value, 1250);
+    assert.equal(opened[0].caption, "Tutar");
+    assert.equal(opened[0].valueText, "1.250");
+    assert.equal(opened[0].anchor, cell);
+  });
+});
+
+// A cell with no measure has no rule to carry, and the panel would have nothing
+// to name in its summary.
+test("a cell without a measure opens no panel", async () => {
+  await withFakePanel((widget, captured, opened) => {
+    captured.onConditionalFormatRequested({ value: 1250 }, {});
+    assert.equal(opened.length, 0);
+  });
+});
+
+test("one panel serves every cell rather than one panel per cell", async () => {
+  await withFakePanel((widget, captured, opened) => {
+    captured.onConditionalFormatRequested({ valueKey: "tutar_sum", value: 1 }, {});
+    const first = widget.conditionalPanel;
+    captured.onConditionalFormatRequested({ valueKey: "tutar_sum", value: 2 }, {});
+
+    assert.equal(widget.conditionalPanel, first);
+    assert.equal(opened.length, 2);
+  });
+});
+
+test("a page with its own panel keeps it, and still hears the event", async () => {
+  const seen = [];
+  const own = [];
+  await withFakePanel((widget, captured, opened) => {
+    widget.on("conditionalFormatRequested", selection => seen.push(selection));
+    captured.onConditionalFormatRequested({ valueKey: "tutar_sum", value: 1250 }, {});
+
+    assert.equal(own.length, 1);
+    // The packaged panel stays shut when the page brought its own, so a reader
+    // never gets two.
+    assert.equal(opened.length, 0);
+    assert.equal(seen.length, 1);
+  }, { rendererOptions: { onConditionalFormatRequested: selection => own.push(selection) } });
+});
+
+// A page that supplies its own panel must still get the menu entry, even with
+// the packaged panel turned off.
+test("a page's own handler survives allowConditionalFormatting being off", async () => {
+  const own = [];
+  await withFakePanel((widget, captured) => {
+    assert.equal(typeof captured.onConditionalFormatRequested, "function");
+    captured.onConditionalFormatRequested({ valueKey: "tutar_sum", value: 1 }, {});
+    assert.equal(own.length, 1);
+  }, {
+    allowConditionalFormatting: false,
+    rendererOptions: { onConditionalFormatRequested: selection => own.push(selection) }
+  });
+});
+
+test("rules declared in markup are the list a runtime rule is added to", async () => {
+  const declared = { id: "r1", valueKey: "tutar_sum", operator: "greaterThan", threshold: 10, color: "green" };
+
+  await withFakePanel((widget, captured) => {
+    assert.deepEqual(captured.conditionalRules, [declared]);
+
+    widget.addConditionalRule(
+      { id: "r2", valueKey: "tutar_sum", operator: "lessThan", threshold: 5, color: "red" });
+
+    assert.deepEqual(widget.conditionalRules.map(rule => rule.id), ["r1", "r2"]);
+  }, { rendererOptions: { conditionalRules: [declared] } });
+});
+
+// The renderer outlives every rule change, so the rules have to travel with
+// each draw -- exactly as the funnel's filteredFields do.
+test("a new rule reaches the next draw without a new request", async () => {
+  await withFakePanel(async (widget, captured) => {
+    await widget.refresh();
+    const requests = captured.renders.length;
+
+    widget.addConditionalRule(
+      { id: "r1", valueKey: "tutar_sum", operator: "greaterThan", threshold: 10, color: "amber" });
+
+    assert.equal(captured.renders.length, requests + 1);
+    assert.deepEqual(
+      captured.renders.at(-1).conditionalRules.map(rule => rule.id), ["r1"]);
+  });
+});
+
+test("a rule added before the first result draws nothing rather than throwing", async () => {
+  await withFakePanel((widget, captured) => {
+    widget.addConditionalRule(
+      { id: "r1", valueKey: "tutar_sum", operator: "greaterThan", threshold: 10, color: "green" });
+
+    assert.deepEqual(captured.renders, []);
+    assert.equal(widget.conditionalRules.length, 1);
+  });
+});
+
+test("a rule that names no measure is refused", async () => {
+  await withFakePanel(widget => {
+    assert.throws(
+      () => widget.addConditionalRule({ operator: "greaterThan", threshold: 1, color: "green" }),
+      /valueKey/);
+    assert.deepEqual(widget.conditionalRules, []);
+  });
+});
+
+test("clearing one measure leaves the other measures' rules alone", async () => {
+  await withFakePanel(async (widget, captured) => {
+    await widget.refresh();
+    widget.setConditionalRules([
+      { id: "a", valueKey: "tutar_sum", operator: "greaterThan", threshold: 1, color: "green" },
+      { id: "b", valueKey: "adet_sum", operator: "lessThan", threshold: 9, color: "red" }
+    ]);
+
+    widget.clearConditionalRules("tutar_sum");
+
+    assert.deepEqual(captured.renders.at(-1).conditionalRules.map(rule => rule.id), ["b"]);
+  });
+});
+
+test("clearing without a measure clears every rule", async () => {
+  await withFakePanel(async (widget, captured) => {
+    await widget.refresh();
+    widget.setConditionalRules([
+      { id: "a", valueKey: "tutar_sum", operator: "greaterThan", threshold: 1, color: "green" },
+      { id: "b", valueKey: "adet_sum", operator: "lessThan", threshold: 9, color: "red" }
+    ]);
+
+    widget.clearConditionalRules();
+
+    assert.deepEqual(captured.renders.at(-1).conditionalRules, []);
+  });
+});
+
+// The panel hands rules straight to the widget, so the two callbacks it is
+// given have to be the ones that change the list.
+test("the panel's callbacks add and clear the widget's rules", async () => {
+  await withFakePanel(async (widget, captured, opened) => {
+    await widget.refresh();
+    captured.onConditionalFormatRequested({ valueKey: "tutar_sum", value: 1250 }, {});
+
+    const rule = { id: "r1", valueKey: "tutar_sum", operator: "greaterThan", threshold: 10, color: "blue" };
+    opened[0].onApply(rule);
+    assert.deepEqual(widget.conditionalRules, [rule]);
+
+    opened[0].onClear("tutar_sum");
+    assert.deepEqual(widget.conditionalRules, []);
+  });
+});
+
+test("disposing the widget disposes the panel it built", async () => {
+  const disposedPanels = [];
+  await withFakePanel((widget, captured, opened, disposed) => {
+    captured.onConditionalFormatRequested({ valueKey: "tutar_sum", value: 1 }, {});
+    disposedPanels.push(disposed);
+  });
+
+  assert.equal(disposedPanels[0].length, 1);
+});
