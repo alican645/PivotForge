@@ -26,6 +26,41 @@ const TEXTS = {
   filterActive: "{0} is filtered"
 };
 
+// The comparisons matchesConditionalRule evaluates and the highlights
+// applyConditionalFormatting has classes for. Named here so a rule can be
+// checked against exactly what the renderer will do with it.
+const CONDITIONAL_OPERATORS = [
+  "greaterThan",
+  "greaterThanOrEqual",
+  "lessThan",
+  "lessThanOrEqual",
+  "equal",
+  "between"
+];
+
+const CONDITIONAL_COLORS = ["green", "amber", "red", "blue"];
+
+// Whether anything could act on this rule at all. Separate from
+// matchesConditionalRule, which asks about one value: this asks whether the
+// rule is the kind of thing that can ever paint anything. Everything that
+// stores, restores or accepts a rule checks it here, so the panel, the widget
+// and a restored view all agree on what a rule is.
+PivotForge.isConditionalRule = function isConditionalRule(rule) {
+  if (typeof rule?.valueKey !== "string" || rule.valueKey === "") {
+    return false;
+  }
+
+  if (!CONDITIONAL_COLORS.includes(rule.color) ||
+    !CONDITIONAL_OPERATORS.includes(rule.operator) ||
+    !Number.isFinite(rule.threshold)) {
+    return false;
+  }
+
+  // Between is the only comparison that reads a second bound, and it cannot do
+  // anything without one.
+  return rule.operator !== "between" || Number.isFinite(rule.threshold2);
+};
+
 function formatText(template, ...values) {
   return values.reduce(
     (result, value, index) => result.replaceAll(`{${index}}`, String(value)),
@@ -1481,7 +1516,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
   applyConditionalFormatting(table, settings = this.lastSettings) {
     const rules = Array.isArray(settings?.conditionalRules) ? settings.conditionalRules : [];
-    const colorClasses = ["green", "amber", "red", "blue"];
+    const colorClasses = CONDITIONAL_COLORS;
 
     table?.querySelectorAll('[data-selection-target="cell"]').forEach(cell => {
       cell.classList.remove(...colorClasses.map(color => `is-conditional-${color}`));

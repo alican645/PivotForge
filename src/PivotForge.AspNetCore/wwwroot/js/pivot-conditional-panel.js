@@ -18,6 +18,13 @@
   // dropped by the renderer, so the panel never offers one.
   const COLORS = ["green", "amber", "red", "blue"];
 
+  // Read at call time for the same reason the operator list is not: this file
+  // may load before pivot-table.js. A page without the renderer has nothing to
+  // paint anyway, so the panel falls back to accepting its own shape.
+  function isRule(rule) {
+    return PivotForge.isConditionalRule?.(rule) ?? true;
+  }
+
   const DEFAULT_LABELS = {
     title: "Conditional formatting",
     close: "Close",
@@ -305,33 +312,19 @@
     // silently colours nothing.
     createRule() {
       const threshold = readNumber(this.elements?.threshold.input);
-
-      if (!Number.isFinite(threshold)) {
-        return null;
-      }
-
-      if (this.operator !== "between") {
-        return {
-          id: createRuleId(),
-          valueKey: this.valueKey,
-          operator: this.operator,
-          threshold,
-          color: this.color
-        };
-      }
-
       const threshold2 = readNumber(this.elements?.threshold2.input);
+      const rule = {
+        id: createRuleId(),
+        valueKey: this.valueKey,
+        operator: this.operator,
+        threshold,
+        // Only Between reads a second bound, and spelling one on every rule
+        // would make the payload claim a bound the comparison never reads.
+        ...(this.operator === "between" ? { threshold2 } : {}),
+        color: this.color
+      };
 
-      return Number.isFinite(threshold2)
-        ? {
-          id: createRuleId(),
-          valueKey: this.valueKey,
-          operator: this.operator,
-          threshold,
-          threshold2,
-          color: this.color
-        }
-        : null;
+      return isRule(rule) ? rule : null;
     }
 
     apply() {

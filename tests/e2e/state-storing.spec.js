@@ -115,3 +115,69 @@ test("storage is per key, so a page without one is untouched", async ({ page }) 
 
   expect(keys).toEqual([STORAGE_KEY]);
 });
+
+// The conditional panel is the only part of the grid whose result the reader
+// creates from nothing, so losing it on reload is the most visible kind of
+// loss. Both sample pages also declare a rule in markup, which makes this the
+// case worth checking: the stored list must replace the declared one rather
+// than being added to it, or every reload would double the declarations.
+for (const url of PAGES) {
+  test(`a conditional rule the reader added survives a reload on ${url}`, async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await open(page, url);
+    await page.waitForSelector(".pivot-table table td");
+
+    const declared = await page.locator('.pivot-table table td[class*="is-conditional-"]').count();
+    expect(declared).toBeGreaterThan(0);
+
+    await page.locator(".pivot-table table tbody td[data-selection-target='cell']")
+      .first().click({ button: "right" });
+    await page.locator(".pivot-cell-menu__item", { hasText: "Koşullu biçimlendirme ekle" }).click();
+    const panel = page.locator(".pivot-conditional-panel");
+    await expect(panel).toBeVisible();
+    await panel.locator("select").selectOption("greaterThan");
+    await panel.locator('input[type="number"]').first().fill("0");
+    await panel.locator('input[type="radio"][value="blue"]').check();
+    await panel.locator('button[type="submit"]').click();
+
+    const blue = await page.locator(".pivot-table table td.is-conditional-blue").count();
+    expect(blue).toBeGreaterThan(0);
+    await expect.poll(async () => (await storedState(page))?.conditionalRules?.length)
+      .toBeGreaterThan(0);
+
+    await open(page, url);
+    await page.waitForSelector(".pivot-table table td");
+
+    await expect(page.locator(".pivot-table table td.is-conditional-blue")).toHaveCount(blue);
+    // The declared rule is still in the list rather than duplicated out of it.
+    await expect.poll(async () => (await storedState(page))?.conditionalRules?.length)
+      .toBe(2);
+    expect(errors).toEqual([]);
+  });
+}
+
+test("clearing the rules is remembered too", async ({ page }) => {
+  // The declarative pages wire no page code, so the widget is caught from the
+  // ready event the same way a consuming page would catch it.
+  await page.addInitScript(() => {
+    document.addEventListener(
+      "pivotforge:ready",
+      event => { window.grid = event.detail.widget; },
+      true);
+  });
+  await open(page, PAGES[0]);
+  await page.waitForSelector(".pivot-table table td");
+  const highlighted = page.locator('.pivot-table table td[class*="is-conditional-"]');
+  expect(await highlighted.count()).toBeGreaterThan(0);
+
+  await page.evaluate(() => window.grid.clearConditionalRules());
+  await expect(highlighted).toHaveCount(0);
+
+  await open(page, PAGES[0]);
+  await page.waitForSelector(".pivot-table table td");
+
+  // The declared rule does not come back: the reader turned it off, and a
+  // declaration that reappeared on every reload could never be turned off.
+  await expect(highlighted).toHaveCount(0);
+});
