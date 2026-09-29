@@ -12,7 +12,7 @@ During the `0.x` preview line, breaking changes may be made when necessary and
 are called out under **Breaking**. After `1.0.0`, an incompatible public API
 change will require a new major version.
 
-## [0.6.0-preview.1] — unreleased
+## [0.6.0-preview.1] — 2026-09-29
 
 The release that made the browser UI declarative down to filtering, and gave
 the endpoints a way to say no.
@@ -271,7 +271,7 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[0.6.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.5.0-preview.1...HEAD
+[0.6.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.5.0-preview.1...v0.6.0-preview.1
 [0.5.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.4.0-preview.8...v0.5.0-preview.1
 [0.4.0-preview.8]: https://github.com/alican645/PivotForge/compare/v0.4.0-preview.7...v0.4.0-preview.8
 [0.4.0-preview.7]: https://github.com/alican645/PivotForge/compare/v0.4.0-preview.6...v0.4.0-preview.7
