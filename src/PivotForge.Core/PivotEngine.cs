@@ -502,6 +502,7 @@ public sealed class PivotEngine
             populated.ColumnHeaders,
             populated.Values.Cells,
             populated.Values.RowTotals,
+            populated.Values.Subtotals,
             request,
             culture);
         cancellationToken.ThrowIfCancellationRequested();
@@ -1291,6 +1292,7 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
         IReadOnlyList<PivotCell> cells,
         IReadOnlyList<PivotTotal> rowTotals,
+        IReadOnlyList<PivotSubtotal> subtotals,
         PivotRequest request,
         CultureInfo culture)
     {
@@ -1302,15 +1304,8 @@ public sealed class PivotEngine
         var rowOrder = Enumerable.Range(0, rowHeaders.Count).ToArray();
         var sort = request.RowSort;
 
-        var directions = ResolveLevelDirections(request.Rows, request.FieldSorts);
-
         rowOrder = sort is null
-            ? rowOrder
-                .OrderBy(
-                    row => rowHeaders[row],
-                    Comparer<IReadOnlyList<string?>>.Create(
-                        (left, right) => CompareRowHeaders(left, right, request.Rows, culture, directions)))
-                .ToArray()
+            ? SortRowsByLevel(rowOrder, rowHeaders, rowTotals, subtotals, request, culture)
             : sort.Mode switch
         {
             PivotSortMode.RowLabel => SortRowsByLabel(rowOrder, rowHeaders, request.Rows, sort, culture),
@@ -1347,38 +1342,147 @@ public sealed class PivotEngine
         return new SortedRows(sortedHeaders, sortedCells, sortedRowTotals);
     }
 
-    private static int CompareRowHeaders(
-        IReadOnlyList<string?> left,
-        IReadOnlyList<string?> right,
-        IReadOnlyList<PivotFieldRef> fields,
-        CultureInfo culture,
-        IReadOnlyList<PivotSortDirection?> directions)
+    /// <summary>Orders rows level by level, each level by its label or by a declared value.</summary>
+    private static int[] SortRowsByLevel(
+        int[] rowOrder,
+        IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
+        IReadOnlyList<PivotTotal> rowTotals,
+        IReadOnlyList<PivotSubtotal> subtotals,
+        PivotRequest request,
+        CultureInfo culture)
     {
-        var depth = Math.Max(left.Count, right.Count);
+        var levelSorts = ResolveLevelSorts(request.Rows, request.FieldSorts);
+        // Resolved once rather than inside the comparer, which runs n log n times.
+        var groupValues = ResolveGroupValues(rowHeaders, rowTotals, subtotals, request, levelSorts);
+
+        return rowOrder
+            .OrderBy(
+                row => row,
+                Comparer<int>.Create((left, right) =>
+                    CompareRows(left, right, rowHeaders, request.Rows, levelSorts, groupValues, culture)))
+            .ToArray();
+    }
+
+    private static int CompareRows(
+        int left,
+        int right,
+        IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
+        IReadOnlyList<PivotFieldRef> fields,
+        IReadOnlyList<PivotFieldSort?> levelSorts,
+        IReadOnlyList<decimal?[]?> groupValues,
+        CultureInfo culture)
+    {
+        var leftHeader = rowHeaders[left];
+        var rightHeader = rowHeaders[right];
+        var depth = Math.Max(leftHeader.Count, rightHeader.Count);
 
         for (var level = 0; level < depth; level++)
         {
             // Per level rather than once: a grouped level runs in its interval's
             // order while the plain levels around it stay collated.
-            var comparison = LevelComparer(fields, level, culture)
-                .Compare(left.ElementAtOrDefault(level), right.ElementAtOrDefault(level));
+            var labelComparison = LevelComparer(fields, level, culture)
+                .Compare(leftHeader.ElementAtOrDefault(level), rightHeader.ElementAtOrDefault(level));
 
-            if (comparison != 0)
+            // Same group at this level: a deeper level decides.
+            if (labelComparison == 0)
             {
-                // The comparison is applied level by level, so flipping one level
-                // reverses that level's groups without moving them out of their
-                // parent -- the hierarchy survives the reversal.
-                return directions.ElementAtOrDefault(level) == PivotSortDirection.Descending
-                    ? -comparison
-                    : comparison;
+                continue;
             }
+
+            var sort = levelSorts.ElementAtOrDefault(level);
+
+            if (sort is not null && groupValues.ElementAtOrDefault(level) is { } values)
+            {
+                var valueComparison = CompareGroupValues(values[left], values[right], sort.Direction);
+
+                // Equal values fall back to the label, ascending whatever the
+                // direction, so the same data always yields the same order.
+                return valueComparison != 0 ? valueComparison : labelComparison;
+            }
+
+            // The comparison is applied level by level, so flipping one level
+            // reverses that level's groups without moving them out of their
+            // parent -- the hierarchy survives the reversal.
+            return sort?.Direction == PivotSortDirection.Descending ? -labelComparison : labelComparison;
         }
 
         return 0;
     }
 
+    private static int CompareGroupValues(decimal? left, decimal? right, PivotSortDirection direction)
+    {
+        // A group that aggregated to nothing has no rank, so it sits last in both
+        // directions rather than winning an ascending sort by being empty.
+        if (left is null || right is null)
+        {
+            return (left is null).CompareTo(right is null);
+        }
+
+        var comparison = left.Value.CompareTo(right.Value);
+        return direction == PivotSortDirection.Descending ? -comparison : comparison;
+    }
+
+    /// <summary>The summary value of every row's group at each value-ordered level.</summary>
+    /// <remarks>Indexed by level, then by row. A level ordered by label, or by a key the request
+    /// does not carry, has no entry: a measure the reader removed leaves label order behind rather
+    /// than an error. An inner group reads its subtotal and the deepest one its row total, both as
+    /// shown after show-as, which is what the reader is looking at.</remarks>
+    private static IReadOnlyList<decimal?[]?> ResolveGroupValues(
+        IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
+        IReadOnlyList<PivotTotal> rowTotals,
+        IReadOnlyList<PivotSubtotal> subtotals,
+        PivotRequest request,
+        IReadOnlyList<PivotFieldSort?> levelSorts)
+    {
+        if (levelSorts.All(sort => sort?.ValueKey is null))
+        {
+            return [];
+        }
+
+        var deepest = request.Rows.Count - 1;
+        var rowTotalLookup = rowTotals.ToDictionary(total => total.Index, total => total.Values);
+        var subtotalLookup = new Dictionary<HeaderKey, IReadOnlyDictionary<string, decimal?>>();
+
+        foreach (var subtotal in subtotals)
+        {
+            subtotalLookup.TryAdd(new HeaderKey(subtotal.RowHeader), subtotal.Totals);
+        }
+
+        decimal?[]? Resolve(PivotFieldSort? sort, int level)
+        {
+            if (sort?.ValueKey is not { } valueKey ||
+                request.Values.All(value => value.Key != valueKey))
+            {
+                return null;
+            }
+
+            var values = new decimal?[rowHeaders.Count];
+
+            for (var row = 0; row < rowHeaders.Count; row++)
+            {
+                IReadOnlyDictionary<string, decimal?>? totals;
+
+                if (level == deepest)
+                {
+                    totals = rowTotalLookup.GetValueOrDefault(row);
+                }
+                else
+                {
+                    subtotalLookup.TryGetValue(
+                        new HeaderKey(rowHeaders[row].Take(level + 1).ToArray()), out totals);
+                }
+
+                values[row] = totals is not null && totals.TryGetValue(valueKey, out var value) ? value : null;
+            }
+
+            return values;
+        }
+
+        return levelSorts.Select(Resolve).ToArray();
+    }
+
     /// <summary>Maps the declared per-field sorts onto header levels, by position in the axis.</summary>
-    private static IReadOnlyList<PivotSortDirection?> ResolveLevelDirections(
+    private static IReadOnlyList<PivotFieldSort?> ResolveLevelSorts(
         IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotFieldSort> fieldSorts)
     {
@@ -1388,12 +1492,14 @@ public sealed class PivotEngine
         }
 
         return fields
-            .Select(field => fieldSorts
-                .Where(sort => NamesLevel(sort.Field, field))
-                .Select(sort => (PivotSortDirection?)sort.Direction)
-                .FirstOrDefault())
+            .Select(field => fieldSorts.FirstOrDefault(sort => NamesLevel(sort.Field, field)))
             .ToArray();
     }
+
+    private static IReadOnlyList<PivotSortDirection?> ResolveLevelDirections(
+        IReadOnlyList<PivotFieldRef> fields,
+        IReadOnlyList<PivotFieldSort> fieldSorts) =>
+        ResolveLevelSorts(fields, fieldSorts).Select(sort => sort?.Direction).ToArray();
 
     private static int[] SortRowsByLabel(
         int[] rowOrder,
