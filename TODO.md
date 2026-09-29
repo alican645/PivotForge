@@ -1,7 +1,9 @@
 # PivotForge — DevExpress Denklik Yol Haritası
 
-DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge'un
-`0.4.0-preview.8` sürümündeki durumu karşılaştırıldı. Kaynaklar dosyanın sonunda.
+DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge
+karşılaştırıldı. İlk karşılaştırma `0.4.0-preview.8` üzerinde yapıldı; işaretler
+o günden beri güncel tutuluyor ve `0.6.0-preview.1` ile `CHANGELOG.md`'nin
+[Unreleased] bölümündeki durumu gösteriyor. Kaynaklar dosyanın sonunda.
 
 **Kapsam dışı (talep üzerine):** OLAP / SSAS, sunucu tarafı toplama (server mode),
 uzaktan gruplama, milyon satır ölçeğinde sanal kaydırma.
@@ -316,8 +318,8 @@ aralarında geçmesi için — kendi durum şeması demoya ait, bildirimsel yol 
 ## Bölüm 8 — Erişilebilirlik ve platform
 
 Sürükleme Pointer Events'e taşındı; fare, dokunmatik, kalem ve klavye aynı
-taşıma işlemini paylaşıyor. Tablo `role="grid"` ilan ediyor. Kalan tek açık
-uyarlanabilir mobil düzen.
+taşıma işlemini paylaşıyor. Tablo `role="grid"` ilan ediyor. Tasarımcı ve
+filtre seçici dar ekrana ve parmağa uyum sağlıyor; bu bölümde açık kalem yok.
 
 - [x] Dokunmatik sürükle-bırak — çipteki tutamaç (`⠿`) `touch-action: none`
       taşıyor, gövdesi taşımıyor: parmakla liste kaydırılabiliyor, tutamaçtan
@@ -339,9 +341,15 @@ uyarlanabilir mobil düzen.
       sıralanabilir başlıkta `aria-sort`, daralt/genişlet düğmelerinde
       `aria-expanded` + ad, tasarımcı bölgelerinde başlığıyla adlandırılmış
       `role="group"`
-- [ ] Uyarlanabilir (adaptive) mobil düzen — mevcut `@media (max-width: 720px)`
-      yalnızca demo düzenini kapsıyor; tasarımcı bölgeleri ve filtre seçici
-      kapsam dışı
+- [x] Uyarlanabilir (adaptive) mobil düzen — tasarımcı, ekrana değil kendi
+      genişliğine bakan bir container query ile bölgelerini tek sütuna diziyor
+      (fareyle 260px, dokunmatikte 420px altında); böylece masaüstündeki 330px
+      yan panel iki sütun kalırken telefon tek sütuna iniyor. Dokunmatikte
+      çipin ×, ⋯ ve huni düğmeleri de tutamaç gibi en az 24px. 560px altında filtre
+      seçici neredeyse tam ekran, alan ayarları tam genişlik; araç çubuğu ve
+      Gizlensin/Gösterilsin satırı taşmak yerine alta sarıyor. Bu satırın hiç
+      stili yoktu, seçili mod da görünmüyordu; ikisi de düzeldi. Dokunmatikte
+      giriş kutuları 16px, iOS odaklanınca sayfayı yakınlaştırmasın diye.
 
 ---
 
@@ -426,7 +434,7 @@ Sizin önceliğiniz "az kodla çok iş" olduğu için sıralama işlevsel büyü
    Tag helper'ı kendi kendine yeterli hale getiren tek adım bu.
 2. **Bölüm 1'in ucuz kalemleri** — `show-as`, `area-index`, `expanded`, alan başına toplamlar.
 3. ~~**Bölüm 2** — filtreleme.~~ Tamamlandı.
-4. **Bölüm 8** — ~~dokunmatik + klavye + ARIA~~ tamam; kalan yalnızca mobil düzen.
+4. ~~**Bölüm 8** — dokunmatik + klavye + ARIA + mobil düzen.~~ Tamamlandı.
 5. **Bölüm 3** — hesaplanmış alanlar. En büyük tasarım işi, en sona.
 
 ---

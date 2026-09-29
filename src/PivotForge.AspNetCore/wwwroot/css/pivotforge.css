@@ -2098,10 +2098,13 @@ select {
   font-weight: 700;
 }
 
+/* A column rather than a grid: the rows above the list come and go with the
+   operator and the source, and a fixed row template handed the spare height to
+   whichever row happened to land in its last track instead of to the list. */
 .pivot-filter-picker__body {
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -2157,8 +2160,11 @@ select {
   display: none;
 }
 
+/* Wraps rather than squeezes: on a narrow screen the buttons drop under the
+   search box instead of running out of the dialog. */
 .pivot-filter-picker__toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 9px 10px;
@@ -2167,7 +2173,7 @@ select {
 }
 
 .pivot-filter-picker__search {
-  flex: 1 1 auto;
+  flex: 1 1 160px;
   min-width: 0;
   min-height: 34px;
   padding: 6px 9px;
@@ -2186,6 +2192,36 @@ select {
   flex: 0 0 auto;
   min-height: 34px;
   padding: 0 10px;
+}
+
+/* Include/Exclude. Had no rules of its own, so its buttons sat unstyled past
+   the dialog edge and neither showed which mode was on. */
+.pivot-filter-picker__mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--pt-border);
+  background: #fbfcfe;
+}
+
+.pivot-filter-picker__mode-label {
+  flex: 1 1 auto;
+  color: var(--pt-muted);
+  font-size: 12px;
+}
+
+.pivot-filter-picker__mode .pivot-button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.pivot-filter-picker__mode .pivot-button.is-active {
+  border-color: var(--pt-accent);
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--pt-accent);
 }
 
 .pivot-filter-picker__notice,
@@ -2211,6 +2247,7 @@ select {
 }
 
 .pivot-filter-picker__list {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   padding: 4px 0;
@@ -2419,13 +2456,34 @@ select {
 /* Coarse pointers have no hover to reveal affordances and need a bigger
    target than a mouse does -- 24px is the WCAG 2.2 minimum. */
 @media (pointer: coarse) {
-  .pivot-chip__grip {
+  .pivot-chip {
+    min-height: 36px;
+  }
+
+  .pivot-chip__grip,
+  .pivot-chip__remove,
+  .pivot-chip__settings,
+  .pivot-chip__filter {
     min-width: 24px;
     min-height: 24px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-size: 0.875rem;
+  }
+
+  .pivot-value-settings__choice {
+    min-height: 32px;
+  }
+
+  /* Below 16px iOS zooms the page into a field on focus and leaves it zoomed
+     after the keyboard closes. */
+  .pivot-search input,
+  .pivot-filter-picker__search,
+  .pivot-filter-picker__operator,
+  .pivot-filter-picker__argument,
+  .pivot-value-settings__input {
+    font-size: 16px;
   }
 }
 
@@ -2587,4 +2645,87 @@ select {
 .pivot-value-settings__choice.is-danger:hover:not(:disabled) {
   border-color: var(--pt-danger);
   background: rgba(180, 35, 24, 0.06);
+}
+
+/* --- Adaptive layout -------------------------------------------------------- */
+
+/* The designer is laid out by the width it was given rather than the viewport:
+   the same panel sits in a 330px sidebar on a desktop and full width on a
+   phone. The host has to get its width from its container (a block, a grid
+   track), which every sidebar does; a shrink-to-fit host would collapse. */
+.pivot-field-designer {
+  container: pivot-designer / inline-size;
+}
+
+/* Two zones side by side stop fitting a chip's controls and a readable caption
+   somewhere under 260px with a mouse, and sooner with a finger, whose targets
+   are larger. Stacked zones no longer need the height that made a side-by-side
+   pair line up, so they give it back. */
+@container pivot-designer (max-width: 259px) {
+  .pivot-layout-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pivot-zone {
+    min-height: 0;
+  }
+
+  .pivot-zone__body {
+    min-height: 48px;
+  }
+}
+
+@media (pointer: coarse) {
+  @container pivot-designer (max-width: 419px) {
+    .pivot-layout-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pivot-zone {
+      min-height: 0;
+    }
+
+    .pivot-zone__body {
+      min-height: 48px;
+    }
+  }
+}
+
+/* Dialogs take nearly the whole screen on a phone: a 32px gutter out of 360
+   is width the list and the buttons need more than the backdrop does. */
+@media (max-width: 560px) {
+  .pivot-filter-picker__dialog,
+  .pivot-value-settings__dialog {
+    width: calc(100vw - 16px);
+  }
+
+  .pivot-filter-picker__dialog {
+    height: calc(100vh - 16px);
+    height: calc(100dvh - 16px);
+  }
+
+  /* Each row's controls share the width evenly under a full-width lead item,
+     rather than wrapping wherever their captions happen to run out. */
+  .pivot-filter-picker__search,
+  .pivot-filter-picker__mode-label {
+    flex: 1 1 100%;
+  }
+
+  .pivot-filter-picker__toolbar .pivot-button,
+  .pivot-filter-picker__mode .pivot-button,
+  .pivot-filter-picker__foot .pivot-button {
+    flex: 1 1 0;
+  }
+
+  .pivot-filter-picker__condition {
+    flex-wrap: wrap;
+  }
+
+  .pivot-filter-picker__operator {
+    flex: 1 1 auto;
+  }
+
+  .pivot-filter-picker__argument {
+    flex: 1 1 100%;
+  }
 }
