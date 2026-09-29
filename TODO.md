@@ -170,7 +170,9 @@ Top-N.
       `PivotFilterPicker`'ı aynı filtre girdisi üzerinde açar; filtre bölgeye değil
       alana ait olduğu için alan yerinde kalır ve taşınırken filtresini de taşır
 - [x] Seçici basılan huninin altında açılıyor — geniş ekranda sayfanın ortasında
-      bir modal yerine başlık ya da çip hunisinin altında açılır pencere. Altta
+      bir modal yerine başlık ya da çip hunisinin altında, Excel filtresi gibi
+      küçük bir açılır pencere: 300px genişlik, başlık yok, çerçeveli liste,
+      listenin başında karışık durumu da gösteren "Tümünü seç" kutusu. Altta
       yer yoksa üste açılıyor, pencereden taşmıyor, sayfa ya da tablo kaydıkça
       huniyle birlikte gidiyor; dışarı tıklamak kapatıyor. 560px altında ve
       her iki yönde de sığmayacak kadar kısa pencerede yine modal. Çıpa

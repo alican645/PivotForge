@@ -43,10 +43,14 @@ that opens where it was asked for.
 
 - **AspNetCore** — on a screen wider than 560px the filter picker drops down
   under the funnel it was opened from, on a table header or a designer chip,
-  instead of opening as a modal in the middle of the page. It opens above the
-  funnel when there is more room there, stays inside the window, and follows
-  the funnel when the page or the table scrolls; a click outside closes it, as
-  the backdrop did. Opened from a field's settings it drops down under that
+  instead of opening as a modal in the middle of the page, and is laid out like
+  Excel's filter dropdown: 300px wide and as tall as its content, no heading,
+  smaller controls, the values in a framed list of about ten rows, and a
+  **Select all** box at the head of the list (mixed while only some of the
+  searched values are checked) in place of the toolbar's two buttons. It opens
+  above the funnel when there is more room there, stays inside the window, and
+  follows the funnel when the page or the table scrolls; a click outside closes
+  it, as the backdrop did. Opened from a field's settings it drops down under that
   field's chip. On a phone, or in a window too short for a dropdown either way,
   it is still the modal. `PivotFilterPicker.open` takes the element as
   `anchor`, `PivotFieldDesigner.openFilterPicker` as its second argument, and

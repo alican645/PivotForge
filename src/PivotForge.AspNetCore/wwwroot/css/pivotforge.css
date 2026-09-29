@@ -2079,18 +2079,117 @@ select {
 }
 
 /* Opened from a funnel on a wide screen, the picker drops down under it rather
-   than taking the middle of the page. The overlay stays, clear, so a click
-   anywhere outside still closes it the way the backdrop did; the script works
-   out where the dialog goes and sets its box inline. */
+   than taking the middle of the page, sized and laid out like Excel's filter
+   dropdown: no heading, one select-all box over the list, small controls. The
+   overlay stays, clear, so a click anywhere outside still closes it the way
+   the backdrop did; the script sets the dialog's position and height cap. */
 .pivot-filter-picker.is-anchored {
   background: transparent;
 }
 
 .pivot-filter-picker.is-anchored .pivot-filter-picker__dialog {
   position: fixed;
-  max-height: none;
+  height: auto;
+  /* The heading is gone, so the body and the buttons are the only rows. */
+  grid-template-rows: minmax(0, 1fr) auto;
   border: 1px solid var(--pt-border);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  border-radius: 4px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
+  font-size: 12px;
+}
+
+.pivot-filter-picker.is-anchored .pivot-panel-head,
+.pivot-filter-picker.is-anchored .pivot-filter-picker__toolbar .pivot-button {
+  display: none;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__condition,
+.pivot-filter-picker.is-anchored .pivot-filter-picker__toolbar,
+.pivot-filter-picker.is-anchored .pivot-filter-picker__mode {
+  gap: 4px 6px;
+  padding: 6px 8px 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__condition-label,
+.pivot-filter-picker.is-anchored .pivot-filter-picker__mode-label {
+  font-size: 11px;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__operator,
+.pivot-filter-picker.is-anchored .pivot-filter-picker__argument,
+.pivot-filter-picker.is-anchored .pivot-filter-picker__search {
+  min-height: 26px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+/* The condition's arguments get a line of their own under the operator; three
+   controls in a row leave each too narrow to read a date in. */
+.pivot-filter-picker.is-anchored .pivot-filter-picker__condition {
+  flex-wrap: wrap;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__operator {
+  flex: 1 1 60%;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__argument {
+  flex: 1 1 40%;
+}
+
+/* Label on its own line, the two choices splitting the one under it: side by
+   side they do not fit the dropdown's width. */
+.pivot-filter-picker.is-anchored .pivot-filter-picker__mode-label {
+  flex: 1 1 100%;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__mode .pivot-button {
+  flex: 1 1 0;
+  min-height: 22px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__notice,
+.pivot-filter-picker.is-anchored .pivot-filter-picker__state {
+  padding: 6px 8px 0;
+  border-bottom: 0;
+  font-size: 11px;
+}
+
+/* The list is a framed box of about ten rows, as in Excel, rather than the
+   rest of the dialog. */
+.pivot-filter-picker.is-anchored .pivot-filter-picker__list {
+  max-height: 220px;
+  margin: 6px 8px 0;
+  padding: 2px 0;
+  border: 1px solid var(--pt-border);
+  border-radius: 3px;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__value,
+.pivot-filter-picker.is-anchored .pivot-filter-picker__select-all {
+  gap: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__foot {
+  gap: 6px;
+  padding: 8px;
+  border-top: 0;
+  background: transparent;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__foot .pivot-button {
+  min-height: 26px;
+  padding: 0 14px;
+  border-radius: 3px;
+  font-size: 12px;
 }
 
 .pivot-filter-picker__heading {
@@ -2275,6 +2374,23 @@ select {
   padding: 6px 12px;
   cursor: pointer;
   font-size: 13px;
+}
+
+.pivot-filter-picker__select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--pt-border);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* The modal keeps its toolbar buttons for this, so only the dropdown shows the
+   row. */
+.pivot-filter-picker:not(.is-anchored) .pivot-filter-picker__select-all {
+  display: none;
 }
 
 .pivot-filter-picker__value:hover {

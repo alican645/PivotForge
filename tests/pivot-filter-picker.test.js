@@ -760,8 +760,8 @@ test("a button near the right edge pulls the dropdown back inside the window", (
     const { picker, host } = build();
     await open(host, picker, { anchor: anchorAt({ top: 100, bottom: 120, left: 1250 }) });
 
-    // 1280 - 420 wide - 8 margin.
-    assert.equal(dialogOf(host).style.left, "852px");
+    // 1280 - 300 wide - 8 margin.
+    assert.equal(dialogOf(host).style.left, "972px");
   }));
 
 test("a button near the bottom opens the dropdown above it", () =>
@@ -769,15 +769,26 @@ test("a button near the bottom opens the dropdown above it", () =>
     const { picker, host } = build();
     await open(host, picker, { anchor: anchorAt({ top: 700, bottom: 720, left: 50 }) });
 
-    // 520 tall, ending 4px above the button's top edge.
-    assert.equal(dialogOf(host).style.height, "520px");
-    assert.equal(dialogOf(host).style.top, "176px");
+    // Pinned by its bottom edge 4px above the button, so a list that arrives
+    // later grows upwards; capped at the room above.
+    assert.equal(dialogOf(host).style.top, "");
+    assert.equal(dialogOf(host).style.bottom, "104px");
+    assert.equal(dialogOf(host).style.maxHeight, "688px");
+  }));
+
+test("a dropdown that fits below the button stays below it, capped at the room there", () =>
+  withWindow({ height: 800 }, async () => {
+    const { picker, host } = build();
+    await open(host, picker, { anchor: anchorAt({ top: 100, bottom: 120, left: 50 }) });
+
+    assert.equal(dialogOf(host).style.bottom, "");
+    assert.equal(dialogOf(host).style.maxHeight, "668px");
   }));
 
 test("a window too short for a dropdown either way gets the modal", () =>
   withWindow({ height: 400 }, async () => {
     const { picker, host } = build();
-    await open(host, picker, { anchor: anchorAt({ top: 190, bottom: 210, left: 50 }) });
+    await open(host, picker, { anchor: anchorAt({ top: 180, bottom: 200, left: 50 }) });
 
     assert.equal(overlayOf(host).classList.contains("is-anchored"), false);
   }));
@@ -808,3 +819,41 @@ test("reopening without a button drops the previous dropdown placement", () =>
     assert.equal(dialogOf(host).style.top, "");
     assert.equal(dialogOf(host).style.width, "");
   }));
+
+// --- Select-all row ------------------------------------------------------------
+
+const toggleAllOf = host => byAction(host, "filter-toggle-all")[0];
+
+test("the list leads with a select-all box that reflects the selection", async () => {
+  const { picker, host } = build();
+  await open(host, picker);
+  const all = toggleAllOf(host);
+
+  assert.equal(all.checked, true);
+  assert.equal(all.indeterminate, false);
+
+  toggle(host, "Ege", false);
+
+  assert.equal(all.checked, false);
+  assert.equal(all.indeterminate, true);
+});
+
+test("the select-all box checks and clears only the searched rows", async () => {
+  const { picker, host } = build();
+  const applied = await open(host, picker);
+
+  const all = toggleAllOf(host);
+  all.checked = false;
+  all.dispatch("change");
+  assert.deepEqual(checkboxesOf(host).map(box => box.checked), [false, false, false]);
+
+  const search = byAction(host, "filter-search")[0];
+  search.value = "ege";
+  search.dispatch("input");
+  const narrowed = toggleAllOf(host);
+  narrowed.checked = true;
+  narrowed.dispatch("change");
+
+  byAction(host, "filter-apply")[0].dispatch("click");
+  assert.deepEqual(applied, [["Ege"]]);
+});

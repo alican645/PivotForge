@@ -20,13 +20,14 @@
   const DROPDOWN_MEDIA = "(min-width: 561px)";
   const DROPDOWN_GAP = 4;
   const VIEWPORT_MARGIN = 8;
-  const DROPDOWN_WIDTH = 420;
-  const DROPDOWN_HEIGHT = 520;
-  // The heading, condition, search, mode and buttons take about 280px before
-  // the list gets any; below this the list shows two or three values, so the
-  // dropdown flips to the taller side, and a window short on both sides gets
-  // the centred modal instead of a cramped dropdown.
-  const DROPDOWN_MIN_HEIGHT = 400;
+  // Excel-sized: narrow, and as tall as its content. The height is what the
+  // compact layout takes with a full list, so it decides whether the dropdown
+  // fits below the button or has to open above it.
+  const DROPDOWN_WIDTH = 300;
+  const DROPDOWN_HEIGHT = 400;
+  // The controls take about 150px before the list gets any; with less room
+  // than this on both sides a centred modal beats a dropdown of three rows.
+  const DROPDOWN_MIN_HEIGHT = 240;
 
   const DEFAULT_LABELS = {
     // {0} is replaced with the field caption.
@@ -456,6 +457,30 @@
       this.setState("", false);
       elements.list.hidden = false;
 
+      // Excel's "(Select All)": one box over the rows the search is showing,
+      // checked when all of them are and mixed when only some are. The
+      // dropdown shows it in place of the toolbar's two buttons; the modal
+      // keeps the buttons and hides this row.
+      const all = document.createElement("label");
+      all.className = "pivot-filter-picker__select-all";
+      const allBox = document.createElement("input");
+      allBox.setAttribute("type", "checkbox");
+      allBox.dataset.action = "filter-toggle-all";
+      const allText = document.createElement("span");
+      allText.textContent = this.labels.selectAll;
+      all.appendChild(allBox);
+      all.appendChild(allText);
+
+      const syncAll = () => {
+        const count = visible.filter(value => this.selected.has(value)).length;
+        allBox.checked = count === visible.length;
+        allBox.indeterminate = count > 0 && count < visible.length;
+      };
+      syncAll();
+      // A mixed box turns checked when clicked, so "some" goes to "all" first,
+      // as it does in Excel.
+      allBox.addEventListener("change", () => this.setVisibleSelection(allBox.checked));
+
       const rows = visible.map(value => {
         const row = document.createElement("label");
         row.className = "pivot-filter-picker__value";
@@ -473,6 +498,7 @@
           }
           elements.summary.textContent =
             format(this.labels.summary, this.selected.size, this.values.length);
+          syncAll();
         });
 
         const text = document.createElement("span");
@@ -483,7 +509,7 @@
         return row;
       });
 
-      elements.list.replaceChildren(...rows);
+      elements.list.replaceChildren(all, ...rows);
     }
 
     // Hiding alone would leave the previous field's values in the DOM, where a
@@ -681,8 +707,10 @@
     }
 
     // Where the dropdown goes: under the anchor, or above it when the space
-    // below is too short and the space above is longer. Null means a modal --
-    // no anchor, a phone-sized screen, or a window too short either way.
+    // below is short of a full dropdown and the space above is longer. Opened
+    // above, it is pinned by its bottom edge, so a list that loads after it
+    // opens grows away from the button instead of over it. Null means a modal
+    // -- no anchor, a phone-sized screen, or a window too short either way.
     dropdownBox() {
       if (!this.anchor || !(root.matchMedia?.(DROPDOWN_MEDIA).matches ?? true)) {
         return null;
@@ -698,8 +726,7 @@
         return null;
       }
 
-      const flip = below < DROPDOWN_MIN_HEIGHT && above > below;
-      const height = Math.min(DROPDOWN_HEIGHT, flip ? above : below);
+      const flip = below < DROPDOWN_HEIGHT && above > below;
       const width = Math.min(DROPDOWN_WIDTH, viewportWidth - 2 * VIEWPORT_MARGIN);
       // Aligned to the button's left edge, pushed back in where that would run
       // past the right edge -- the designer's funnels sit near it.
@@ -708,10 +735,11 @@
         Math.min(rect.left, viewportWidth - width - VIEWPORT_MARGIN));
 
       return {
-        top: flip ? rect.top - DROPDOWN_GAP - height : rect.bottom + DROPDOWN_GAP,
+        top: flip ? null : rect.bottom + DROPDOWN_GAP,
+        bottom: flip ? viewportHeight - rect.top + DROPDOWN_GAP : null,
         left,
         width,
-        height
+        maxHeight: flip ? above : below
       };
     }
 
@@ -727,10 +755,12 @@
       // A dropdown leaves the page usable around it, so it does not claim to be
       // modal; a click outside it still closes it, as the backdrop's did.
       dialog.setAttribute("aria-modal", String(box === null));
-      dialog.style.top = box ? `${Math.round(box.top)}px` : "";
-      dialog.style.left = box ? `${Math.round(box.left)}px` : "";
-      dialog.style.width = box ? `${Math.round(box.width)}px` : "";
-      dialog.style.height = box ? `${Math.round(box.height)}px` : "";
+      const px = value => (value === null || value === undefined ? "" : `${Math.round(value)}px`);
+      dialog.style.top = px(box?.top);
+      dialog.style.bottom = px(box?.bottom);
+      dialog.style.left = px(box?.left);
+      dialog.style.width = px(box?.width);
+      dialog.style.maxHeight = px(box?.maxHeight);
     }
 
     // Scrolling the table or the page moves the button, and a resize can cross

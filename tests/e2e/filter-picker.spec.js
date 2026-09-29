@@ -77,7 +77,7 @@ test("a filter that excludes a value actually removes its rows", async ({ page }
   await expect(page.locator(pickerValue).first()).toBeVisible();
 
   const values = await page.locator(`${pickerValue} span`).allTextContents();
-  await page.locator(`${picker} [data-action="filter-clear"]`).click();
+  await page.locator(`${picker} [data-action="filter-toggle-all"]`).uncheck();
   await page.locator(`${pickerValue} input`).first().check();
   await page.locator(`${picker} [data-action="filter-apply"]`).click();
 
@@ -106,10 +106,10 @@ test("reopening the picker shows the selection already in force", async ({ page 
 test("search narrows the list and select-all acts on what it shows", async ({ page }) => {
   await openPicker(page);
 
-  await page.locator(`${picker} [data-action="filter-clear"]`).click();
+  await page.locator(`${picker} [data-action="filter-toggle-all"]`).uncheck();
   await page.locator(`${picker} [data-action="filter-search"]`).fill("ç2");
   await expect(page.locator(`${pickerValue} span`)).toHaveText(["Ç2"]);
-  await page.locator(`${picker} [data-action="filter-select-all"]`).click();
+  await page.locator(`${picker} [data-action="filter-toggle-all"]`).check();
   await page.locator(`${picker} [data-action="filter-search"]`).fill("");
   await page.locator(`${picker} [data-action="filter-apply"]`).click();
 
@@ -125,7 +125,7 @@ test("re-checking everything clears the filter rather than freezing the value se
     .toHaveCount(1);
 
   await page.locator(`${chipIn("filter", "Quarter")} [data-action="filter"]`).click();
-  await page.locator(`${picker} [data-action="filter-select-all"]`).click();
+  await page.locator(`${picker} [data-action="filter-toggle-all"]`).check();
   await page.locator(`${picker} [data-action="filter-apply"]`).click();
 
   await expect(page.locator(`${chipIn("filter", "Quarter")} .pivot-chip__filter-count`))

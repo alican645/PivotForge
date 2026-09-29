@@ -31,6 +31,28 @@ test.describe("on a desktop", () => {
     await expect(page.locator(dialog)).toHaveAttribute("aria-modal", "false");
   });
 
+  test("the dropdown is Excel-sized: narrow, no heading, a select-all box", async ({ page }) => {
+    await page.locator(headerFunnel("Region")).click();
+    await expect(page.locator(pickerValue).first()).toBeVisible();
+
+    const box = await page.locator(dialog).boundingBox();
+    expect(box.width).toBeLessThanOrEqual(300);
+    await expect(page.locator(`${picker} .pivot-panel-head`)).toBeHidden();
+    // The toolbar's two buttons give way to the box at the head of the list.
+    await expect(page.locator(`${picker} [data-action="filter-select-all"]`)).toBeHidden();
+
+    const all = page.locator(`${picker} [data-action="filter-toggle-all"]`);
+    await expect(all).toBeChecked();
+    await page.locator(pickerValue).first().locator("input").uncheck();
+    expect(await all.evaluate(node => node.indeterminate)).toBe(true);
+
+    await all.click();
+    const boxes = page.locator(`${pickerValue} input`);
+    for (const checked of await boxes.evaluateAll(nodes => nodes.map(node => node.checked))) {
+      expect(checked).toBe(true);
+    }
+  });
+
   test("the designer's funnel keeps the dropdown inside the window", async ({ page }) => {
     await page.dragAndDrop(
       '.pivot-field-list .pivot-chip[data-field="Quarter"]',
@@ -82,5 +104,8 @@ test.describe("on a phone", () => {
 
     await expect(page.locator(picker)).not.toHaveClass(/is-anchored/);
     await expect(page.locator(dialog)).toHaveAttribute("aria-modal", "true");
+    // The modal keeps its toolbar buttons, so the list has no select-all row.
+    await expect(page.locator(`${picker} [data-action="filter-toggle-all"]`)).toBeHidden();
+    await expect(page.locator(`${picker} [data-action="filter-select-all"]`)).toBeVisible();
   });
 });

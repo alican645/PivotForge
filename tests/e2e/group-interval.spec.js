@@ -101,7 +101,7 @@ test("a month filter actually restricts the table", async ({ page }) => {
 
   await page.locator(funnel).click();
   await expect(page.locator(`${picker} .pivot-filter-picker__value`).first()).toBeVisible();
-  await page.locator(`${picker} [data-action="filter-clear"]`).click();
+  await page.locator(`${picker} [data-action="filter-toggle-all"]`).uncheck();
   await page.locator(`${picker} .pivot-filter-picker__value input`).nth(0).check();
   const kept = (await page.locator(`${picker} .pivot-filter-picker__value span`).nth(0).textContent()).trim();
   await page.locator(`${picker} [data-action="filter-apply"]`).click();
