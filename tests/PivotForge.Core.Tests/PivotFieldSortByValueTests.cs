@@ -164,4 +164,31 @@ public sealed class PivotFieldSortByValueTests
         // which label order would not.
         Assert.Equal(["Beta", "Alpha"], RowPaths(result));
     }
+
+    [Fact]
+    public void GroupsDifferingOnlyByCaseKeepAStableOrder()
+    {
+        // "abc" and "ABC" are separate groups with separate subtotals. A comparer
+        // that treats them as one group compares children of different parents,
+        // which is not transitive and makes the order depend on arrival order.
+        Sale[] sales =
+        [
+            new("abc", "x", 10m),
+            new("ABC", "x", 1m),
+            new("abc", "y", 5m),
+            new("ABC", "z", 7m),
+            new("abc", "w", 3m),
+            new("ABC", "v", 8m)
+        ];
+        var request = Nested(new PivotFieldSort("Category", PivotSortDirection.Descending, "Amount_sum"));
+
+        var forward = RowPaths(Engine.Execute(sales, request));
+        var reversed = RowPaths(Engine.Execute(sales.Reverse().ToArray(), request));
+
+        Assert.Equal(forward, reversed);
+        // Each region's children stay together and run by value within it.
+        Assert.Equal(
+            ["ABC/v", "ABC/z", "ABC/x", "abc/x", "abc/y", "abc/w"],
+            forward);
+    }
 }

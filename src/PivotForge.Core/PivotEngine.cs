@@ -1380,8 +1380,18 @@ public sealed class PivotEngine
         {
             // Per level rather than once: a grouped level runs in its interval's
             // order while the plain levels around it stay collated.
-            var labelComparison = LevelComparer(fields, level, culture)
-                .Compare(leftHeader.ElementAtOrDefault(level), rightHeader.ElementAtOrDefault(level));
+            var leftLabel = leftHeader.ElementAtOrDefault(level);
+            var rightLabel = rightHeader.ElementAtOrDefault(level);
+            var labelComparison = LevelComparer(fields, level, culture).Compare(leftLabel, rightLabel);
+
+            // Groups are identified ordinally everywhere else, so "abc" and "ABC" are two
+            // groups the collation calls equal. Separating them here keeps each group's
+            // rows together; treating them as one would compare children of different
+            // parents, which is not transitive.
+            if (labelComparison == 0)
+            {
+                labelComparison = string.CompareOrdinal(leftLabel, rightLabel);
+            }
 
             // Same group at this level: a deeper level decides.
             if (labelComparison == 0)
