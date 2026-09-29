@@ -134,6 +134,10 @@
       }
 
       this.host = element;
+      // The hook the stylesheet sizes the panel by: the zones adapt to the width
+      // the host was given, not to the viewport, because the same designer sits
+      // in a 330px sidebar on a desktop and full width on a phone.
+      this.host.classList.add("pivot-field-designer");
       this.state = options.state;
       this.widget = options.widget;
       this.labels = { ...DEFAULT_LABELS, ...(options.labels ?? {}) };
@@ -1279,6 +1283,7 @@
       this.filterPicker?.dispose();
       this.filterPicker = null;
       this.host.replaceChildren();
+      this.host.classList.remove("pivot-field-designer");
     }
   }
 

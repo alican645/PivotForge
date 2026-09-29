@@ -278,6 +278,18 @@ test("renders a zone for each area plus the available list", () => {
   assert.notEqual(zone(host, "available"), null);
 });
 
+// The stylesheet's container query hangs off this class, so a host the page
+// hands over unstyled still gets the narrow-width layout.
+test("marks its host as the designer and unmarks it on dispose", () => {
+  const { designer, host } = build();
+
+  assert.equal(host.classList.contains("pivot-field-designer"), true);
+
+  designer.dispose();
+
+  assert.equal(host.classList.contains("pivot-field-designer"), false);
+});
+
 test("renders a chip for every catalog field", () => {
   const { host } = build();
 

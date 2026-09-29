@@ -16,6 +16,16 @@ change will require a new major version.
 
 ### Added
 
+- **AspNetCore** — the field designer and the filter picker adapt to phones.
+  The designer stacks its four zones in one column when the panel it was given
+  is narrow (under 260px with a mouse, 420px with a finger); it measures its
+  own width through a container query, so a desktop sidebar keeps two columns.
+  On a coarse pointer every chip control is at least 24px, as the grip already
+  was, and inputs use 16px text so iOS does not zoom in on focus. Under 560px
+  the filter picker fills the screen, the field settings dialog takes its full
+  width, and the picker's button rows wrap instead of running past the edge. The designer adds a
+  `pivot-field-designer` class to its host.
+
 - **AspNetCore** — the grand total column on the right can be switched off with
   `show-column-grand-totals` / `ShowColumnGrandTotals(bool)`. The bottom row gets
   the matching name `show-row-grand-totals` / `ShowRowGrandTotals(bool)`, after
@@ -24,6 +34,11 @@ change will require a new major version.
   `show-grand-totals="false"` / `ShowGrandTotals(false)`: its column in the
   right-hand block goes while the other values keep theirs, and the bottom row
   goes only once every value has opted out, as in DevExtreme.
+
+### Fixed
+
+- **AspNetCore** — the filter picker's Include/Exclude row had no styles, so its
+  buttons ran out of the dialog and neither showed which mode was selected.
 
 ## [0.6.0-preview.1] — 2026-09-29
 
