@@ -2,8 +2,8 @@
 
 DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge
 karşılaştırıldı. İlk karşılaştırma `0.4.0-preview.8` üzerinde yapıldı; işaretler
-o günden beri güncel tutuluyor ve `0.6.0-preview.1` ile `CHANGELOG.md`'nin
-[Unreleased] bölümündeki durumu gösteriyor. Kaynaklar dosyanın sonunda.
+o günden beri güncel tutuluyor ve `0.6.0-preview.2` sürümündeki durumu
+gösteriyor. Kaynaklar dosyanın sonunda.
 
 **Kapsam dışı (talep üzerine):** OLAP / SSAS, sunucu tarafı toplama (server mode),
 uzaktan gruplama, milyon satır ölçeğinde sanal kaydırma.
@@ -169,6 +169,13 @@ Top-N.
 - [x] Excel benzeri başlık filtresi (`headerFilter`) — satır başlığındaki huni aynı
       `PivotFilterPicker`'ı aynı filtre girdisi üzerinde açar; filtre bölgeye değil
       alana ait olduğu için alan yerinde kalır ve taşınırken filtresini de taşır
+- [x] Seçici basılan huninin altında açılıyor — geniş ekranda sayfanın ortasında
+      bir modal yerine başlık ya da çip hunisinin altında açılır pencere. Altta
+      yer yoksa üste açılıyor, pencereden taşmıyor, sayfa ya da tablo kaydıkça
+      huniyle birlikte gidiyor; dışarı tıklamak kapatıyor. 560px altında ve
+      her iki yönde de sığmayacak kadar kısa pencerede yine modal. Çıpa
+      (`anchor`) yalnızca bir tarayıcı işi: seçici hâlâ tek, filtre girdisi
+      hâlâ aynı
 - [x] Sütun ekseninde başlık filtresi — asıl engel filtreleme değildi, **isimlendirme**
       idi: bir sütun başlığı `2024` yazar, ait olduğu alanı hiç yazmaz, dolayısıyla
       huniyi asacak hücre yoktu. Köşe bloğunda her sütun seviyesine kendi ad hücresi

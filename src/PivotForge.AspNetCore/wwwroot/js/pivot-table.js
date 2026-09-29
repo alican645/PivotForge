@@ -2141,7 +2141,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     button.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      settings.onFilterRequested(field);
+      // The button goes along so the picker can drop down under it.
+      settings.onFilterRequested(field, button);
     });
 
     cell.appendChild(button);

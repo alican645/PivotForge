@@ -13,6 +13,21 @@
   // erasing it.
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+  // Opened from a button, the picker drops down under it -- but only where
+  // there is room beside the button for a dropdown to be one. On a phone it
+  // would be a modal without the backdrop, so it stays a modal there. The
+  // width matches the stylesheet's phone breakpoint.
+  const DROPDOWN_MEDIA = "(min-width: 561px)";
+  const DROPDOWN_GAP = 4;
+  const VIEWPORT_MARGIN = 8;
+  const DROPDOWN_WIDTH = 420;
+  const DROPDOWN_HEIGHT = 520;
+  // The heading, condition, search, mode and buttons take about 280px before
+  // the list gets any; below this the list shows two or three values, so the
+  // dropdown flips to the taller side, and a window short on both sides gets
+  // the centred modal instead of a cramped dropdown.
+  const DROPDOWN_MIN_HEIGHT = 400;
+
   const DEFAULT_LABELS = {
     // {0} is replaced with the field caption.
     title: "{0} filter",
@@ -95,6 +110,12 @@
       this.isOpen = false;
       this.disposed = false;
       this.elements = null;
+      // The button the picker was opened from, when it was; null opens it as a
+      // modal. Kept while open so a scroll or resize can move the dropdown
+      // with it.
+      this.anchor = null;
+      this.watching = false;
+      this.reposition = () => this.place();
     }
 
     build() {
@@ -272,13 +293,15 @@
 
       this.host.appendChild(overlay);
       this.elements = {
-        overlay, title, summary, search, notice, state, list, apply, modeButtons,
+        overlay, dialog, title, summary, search, notice, state, list, apply, modeButtons,
         toolbar, operator, argumentInputs, argumentCounts: FILTER_ARGUMENTS
       };
       return this.elements;
     }
 
-    async open({ field, caption, selected = [], mode = "Include", operator = "Equals", onApply } = {}) {
+    async open({
+      field, caption, selected = [], mode = "Include", operator = "Equals", onApply, anchor = null
+    } = {}) {
       if (this.disposed || !field) {
         return;
       }
@@ -320,6 +343,9 @@
       elements.list.replaceChildren();
       elements.overlay.classList.add("is-open");
       elements.overlay.setAttribute("aria-hidden", "false");
+      this.anchor = anchor;
+      this.place();
+      this.watchAnchor(anchor !== null);
       elements.title.textContent = format(this.labels.title, caption ?? field);
       elements.summary.textContent = "";
       this.setState(this.labels.loading, false);
@@ -648,8 +674,77 @@
       this.isOpen = false;
       this.field = null;
       this.onApply = null;
+      this.watchAnchor(false);
+      this.anchor = null;
       this.elements.overlay.classList.remove("is-open");
       this.elements.overlay.setAttribute("aria-hidden", "true");
+    }
+
+    // Where the dropdown goes: under the anchor, or above it when the space
+    // below is too short and the space above is longer. Null means a modal --
+    // no anchor, a phone-sized screen, or a window too short either way.
+    dropdownBox() {
+      if (!this.anchor || !(root.matchMedia?.(DROPDOWN_MEDIA).matches ?? true)) {
+        return null;
+      }
+
+      const rect = this.anchor.getBoundingClientRect();
+      const viewportWidth = root.innerWidth;
+      const viewportHeight = root.innerHeight;
+      const below = viewportHeight - rect.bottom - DROPDOWN_GAP - VIEWPORT_MARGIN;
+      const above = rect.top - DROPDOWN_GAP - VIEWPORT_MARGIN;
+
+      if (Math.max(below, above) < DROPDOWN_MIN_HEIGHT) {
+        return null;
+      }
+
+      const flip = below < DROPDOWN_MIN_HEIGHT && above > below;
+      const height = Math.min(DROPDOWN_HEIGHT, flip ? above : below);
+      const width = Math.min(DROPDOWN_WIDTH, viewportWidth - 2 * VIEWPORT_MARGIN);
+      // Aligned to the button's left edge, pushed back in where that would run
+      // past the right edge -- the designer's funnels sit near it.
+      const left = Math.max(
+        VIEWPORT_MARGIN,
+        Math.min(rect.left, viewportWidth - width - VIEWPORT_MARGIN));
+
+      return {
+        top: flip ? rect.top - DROPDOWN_GAP - height : rect.bottom + DROPDOWN_GAP,
+        left,
+        width,
+        height
+      };
+    }
+
+    place() {
+      if (!this.elements || !this.isOpen) {
+        return;
+      }
+
+      const { overlay, dialog } = this.elements;
+      const box = this.dropdownBox();
+
+      overlay.classList.toggle("is-anchored", box !== null);
+      // A dropdown leaves the page usable around it, so it does not claim to be
+      // modal; a click outside it still closes it, as the backdrop's did.
+      dialog.setAttribute("aria-modal", String(box === null));
+      dialog.style.top = box ? `${Math.round(box.top)}px` : "";
+      dialog.style.left = box ? `${Math.round(box.left)}px` : "";
+      dialog.style.width = box ? `${Math.round(box.width)}px` : "";
+      dialog.style.height = box ? `${Math.round(box.height)}px` : "";
+    }
+
+    // Scrolling the table or the page moves the button, and a resize can cross
+    // the phone breakpoint, so either one places the dialog again. Capture
+    // catches the scroll of any container the button sits in.
+    watchAnchor(on) {
+      if (on === this.watching) {
+        return;
+      }
+
+      const method = on ? "addEventListener" : "removeEventListener";
+      root[method]?.("scroll", this.reposition, true);
+      root[method]?.("resize", this.reposition);
+      this.watching = on;
     }
 
     dispose() {
@@ -659,6 +754,8 @@
 
       this.disposed = true;
       this.isOpen = false;
+      this.watchAnchor(false);
+      this.anchor = null;
 
       if (this.keydownHandler) {
         root.document?.removeEventListener("keydown", this.keydownHandler);

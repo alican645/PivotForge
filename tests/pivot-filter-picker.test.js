@@ -30,6 +30,8 @@ function createElement(tagName) {
     hidden: false,
     checked: false,
     value: "",
+    // Inline style, which the picker writes to place itself as a dropdown.
+    style: {},
     classList: {
       names: new Set(),
       add(...names) { names.forEach(name => this.names.add(name)); },
@@ -688,3 +690,121 @@ test("a field with no values yet asks for no calendar", () => {
 
   assert.equal(picker.comparesDates(), false);
 });
+
+// --- Dropdown placement ------------------------------------------------------
+
+// A window of the given size whose media query answers as a browser that wide
+// would, with its scroll/resize listeners recorded. Restores the globals after.
+function withWindow({ width = 1280, height = 800 } = {}, body) {
+  const saved = {
+    innerWidth: globalThis.innerWidth,
+    innerHeight: globalThis.innerHeight,
+    matchMedia: globalThis.matchMedia,
+    addEventListener: globalThis.addEventListener,
+    removeEventListener: globalThis.removeEventListener
+  };
+  const listeners = new Map();
+  globalThis.innerWidth = width;
+  globalThis.innerHeight = height;
+  globalThis.matchMedia = query => ({
+    matches: query === "(min-width: 561px)" ? width >= 561 : false
+  });
+  globalThis.addEventListener = (name, handler) => listeners.set(name, handler);
+  globalThis.removeEventListener = name => listeners.delete(name);
+
+  return Promise.resolve(body(listeners)).finally(() => Object.assign(globalThis, saved));
+}
+
+function anchorAt(rect) {
+  const anchor = createElement("button");
+  anchor.rect = rect;
+  anchor.getBoundingClientRect = function () { return this.rect; };
+  return anchor;
+}
+
+const overlayOf = host => byClass(host, "pivot-filter-picker")[0];
+const dialogOf = host => byClass(host, "pivot-filter-picker__dialog")[0];
+
+test("opened from a button on a wide screen, the picker drops down under it", () =>
+  withWindow({}, async () => {
+    const { picker, host } = build();
+    await open(host, picker, { anchor: anchorAt({ top: 100, bottom: 120, left: 50 }) });
+
+    assert.equal(overlayOf(host).classList.contains("is-anchored"), true);
+    assert.equal(dialogOf(host).style.top, "124px");
+    assert.equal(dialogOf(host).style.left, "50px");
+    assert.equal(dialogOf(host).attributes["aria-modal"], "false");
+  }));
+
+test("without a button the picker opens as a modal", () =>
+  withWindow({}, async () => {
+    const { picker, host } = build();
+    await open(host, picker);
+
+    assert.equal(overlayOf(host).classList.contains("is-anchored"), false);
+    assert.equal(dialogOf(host).style.top, "");
+    assert.equal(dialogOf(host).attributes["aria-modal"], "true");
+  }));
+
+test("on a phone-sized screen the picker stays a modal even from a button", () =>
+  withWindow({ width: 360, height: 740 }, async () => {
+    const { picker, host } = build();
+    await open(host, picker, { anchor: anchorAt({ top: 100, bottom: 120, left: 50 }) });
+
+    assert.equal(overlayOf(host).classList.contains("is-anchored"), false);
+    assert.equal(dialogOf(host).style.top, "");
+  }));
+
+test("a button near the right edge pulls the dropdown back inside the window", () =>
+  withWindow({ width: 1280 }, async () => {
+    const { picker, host } = build();
+    await open(host, picker, { anchor: anchorAt({ top: 100, bottom: 120, left: 1250 }) });
+
+    // 1280 - 420 wide - 8 margin.
+    assert.equal(dialogOf(host).style.left, "852px");
+  }));
+
+test("a button near the bottom opens the dropdown above it", () =>
+  withWindow({ height: 800 }, async () => {
+    const { picker, host } = build();
+    await open(host, picker, { anchor: anchorAt({ top: 700, bottom: 720, left: 50 }) });
+
+    // 520 tall, ending 4px above the button's top edge.
+    assert.equal(dialogOf(host).style.height, "520px");
+    assert.equal(dialogOf(host).style.top, "176px");
+  }));
+
+test("a window too short for a dropdown either way gets the modal", () =>
+  withWindow({ height: 400 }, async () => {
+    const { picker, host } = build();
+    await open(host, picker, { anchor: anchorAt({ top: 190, bottom: 210, left: 50 }) });
+
+    assert.equal(overlayOf(host).classList.contains("is-anchored"), false);
+  }));
+
+test("the dropdown follows its button on scroll and stops listening once closed", () =>
+  withWindow({}, async listeners => {
+    const { picker, host } = build();
+    const anchor = anchorAt({ top: 100, bottom: 120, left: 50 });
+    await open(host, picker, { anchor });
+
+    anchor.rect = { top: 40, bottom: 60, left: 50 };
+    listeners.get("scroll")();
+    assert.equal(dialogOf(host).style.top, "64px");
+
+    picker.close();
+    assert.equal(listeners.has("scroll"), false);
+    assert.equal(listeners.has("resize"), false);
+  }));
+
+test("reopening without a button drops the previous dropdown placement", () =>
+  withWindow({}, async () => {
+    const { picker, host } = build();
+    await open(host, picker, { anchor: anchorAt({ top: 100, bottom: 120, left: 50 }) });
+    picker.close();
+    await open(host, picker);
+
+    assert.equal(overlayOf(host).classList.contains("is-anchored"), false);
+    assert.equal(dialogOf(host).style.top, "");
+    assert.equal(dialogOf(host).style.width, "");
+  }));

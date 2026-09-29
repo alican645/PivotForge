@@ -2078,6 +2078,21 @@ select {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+/* Opened from a funnel on a wide screen, the picker drops down under it rather
+   than taking the middle of the page. The overlay stays, clear, so a click
+   anywhere outside still closes it the way the backdrop did; the script works
+   out where the dialog goes and sets its box inline. */
+.pivot-filter-picker.is-anchored {
+  background: transparent;
+}
+
+.pivot-filter-picker.is-anchored .pivot-filter-picker__dialog {
+  position: fixed;
+  max-height: none;
+  border: 1px solid var(--pt-border);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
 .pivot-filter-picker__heading {
   display: grid;
   gap: 2px;
