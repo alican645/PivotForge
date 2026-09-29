@@ -177,6 +177,14 @@
       );
     }
 
+    // Ordering a level by a summary value is implemented on the row axis only;
+    // the column axis is the product of its levels and has no such order.
+    if (!isRow && field.sortByValueKey !== undefined) {
+      throw new Error(
+        `"sortByValueKey" is only valid on a "row" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+
     return {
       dataField,
       // What identifies this level everywhere except the source query: a date
@@ -189,6 +197,7 @@
       role,
       areaIndex: areaIndex ?? null,
       sortOrder,
+      sortByValueKey: isRow && field.sortByValueKey ? String(field.sortByValueKey) : null,
       caption: field.caption ?? dataField,
       aggregation,
       showAs,
@@ -334,10 +343,16 @@
         ? { topN: normalizeRankings(extras.topN) }
         : {}),
       // Named rather than positional so the list survives a field moving to
-      // another area, and so a later per-field sortBy has somewhere to live.
+      // another area. A value sort declared without a direction takes the row
+      // axis default; valueKey is sent only when declared, so a page that never
+      // uses it sends the request it always did.
       fieldSorts: normalized
-        .filter(field => field.sortOrder !== null)
-        .map(field => ({ field: field.key, direction: field.sortOrder }))
+        .filter(field => field.sortOrder !== null || field.sortByValueKey !== null)
+        .map(field => ({
+          field: field.key,
+          direction: field.sortOrder ?? "Ascending",
+          ...(field.sortByValueKey !== null ? { valueKey: field.sortByValueKey } : {})
+        }))
     };
   }
 

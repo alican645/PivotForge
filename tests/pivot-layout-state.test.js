@@ -901,6 +901,35 @@ test("a row-only declaration is dropped when the field moves to another area", (
   assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
 });
 
+test("a declared sortByValueKey survives a row-to-row move", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Category" ? { ...field, sortByValueKey: "Amount_sum" } : field));
+
+  state.reorder("row", 0, 1);
+  const request = PivotForge.PivotRequestBuilder.buildRequest(state.toFields());
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "Category", direction: "Ascending", valueKey: "Amount_sum" }
+  ]);
+});
+
+test("sortByValueKey is dropped, and sortOrder kept, when the field moves to the column area", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Category"
+        ? { ...field, sortOrder: "Descending", sortByValueKey: "Amount_sum" }
+        : field));
+
+  // Carrying the key along would turn a legal drag into a normalizeField exception.
+  state.move("Category", "column", 0);
+  const emitted = state.toFields().find(field => field.dataField === "Category");
+
+  assert.equal(emitted.sortByValueKey, undefined);
+  assert.equal(emitted.sortOrder, "Descending");
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
+});
+
 test("areaIndex is not re-emitted, so a move is not undone by the declaration", () => {
   const state = new PivotForge.PivotLayoutState(
     catalog.map(field =>

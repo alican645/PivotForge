@@ -394,6 +394,41 @@ test("an unknown sortOrder is refused rather than passed through", () => {
     /Unknown sortOrder "descending"/);
 });
 
+test("a declared sortByValueKey reaches the request as a value field sort", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "Region", area: "row" },
+    { dataField: "Category", area: "row", sortOrder: "Descending", sortByValueKey: "Amount_sum" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "Category", direction: "Descending", valueKey: "Amount_sum" }
+  ]);
+});
+
+test("a sortByValueKey without a sortOrder sorts ascending", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "Category", area: "row", sortByValueKey: "Amount_sum" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "Category", direction: "Ascending", valueKey: "Amount_sum" }
+  ]);
+});
+
+test("sortByValueKey is refused outside the row area", () => {
+  ["column", "filter", "data"].forEach(area => {
+    assert.throws(
+      () => PivotRequestBuilder.normalizeFields([
+        { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension",
+          sortByValueKey: "Amount_sum" }
+      ]),
+      /"sortByValueKey" is only valid on a "row" field/,
+      area);
+  });
+});
+
 test("a filter with no declared mode is sent as including", () => {
   const request = PivotRequestBuilder.buildRequest(salesFields, {
     filters: [{ field: "bolge", values: ["Kuzey"] }]
