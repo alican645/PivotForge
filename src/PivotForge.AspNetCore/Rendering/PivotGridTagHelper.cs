@@ -106,9 +106,18 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("subtotals")]
     public bool? Subtotals { get; set; }
 
-    /// <summary>Gets or sets whether the grand total is shown.</summary>
+    /// <summary>Gets or sets whether the grand total row is shown.</summary>
+    /// <remarks>The earlier name of <see cref="ShowRowGrandTotals"/>; the two may not disagree.</remarks>
     [HtmlAttributeName("show-grand-total")]
     public bool? ShowGrandTotal { get; set; }
+
+    /// <summary>Gets or sets whether the grand total row along the bottom is shown.</summary>
+    [HtmlAttributeName("show-row-grand-totals")]
+    public bool? ShowRowGrandTotals { get; set; }
+
+    /// <summary>Gets or sets whether the grand total column on the right is shown.</summary>
+    [HtmlAttributeName("show-column-grand-totals")]
+    public bool? ShowColumnGrandTotals { get; set; }
 
     /// <summary>Gets or sets whether a row label repeats on every row it spans.</summary>
     [HtmlAttributeName("repeat-row-labels")]
@@ -309,9 +318,23 @@ public sealed class PivotGridTagHelper : TagHelper
             builder.Subtotals(subtotals);
         }
 
-        if (ShowGrandTotal is { } showGrandTotal)
+        // Two names for one setting: honouring whichever came last would make the
+        // outcome depend on attribute order, so a contradiction is reported.
+        if (ShowGrandTotal is { } legacy && ShowRowGrandTotals is { } current && legacy != current)
         {
-            builder.ShowGrandTotal(showGrandTotal);
+            throw new InvalidOperationException(
+                "pivot-grid sets show-grand-total and show-row-grand-totals to different values. " +
+                "They are the same setting; keep show-row-grand-totals.");
+        }
+
+        if ((ShowRowGrandTotals ?? ShowGrandTotal) is { } showRowGrandTotals)
+        {
+            builder.ShowRowGrandTotals(showRowGrandTotals);
+        }
+
+        if (ShowColumnGrandTotals is { } showColumnGrandTotals)
+        {
+            builder.ShowColumnGrandTotals(showColumnGrandTotals);
         }
 
         if (RepeatRowLabels is { } repeatRowLabels)

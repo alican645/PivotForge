@@ -180,6 +180,7 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | `visible` | `true` | `false` configures a field without including it in the rendered request. |
 | `expanded` | `true` | Only on `row` fields. `false` collapses this level's groups at the grid's **first** render; after that the state belongs to the user, and a restored `state-storing` view wins. Declaring it on the deepest row field does nothing — that level's rows are the detail rows and have no groups. |
 | `showTotals` | `true` | Only on `row` fields. `false` leaves the group header in place without its sums, which is the same shape the grid uses when `subtotals` is off entirely — so a deep hierarchy can total the levels worth totalling and nowhere else. The grid-wide `subtotals="false"` still wins. |
+| `showGrandTotals` | `true` | Only on `data` fields (and on `available` fields whose `role` is `measure`). `false` removes this value's column from the grand total block on the right; the other values keep theirs. The grand total row along the bottom stays, because its cells total the grid's columns, until every value has opted out — then it goes too. This follows DevExtreme's `showGrandTotals`. The engine still computes the total, so `percentOfGrandTotal` is unaffected. The grid-wide `show-row-grand-totals="false"` / `show-column-grand-totals="false"` still win. |
 
 ### `PivotGridBuilder` (Razor)
 
@@ -240,7 +241,8 @@ the renderer keeps its own default.
 | `layout-mode` | `LayoutMode(PivotGridLayoutMode)` | `Tabular` | `Tabular` gives each row field its own column; `Compact` indents them into one. |
 | `context-menu` | `ContextMenu(bool)` | `true` | The right-click cell menu. |
 | `subtotals` | `Subtotals(bool)` | `true` | Subtotal rows. |
-| `show-grand-total` | `ShowGrandTotal(bool)` | `true` | The grand total row. |
+| `show-row-grand-totals` | `ShowRowGrandTotals(bool)` | `true` | The grand total row along the bottom. Named, as in DevExtreme, after the area its header sits in. `show-grand-total` / `ShowGrandTotal(bool)` is its earlier name and still works; setting both to different values is an error. |
+| `show-column-grand-totals` | `ShowColumnGrandTotals(bool)` | `true` | The grand total column on the right. Sorting by that column goes with it. |
 | `repeat-row-labels` | `RepeatRowLabels(bool)` | `false` | Repeats a row label on every row it spans instead of only the first. |
 | `min-column-width` | `MinColumnWidth(int)` | `72` | Narrowest a column may be rendered or resized to, in pixels. Must be positive. |
 | `max-column-width` | `MaxColumnWidth(int)` | `420` | Widest a column may be, in pixels. Must be positive. |
@@ -400,7 +402,7 @@ Anything not listed here still needs `rendererOptions` through
 `<pivot-field>` attributes are `field` (the source column, required),
 `caption`, `area`, `role`, `aggregation`, `show-as`, the four `format-*`
 attributes, `visible`, `area-index`, `sort-order`, `group-interval`, and — on
-`Row` fields only — `expanded`, `show-totals` and `sort-by-value-key`. `area` defaults to `Data`, matching
+`Row` fields only — `expanded`, `show-totals` and `sort-by-value-key`, and — on `Data` fields only — `show-grand-totals`. `area` defaults to `Data`, matching
 `PivotFieldBuilder`.
 
 `area-index` gives the field an explicit position among the fields sharing its

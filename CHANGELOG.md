@@ -12,6 +12,19 @@ During the `0.x` preview line, breaking changes may be made when necessary and
 are called out under **Breaking**. After `1.0.0`, an incompatible public API
 change will require a new major version.
 
+## [Unreleased]
+
+### Added
+
+- **AspNetCore** — the grand total column on the right can be switched off with
+  `show-column-grand-totals` / `ShowColumnGrandTotals(bool)`. The bottom row gets
+  the matching name `show-row-grand-totals` / `ShowRowGrandTotals(bool)`, after
+  DevExtreme; `show-grand-total` keeps working as its earlier name.
+- **AspNetCore** — a data field can leave itself out of the grand totals with
+  `show-grand-totals="false"` / `ShowGrandTotals(false)`: its column in the
+  right-hand block goes while the other values keep theirs, and the bottom row
+  goes only once every value has opted out, as in DevExtreme.
+
 ## [0.6.0-preview.1] — 2026-09-29
 
 The release that made the browser UI declarative down to filtering, and gave

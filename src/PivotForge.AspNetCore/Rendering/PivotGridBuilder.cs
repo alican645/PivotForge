@@ -155,10 +155,30 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     public PivotGridBuilder Subtotals(bool show) => SetRenderer("subtotals", show);
 
-    /// <summary>Shows or hides the grand total.</summary>
-    /// <param name="show">True to show the grand total.</param>
+    /// <summary>Shows or hides the grand total row along the bottom of the grid.</summary>
+    /// <remarks>The name this setting had before the column grand totals could be switched off; see <see cref="ShowRowGrandTotals"/>.</remarks>
+    /// <param name="show">True to show the grand total row.</param>
     /// <returns>This builder.</returns>
-    public PivotGridBuilder ShowGrandTotal(bool show) => SetRenderer("showGrandTotal", show);
+    public PivotGridBuilder ShowGrandTotal(bool show) => ShowRowGrandTotals(show);
+
+    /// <summary>Shows or hides the grand total row along the bottom of the grid.</summary>
+    /// <remarks>
+    /// Named, as in DevExtreme, after the area its header sits in: the row that totals every column.
+    /// A data field can also leave itself out with <see cref="PivotFieldBuilder.ShowGrandTotals"/>.
+    /// </remarks>
+    /// <param name="show">True to show the grand total row.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ShowRowGrandTotals(bool show) => SetRenderer("showGrandTotal", show);
+
+    /// <summary>Shows or hides the grand total column on the right of the grid.</summary>
+    /// <remarks>
+    /// Named, as in DevExtreme, after the area its header sits in: the column that totals every row.
+    /// Sorting by that column goes with it. A data field can also leave only its own column out with
+    /// <see cref="PivotFieldBuilder.ShowGrandTotals"/>.
+    /// </remarks>
+    /// <param name="show">True to show the grand total column.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ShowColumnGrandTotals(bool show) => SetRenderer("showColumnGrandTotals", show);
 
     /// <summary>Sets how row headers are arranged.</summary>
     /// <param name="mode">The layout mode.</param>

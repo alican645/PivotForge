@@ -183,7 +183,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       selectionMode: "single",
       contextMenu: true,
       conditionalRules: [],
+      // DevExtreme names a grand total after the area its header sits in, and
+      // so does this: showGrandTotal is the total *row* along the bottom (the
+      // row grand total), showColumnGrandTotals the total *column* on the right.
+      // The payload names them the other way round -- rowTotals feeds that right
+      // column -- because it names what each total sums, not where it is drawn.
       showGrandTotal: true,
+      showColumnGrandTotals: true,
       virtualState: null,
       restoreSelectionFocus: true,
       onSelectionChanged: null,
@@ -260,7 +266,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       rowTotals,
       columnTotals,
       subtotals));
-    this.applyVirtualSpacers(table, settings.virtualState, rowDepth, columnHeaders, values);
+    this.applyVirtualSpacers(table, settings.virtualState, rowDepth, columnHeaders, values, settings);
     // After the spacers, so the rows they insert are excluded from the count.
     this.applyGridIndexes(table, settings.virtualState);
 
@@ -495,7 +501,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         label: value.label ?? value.key,
         aggregation: value.aggregation ?? settings.aggregation,
         format: value.format ?? null,
-        showAs: value.showAs ?? "normal"
+        showAs: value.showAs ?? "normal",
+        showGrandTotals: value.showGrandTotals !== false
       }));
     }
 
@@ -521,10 +528,34 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     return null;
   }
 
+  // The values that keep a column in the grand total block on the right. A
+  // value opting out of its grand totals loses that column outright rather than
+  // keeping an empty one; switching the block off grid-wide leaves none at all.
+  totalColumnValues(values, settings) {
+    return settings.showColumnGrandTotals === false
+      ? []
+      : values.filter(value => value.showGrandTotals !== false);
+  }
+
+  // A value opting out loses only its column on the right, as in DevExtreme:
+  // its cells in the bottom row total a column of the grid, not the value
+  // itself, and the other values' totals share that row anyway. Only when every
+  // value has opted out does the row go too, since then no grand total is left.
+  showsGrandTotalRow(values, settings) {
+    return settings.showGrandTotal !== false && values.some(value => value.showGrandTotals !== false);
+  }
+
+  columnCount(rowDepth, columnHeaders, values, settings) {
+    return rowDepth +
+      Math.max(1, columnHeaders.length) * values.length +
+      this.totalColumnValues(values, settings).length;
+  }
+
   createTableHead(columnHeaders, columnDepth, measureDepth, rowDepth, values, settings) {
     const thead = document.createElement("thead");
     thead.setAttribute("role", "rowgroup");
     const valueSpan = values.length;
+    const totalValues = this.totalColumnValues(values, settings);
     // A column header names a value -- "2024" -- never the field behind it, so
     // there is nowhere to hang a funnel the way the row axis hangs one on its
     // corner. The field names get a cell of their own in the corner block, one
@@ -596,9 +627,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         row.appendChild(header);
       }
 
-      if (level === 0) {
+      if (level === 0 && totalValues.length > 0) {
         const total = this.createCell("th", settings.totalText, "pivot-table__measure-header");
-        total.colSpan = valueSpan;
+        total.colSpan = totalValues.length;
         total.rowSpan = columnDepth;
         total.dataset.stickyRow = "0";
         total.dataset.columnStart = String(rowDepth + Math.max(1, columnHeaders.length) * valueSpan);
@@ -606,7 +637,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
           total.dataset.columnIndex = total.dataset.columnStart;
           this.decorateSortableHeader(total, settings.totalText, {
             mode: "RowTotalValue",
-            valueKey: values[0].key
+            valueKey: totalValues[0].key
           }, settings);
         }
         row.appendChild(total);
@@ -641,7 +672,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         });
       }
 
-      values.forEach((value, valueIndex) => {
+      totalValues.forEach((value, valueIndex) => {
         const totalCell = this.createCell("th", value.label, "pivot-table__value-header pivot-table__total-value-header");
         totalCell.dataset.stickyRow = String(columnDepth);
         totalCell.dataset.columnIndex = String(rowDepth + Math.max(1, columnHeaders.length) * valueSpan + valueIndex);
@@ -661,7 +692,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // the row names an axis, not a coordinate, so there is nothing to line up
       // with underneath.
       const filler = this.createCell("th", "", "pivot-table__column-field-filler");
-      filler.colSpan = Math.max(1, columnHeaders.length) * valueSpan + valueSpan;
+      filler.colSpan = Math.max(1, columnHeaders.length) * valueSpan + totalValues.length;
       rowFieldRow.appendChild(filler);
       thead.appendChild(rowFieldRow);
     }
@@ -727,7 +758,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     if (rowHeaders.length === 0) {
       const row = this.createRow();
       const empty = this.createCell("td", settings.texts.noData, "pivot-table__empty");
-      empty.colSpan = rowDepth + Math.max(1, columnHeaders.length) * values.length + values.length;
+      empty.colSpan = this.columnCount(rowDepth, columnHeaders, values, settings);
       row.appendChild(empty);
       tbody.appendChild(row);
       return tbody;
@@ -758,7 +789,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       previousVisibleRowHeader = rowInfo.rowHeader;
     });
 
-    if (settings.showGrandTotal !== false) {
+    if (this.showsGrandTotalRow(values, settings)) {
       tbody.appendChild(this.createGrandTotalRow(
         rowHeaders,
         columnHeaders,
@@ -772,7 +803,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     return tbody;
   }
 
-  applyVirtualSpacers(table, virtualState, rowDepth, columnHeaders, values) {
+  applyVirtualSpacers(table, virtualState, rowDepth, columnHeaders, values, settings = this.options) {
     if (!virtualState || !table?.tBodies[0]) {
       return;
     }
@@ -781,7 +812,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const offset = Math.max(0, virtualState.offset ?? 0);
     const pageRowCount = Math.max(0, virtualState.pageRowCount ?? 0);
     const totalRows = Math.max(pageRowCount, virtualState.totalRowCount ?? pageRowCount);
-    const columnCount = rowDepth + Math.max(1, columnHeaders.length) * values.length + values.length;
+    const columnCount = this.columnCount(rowDepth, columnHeaders, values, settings);
     const topHeight = offset * rowHeight;
     const bottomHeight = Math.max(0, totalRows - offset - pageRowCount) * rowHeight;
     const tbody = table.tBodies[0];
@@ -876,7 +907,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       });
     });
 
-    values.forEach((valueDefinition, valueIndex) => {
+    this.totalColumnValues(values, settings).forEach((valueDefinition, valueIndex) => {
       const serverTotal = rowInfo.type === "detail"
         ? rowTotalLookup.get(rowInfo.rowIndexes[0])?.[valueDefinition.key]
         : subtotal?.totals?.[valueDefinition.key];
@@ -1910,7 +1941,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       });
     });
 
-    values.forEach((valueDefinition, valueIndex) => {
+    this.totalColumnValues(values, settings).forEach((valueDefinition, valueIndex) => {
       const grandTotalCell = this.createCell(
         "td",
         this.formatValue(grandTotals[valueDefinition.key], settings, valueDefinition),

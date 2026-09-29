@@ -578,7 +578,8 @@
           label: field.caption,
           aggregation: field.aggregation,
           showAs: field.showAs,
-          format: field.format
+          format: field.format,
+          showGrandTotals: field.showGrandTotals
         }));
     }
 

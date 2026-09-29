@@ -692,3 +692,44 @@ test("grouping follows the sent order rather than re-sorting into it", () => {
     plan.filter(row => row.type === "detail").map(row => row.rowHeader[1]),
     ["Teknoloji", "Mobilya", "Teknoloji"]);
 });
+
+test("a value opting out of grand totals loses only its column on the right", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const values = renderer.resolveValues({
+    values: [
+      { key: "Amount_sum" },
+      { key: "Quantity_sum", showGrandTotals: false }
+    ]
+  }, [], {});
+
+  assert.deepEqual(renderer.totalColumnValues(values, {}).map(value => value.key), ["Amount_sum"]);
+  // The bottom row totals the grid's columns, so it stays for the others.
+  assert.equal(renderer.showsGrandTotalRow(values, {}), true);
+  // Two column headers of two values each, plus the one total column left.
+  assert.equal(renderer.columnCount(1, [["2025"], ["2026"]], values, {}), 1 + 4 + 1);
+});
+
+test("the grand total row goes only once every value has opted out", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const values = renderer.resolveValues({
+    values: [
+      { key: "Amount_sum", showGrandTotals: false },
+      { key: "Quantity_sum", showGrandTotals: false }
+    ]
+  }, [], {});
+
+  assert.deepEqual(renderer.totalColumnValues(values, {}), []);
+  assert.equal(renderer.showsGrandTotalRow(values, {}), false);
+});
+
+test("the grid-wide switches win over a value asking for its grand totals", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const values = renderer.resolveValues({ values: [{ key: "Amount_sum" }] }, [], {});
+
+  assert.deepEqual(renderer.totalColumnValues(values, { showColumnGrandTotals: false }), []);
+  assert.equal(renderer.showsGrandTotalRow(values, { showGrandTotal: false }), false);
+  assert.equal(renderer.columnCount(2, [["2025"]], values, { showColumnGrandTotals: false }), 3);
+  // Each switch governs its own direction only.
+  assert.equal(renderer.showsGrandTotalRow(values, { showColumnGrandTotals: false }), true);
+  assert.equal(renderer.totalColumnValues(values, { showGrandTotal: false }).length, 1);
+});

@@ -27,6 +27,7 @@ public class PivotTagHelperTests
         bool? Visible = null,
         bool? Expanded = null,
         bool? ShowTotals = null,
+        bool? ShowGrandTotals = null,
         int? AreaIndex = null,
         PivotSortDirection? SortOrder = null,
         PivotGroupInterval? GroupInterval = null,
@@ -108,6 +109,12 @@ public class PivotTagHelperTests
         {
             helper.ShowTotals = showTotals;
             attributes.Add(new TagHelperAttribute("show-totals", showTotals));
+        }
+
+        if (spec.ShowGrandTotals is { } showGrandTotals)
+        {
+            helper.ShowGrandTotals = showGrandTotals;
+            attributes.Add(new TagHelperAttribute("show-grand-totals", showGrandTotals));
         }
 
         if (spec.AreaIndex is { } areaIndex)
@@ -555,6 +562,7 @@ public class PivotTagHelperTests
 
         var renderer = config.GetProperty("rendererOptions");
         Assert.False(renderer.TryGetProperty("showGrandTotal", out _));
+        Assert.False(renderer.TryGetProperty("showColumnGrandTotals", out _));
         Assert.False(renderer.TryGetProperty("layoutMode", out _));
     }
 
@@ -793,6 +801,71 @@ public class PivotTagHelperTests
         // The row area accepts both.
         new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
             .Expanded(false).ShowTotals(false).Build();
+    }
+
+    [Fact]
+    public async Task WritesShowGrandTotalsOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum, ShowGrandTotals: false),
+            new FieldSpec("Quantity", PivotArea.Data, "Adet", PivotAggregation.Sum)));
+
+        var fields = declared.GetProperty("fields");
+        Assert.False(fields[1].GetProperty("showGrandTotals").GetBoolean());
+        Assert.False(fields[2].TryGetProperty("showGrandTotals", out _));
+    }
+
+    [Fact]
+    public void RefusesShowGrandTotalsOnAFieldThatIsNotAMeasure()
+    {
+        // A grand total is a measure summed over an axis; a dimension has none.
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Row).ShowGrandTotals(false).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Year").Area(PivotArea.Column).ShowGrandTotals(false).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Available).Role(PivotFieldRole.Dimension)
+            .ShowGrandTotals(false).Build());
+
+        // A measure in the data area, or still waiting in the field list, accepts it.
+        new PivotFieldBuilder().DataField("Amount").Area(PivotArea.Data).ShowGrandTotals(false).Build();
+        var waiting = new PivotFieldBuilder().DataField("Amount").Area(PivotArea.Available)
+            .Role(PivotFieldRole.Measure).ShowGrandTotals(false).Build();
+        Assert.Equal(false, waiting["showGrandTotals"]);
+    }
+
+    [Fact]
+    public async Task WritesRowAndColumnGrandTotalsUnderRendererOptions()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ShowRowGrandTotals = false, ShowColumnGrandTotals = false },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var renderer = config.GetProperty("rendererOptions");
+        // The row switch keeps the renderer key show-grand-total always wrote, so
+        // the earlier attribute and the new one drive the same setting.
+        Assert.False(renderer.GetProperty("showGrandTotal").GetBoolean());
+        Assert.False(renderer.GetProperty("showColumnGrandTotals").GetBoolean());
+    }
+
+    [Fact]
+    public async Task AcceptsTheEarlierGrandTotalNameWhenItAgrees()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ShowGrandTotal = false, ShowRowGrandTotals = false },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.GetProperty("rendererOptions").GetProperty("showGrandTotal").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RefusesTheTwoGrandTotalRowNamesDisagreeing()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ShowGrandTotal = false, ShowRowGrandTotals = true },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
     }
 
     [Fact]
