@@ -297,6 +297,57 @@ public sealed class PivotForgeAspNetCoreTests
     }
 
     [Fact]
+    public async Task PivotEndpoint_OrdersARowLevelByADeclaredValue()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>(
+        [
+            new("North", 120m),
+            new("South", 90m)
+        ]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        // Descending by label would put South first; by value North (120) leads.
+        var json = """
+            {
+              "rows": ["Region"],
+              "columns": [],
+              "values": [{ "field": "Amount", "aggregation": "sum" }],
+              "filters": [],
+              "fieldSorts": [{ "field": "Region", "direction": "Descending", "valueKey": "Amount_sum" }]
+            }
+            """;
+
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var httpResponse = await client.PostAsync("/pivotforge/pivot", content);
+            await using var responseStream = await httpResponse.Content.ReadAsStreamAsync();
+            using var response = await JsonDocument.ParseAsync(responseStream);
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, httpResponse.StatusCode);
+            Assert.Equal(
+                ["North", "South"],
+                response.RootElement.GetProperty("rowHeaders")
+                    .EnumerateArray()
+                    .Select(header => header[0].GetString()!)
+                    .ToArray());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task PivotEndpoint_AppliesAnExcludingFilter()
     {
         var builder = WebApplication.CreateBuilder();

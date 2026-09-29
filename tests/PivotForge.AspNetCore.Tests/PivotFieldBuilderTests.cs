@@ -322,4 +322,33 @@ public class PivotFieldBuilderTests
         Assert.Throws<ArgumentException>(
             () => new PivotFieldBuilder().DataField("tutar").FormatCurrency("  "));
     }
+
+    [Fact]
+    public void SortByValueKeyIsEmittedOnlyWhenDeclared()
+    {
+        var declared = new PivotFieldBuilder()
+            .DataField("Category").Area(PivotArea.Row).SortByValueKey("Amount_sum").Build();
+        var undeclared = new PivotFieldBuilder()
+            .DataField("Category").Area(PivotArea.Row).Build();
+
+        Assert.Equal("Amount_sum", declared["sortByValueKey"]);
+        // No direction was declared, and none is invented: the browser applies
+        // the row axis default.
+        Assert.False(declared.ContainsKey("sortOrder"));
+        Assert.False(undeclared.ContainsKey("sortByValueKey"));
+    }
+
+    [Theory]
+    [InlineData(PivotArea.Column)]
+    [InlineData(PivotArea.Data)]
+    [InlineData(PivotArea.Filter)]
+    public void SortByValueKeyOutsideTheRowAreaThrows(PivotArea area)
+    {
+        var builder = new PivotFieldBuilder()
+            .DataField("Category").Area(area).SortByValueKey("Amount_sum");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("SortByValueKey is only valid on fields whose Area is Row", exception.Message);
+    }
 }
