@@ -44,10 +44,21 @@ public sealed record PivotSort(
 /// Unlike <see cref="PivotSort"/>, which orders the whole row axis by one criterion, this orders a
 /// single level within its parent group, so the hierarchy stays intact. Levels left undeclared keep
 /// the engine's default: ascending on the row axis, discovery order on the column axis.
+/// <para>
+/// With a <paramref name="ValueKey"/>, a row level orders its groups by that value's summary
+/// instead of their labels: an inner level by its subtotal, the deepest level by its row total,
+/// both as shown after <see cref="PivotShowAs"/>. A group with no value sorts last in either
+/// direction and equal values break on the label, ascending. A key that is not among the request's
+/// values leaves the level in label order. Value ordering applies to the row axis only.
+/// </para>
 /// </remarks>
 /// <param name="Field">The row or column field whose level is ordered.</param>
 /// <param name="Direction">The sort direction applied to that level.</param>
-public sealed record PivotFieldSort(string Field, PivotSortDirection Direction);
+/// <param name="ValueKey">
+/// The <see cref="PivotValueDefinition.Key"/> whose summary orders the level, or null to order it
+/// by label.
+/// </param>
+public sealed record PivotFieldSort(string Field, PivotSortDirection Direction, string? ValueKey = null);
 
 /// <summary>Specifies the source used to order pivot rows.</summary>
 public enum PivotSortMode

@@ -87,6 +87,15 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("sort-order")]
     public PivotSortDirection SortOrder { get; set; }
 
+    /// <summary>Gets or sets the value key whose summary orders this field's level.</summary>
+    /// <remarks>
+    /// As <c>Field_aggregation</c>, e.g. <c>Amount_sum</c>. Orders the level's groups by value inside
+    /// their parent group, in the direction <c>sort-order</c> gives (ascending when absent). Valid on
+    /// <c>Row</c> fields only.
+    /// </remarks>
+    [HtmlAttributeName("sort-by-value-key")]
+    public string? SortByValueKey { get; set; }
+
     /// <summary>Gets or sets the date interval this field's values are grouped into.</summary>
     /// <remarks>
     /// Collapses dates to their year, quarter, month, day or weekday. The same column may be
@@ -218,6 +227,11 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (_writtenAttributes.Contains("sort-order"))
         {
             builder.SortOrder(SortOrder);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SortByValueKey))
+        {
+            builder.SortByValueKey(SortByValueKey);
         }
     }
 }

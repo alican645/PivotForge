@@ -400,7 +400,7 @@ Anything not listed here still needs `rendererOptions` through
 `<pivot-field>` attributes are `field` (the source column, required),
 `caption`, `area`, `role`, `aggregation`, `show-as`, the four `format-*`
 attributes, `visible`, `area-index`, `sort-order`, `group-interval`, and — on
-`Row` fields only — `expanded` and `show-totals`. `area` defaults to `Data`, matching
+`Row` fields only — `expanded`, `show-totals` and `sort-by-value-key`. `area` defaults to `Data`, matching
 `PivotFieldBuilder`.
 
 `area-index` gives the field an explicit position among the fields sharing its
@@ -415,6 +415,20 @@ axis is ascending unless told otherwise, while an undeclared column level keeps
 the order the data arrived in — a query that ordered months by month number
 would be ruined by alphabetical ordering, so the engine does not impose one. A
 sort the user applies by clicking a header still wins over the declaration.
+
+`sort-by-value-key` orders a row field's level by a summary value instead of
+its labels, inside each parent group. It names a value key (`Field_aggregation`)
+and takes its direction from `sort-order`, ascending when absent:
+
+```cshtml
+<pivot-field field="Category" area="Row"
+             sort-by-value-key="Amount_sum" sort-order="Descending" />
+```
+
+An inner level is ordered by its subtotal and the deepest level by its row
+total, both as shown after `show-as`. A group with no value sorts last in
+either direction, and equal values break on the label. Row fields only. A sort
+the reader picks from the cell menu still wins.
 
 `group-interval` (`Year`, `Quarter`, `Month`, `Day`, `DayOfWeek`) collapses a
 date column into header groups — see [Date grouping](#date-grouping).

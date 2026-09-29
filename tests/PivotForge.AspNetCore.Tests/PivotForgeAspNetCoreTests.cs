@@ -162,6 +162,42 @@ public sealed class PivotForgeAspNetCoreTests
         }
     }
 
+    [Theory]
+    [InlineData(""" "fieldSorts": [{ "field": "Region", "direction": "Descending", "valueKey": "Amount_sum" }],""")]
+    [InlineData(""" "topN": [{ "field": "Region", "count": 1 }],""")]
+    [InlineData(""" "hideEmptySummaryCells": true,""")]
+    public async Task LargeStart_DoesNotReuseAResultAcrossRequestsThatShapeItDifferently(string member)
+    {
+        // Each of these changes which rows the result holds or in what order, so a
+        // request differing only in one of them must not be served the other's result.
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) =>
+            ValueTask.FromResult<IReadOnlyList<Sale>>([new("North", 120m), new("South", 90m)]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            var plain = await PostLargeStartAsync(client, 10);
+            var shaped = await PostLargeStartAsync(client, 10, extraMembers: member);
+
+            Assert.False(shaped.GetProperty("cacheHit").GetBoolean());
+            Assert.NotEqual(plain.GetProperty("sessionId").GetString(), shaped.GetProperty("sessionId").GetString());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
     [Fact]
     public async Task LargeStart_DoesNotReuseResultsAcrossDifferentRequestScopes()
     {
@@ -285,6 +321,57 @@ public sealed class PivotForgeAspNetCoreTests
             Assert.Equal(System.Net.HttpStatusCode.OK, httpResponse.StatusCode);
             Assert.Equal(
                 ["South", "North"],
+                response.RootElement.GetProperty("rowHeaders")
+                    .EnumerateArray()
+                    .Select(header => header[0].GetString()!)
+                    .ToArray());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PivotEndpoint_OrdersARowLevelByADeclaredValue()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>((_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>(
+        [
+            new("North", 120m),
+            new("South", 90m)
+        ]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        // Descending by label would put South first; by value North (120) leads.
+        var json = """
+            {
+              "rows": ["Region"],
+              "columns": [],
+              "values": [{ "field": "Amount", "aggregation": "sum" }],
+              "filters": [],
+              "fieldSorts": [{ "field": "Region", "direction": "Descending", "valueKey": "Amount_sum" }]
+            }
+            """;
+
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var httpResponse = await client.PostAsync("/pivotforge/pivot", content);
+            await using var responseStream = await httpResponse.Content.ReadAsStreamAsync();
+            using var response = await JsonDocument.ParseAsync(responseStream);
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, httpResponse.StatusCode);
+            Assert.Equal(
+                ["North", "South"],
                 response.RootElement.GetProperty("rowHeaders")
                     .EnumerateArray()
                     .Select(header => header[0].GetString()!)
@@ -486,14 +573,15 @@ public sealed class PivotForgeAspNetCoreTests
     private static async Task<JsonElement> PostLargeStartAsync(
         HttpClient client,
         int pageSize,
-        string requestScope = "")
+        string requestScope = "",
+        string extraMembers = "")
     {
         var json = $$"""
             {
               "rows": ["Region"],
               "columns": [],
               "values": [{ "field": "Amount", "aggregation": "sum" }],
-              "filters": [],
+              "filters": [],{{extraMembers}}
               "pageSize": {{pageSize}},
               "sourceRowCount": 1000
             }

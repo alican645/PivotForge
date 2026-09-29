@@ -505,7 +505,8 @@
       // The same reasoning, for the attributes that are only meaningful in some
       // areas: each is carried into the areas that accept it and dropped
       // elsewhere, because a row field dragged into the column zone must not
-      // arrive still holding showTotals -- normalizeField refuses it there.
+      // arrive still holding showTotals -- normalizeField refuses it there. The
+      // same holds for sortByValueKey.
       // areaIndex is deliberately absent: it declares the opening order, and
       // re-emitting it would undo the drag that just changed the order.
       const declaredIn = (name, area) => {
@@ -515,6 +516,7 @@
         return {
           ...(isRow && field.expanded === false ? { expanded: false } : {}),
           ...(isRow && field.showTotals === false ? { showTotals: false } : {}),
+          ...(isRow && field.sortByValueKey ? { sortByValueKey: field.sortByValueKey } : {}),
           ...((isRow || area === "column") && field.sortOrder
             ? { sortOrder: field.sortOrder }
             : {})

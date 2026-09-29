@@ -29,7 +29,8 @@ public class PivotTagHelperTests
         bool? ShowTotals = null,
         int? AreaIndex = null,
         PivotSortDirection? SortOrder = null,
-        PivotGroupInterval? GroupInterval = null);
+        PivotGroupInterval? GroupInterval = null,
+        string? SortByValueKey = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -125,6 +126,12 @@ public class PivotTagHelperTests
         {
             helper.GroupInterval = groupInterval;
             attributes.Add(new TagHelperAttribute("group-interval", groupInterval.ToString()));
+        }
+
+        if (spec.SortByValueKey is not null)
+        {
+            helper.SortByValueKey = spec.SortByValueKey;
+            attributes.Add(new TagHelperAttribute("sort-by-value-key", spec.SortByValueKey));
         }
 
         return (helper, attributes);
@@ -804,6 +811,22 @@ public class PivotTagHelperTests
 
         Assert.False(fields[1].TryGetProperty("areaIndex", out _));
         Assert.False(fields[1].TryGetProperty("sortOrder", out _));
+    }
+
+    [Fact]
+    public async Task WritesSortByValueKeyOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge"),
+            new FieldSpec("Category", PivotArea.Row, "Kategori",
+                SortOrder: PivotSortDirection.Descending, SortByValueKey: "Amount_sum"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var fields = declared.GetProperty("fields");
+        Assert.False(fields[0].TryGetProperty("sortByValueKey", out _));
+        Assert.Equal("Amount_sum", fields[1].GetProperty("sortByValueKey").GetString());
+        Assert.Equal("Descending", fields[1].GetProperty("sortOrder").GetString());
     }
 
     [Fact]

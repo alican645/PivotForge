@@ -20,6 +20,7 @@ public sealed class PivotFieldBuilder
     private bool? _showTotals;
     private int? _areaIndex;
     private PivotSortDirection? _sortOrder;
+    private string? _sortByValueKey;
     private PivotGroupInterval? _groupInterval;
 
     /// <summary>Sets the source field name.</summary>
@@ -201,6 +202,22 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Orders this row field's level by a summary value instead of its labels.</summary>
+    /// <remarks>
+    /// Groups are ordered inside their parent group, so every region's categories run by amount
+    /// within that region. The direction comes from <see cref="SortOrder"/>, ascending when it is
+    /// not set. A sort the user applies from the cell menu still wins over this. Valid on
+    /// <see cref="PivotArea.Row"/> fields only.
+    /// </remarks>
+    /// <param name="valueKey">The value key, as <c>Field_aggregation</c>. See <see cref="PivotValueKey"/>.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder SortByValueKey(string valueKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(valueKey);
+        _sortByValueKey = valueKey;
+        return this;
+    }
+
     /// <summary>Collapses a date field's values into year, quarter, month, day or weekday groups.</summary>
     /// <remarks>
     /// Grouping happens where the header is read, so no second source column is needed — and the
@@ -224,7 +241,8 @@ public sealed class PivotFieldBuilder
     /// <see cref="PivotArea.Data"/>), or <see cref="Aggregation"/>/<see cref="ShowAs"/> was set on a field whose
     /// <see cref="Area"/> is not <see cref="PivotArea.Data"/>, <see cref="Expanded"/>/<see cref="ShowTotals"/>
     /// was set outside <see cref="PivotArea.Row"/>, or <see cref="SortOrder"/> was set outside
-    /// <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/>.
+    /// <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/>, or <see cref="SortByValueKey"/> was set
+    /// outside <see cref="PivotArea.Row"/>.
     /// </exception>
     public IDictionary<string, object?> Build()
     {
@@ -274,6 +292,15 @@ public sealed class PivotFieldBuilder
             throw new InvalidOperationException(
                 $"Field \"{_dataField}\" sets SortOrder, but its Area is \"{_area}\". " +
                 "SortOrder is only valid on fields whose Area is Row or Column.");
+        }
+
+        // Ordering a level by value is implemented on the row axis only: the
+        // column axis is the product of its levels and has no such order.
+        if (_area != PivotArea.Row && _sortByValueKey is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets SortByValueKey, but its Area is \"{_area}\". " +
+                "SortByValueKey is only valid on fields whose Area is Row.");
         }
 
         // A measure is aggregated, not grouped: collapsing it to a month would
@@ -338,6 +365,11 @@ public sealed class PivotFieldBuilder
         if (_sortOrder is { } sortOrder)
         {
             field["sortOrder"] = sortOrder.ToString();
+        }
+
+        if (_sortByValueKey is { } sortByValueKey)
+        {
+            field["sortByValueKey"] = sortByValueKey;
         }
 
         if (HasFormat)
