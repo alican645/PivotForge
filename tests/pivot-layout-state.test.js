@@ -876,6 +876,34 @@ test("a declared showTotals survives a layout mutation", () => {
   assert.equal(carried.expanded, false);
 });
 
+test("a declared showGrandTotals survives a layout mutation", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.area === "data" ? { ...field, showGrandTotals: false } : field));
+  const measure = catalog.find(field => field.area === "data").dataField;
+
+  state.reorder("row", 0, 1);
+  const [carried] = PivotForge.PivotRequestBuilder
+    .normalizeFields(state.toFields())
+    .filter(field => field.dataField === measure && field.area === "data");
+
+  assert.equal(carried.showGrandTotals, false);
+});
+
+test("a measure dragged in from the field list brings its showGrandTotals", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Quantity" ? { ...field, showGrandTotals: false } : field));
+
+  state.move("Quantity", "data");
+  const quantity = PivotForge.PivotRequestBuilder
+    .normalizeFields(state.toFields())
+    .find(field => field.dataField === "Quantity");
+
+  assert.equal(quantity.area, "data");
+  assert.equal(quantity.showGrandTotals, false);
+});
+
 test("a declared sortOrder survives a layout mutation", () => {
   const state = new PivotForge.PivotLayoutState(
     catalog.map(field =>

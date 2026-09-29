@@ -73,6 +73,11 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("show-totals")]
     public bool? ShowTotals { get; set; }
 
+    /// <summary>Gets or sets whether this data field's values appear in the grand totals.</summary>
+    /// <remarks>Valid on <c>Data</c> fields, and on <c>Available</c> fields with the <c>Measure</c> role.</remarks>
+    [HtmlAttributeName("show-grand-totals")]
+    public bool? ShowGrandTotals { get; set; }
+
     /// <summary>Gets or sets this field's position among the fields sharing its area.</summary>
     /// <remarks>The opening order only; after that the layout owns the order.</remarks>
     [HtmlAttributeName("area-index")]
@@ -207,6 +212,11 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (ShowTotals is { } showTotals)
         {
             builder.ShowTotals(showTotals);
+        }
+
+        if (ShowGrandTotals is { } showGrandTotals)
+        {
+            builder.ShowGrandTotals(showGrandTotals);
         }
 
         if (AreaIndex is { } areaIndex)

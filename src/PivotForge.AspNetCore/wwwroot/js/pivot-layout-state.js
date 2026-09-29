@@ -549,7 +549,10 @@
           aggregation: value.aggregation,
           showAs: value.showAs,
           format: value.format ?? null,
-          visible: visibleOf(value.field)
+          visible: visibleOf(value.field),
+          // Only a data field may hold it, so it rides along with this area
+          // alone: the same measure dragged out to a row drops it.
+          ...(this.field(value.field).showGrandTotals === false ? { showGrandTotals: false } : {})
         })),
         // Only the entries whose field is not seated elsewhere: a row field
         // filtered from its header has an entry too, and emitting that as a

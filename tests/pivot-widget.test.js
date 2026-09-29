@@ -637,7 +637,7 @@ test("each data field reaches the renderer as a value definition", async () => {
     await widget.refresh();
 
     assert.deepEqual(renders.at(-1).values, [
-      { key: "tutar_sum", label: "Tutar", aggregation: "sum", showAs: "normal", format: null }
+      { key: "tutar_sum", label: "Tutar", aggregation: "sum", showAs: "normal", format: null, showGrandTotals: true }
     ]);
 
     widget.dispose();

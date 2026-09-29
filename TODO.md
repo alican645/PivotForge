@@ -87,7 +87,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `sortBySummaryField` / `Path` | ⚠️ | ⚠️ | `RowTotalValue` var ama sütun yoluna göre değil |
 | `expanded` | ✅ | ✅ | Alan başına başlangıç durumu; yalnızca ilk çizimde |
 | `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
-| `showGrandTotals` (alan başına) | ❌ | ❌ | Yalnızca tablo geneli |
+| `showGrandTotals` (alan başına) | ✅ | ✅ | `show-grand-totals` niteliği ve `ShowGrandTotals()` metodu; grid düzeyinde `show-row-grand-totals` / `show-column-grand-totals` |
 | `dataType` | ❌ | ❌ | Tür dönüşümü yok |
 | `groupInterval` (yıl/çeyrek/ay/gün) | ✅ | ✅ | `group-interval` niteliği ve `GroupInterval()` metodu; aynı kolon birden fazla seviyede |
 | `selector` / `sortingMethod` | ❌ | ❌ | Özel gruplama/sıralama fonksiyonu |
@@ -123,8 +123,14 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
       toplamlarını kaldırıyor; bu, ara toplamlar tümüyle kapalıyken zaten
       kullanılan satır şeklinin aynısı, yani derin bir hiyerarşi yalnızca
       toplanmaya değer seviyelerde toplam gösterebiliyor
-- [ ] Alan başına `show-grand-totals` — DevExpress'te sütun yönünde de anlamı
-      var, renderer'da karşılığı yok; ayrı bir tasarım kararı gerektiriyor
+- [x] Alan başına `show-grand-totals` — DevExtreme'deki gibi yalnızca Data
+      alanında: `false` o ölçünün sağdaki genel toplam sütununu kaldırıyor.
+      Alttaki genel toplam satırı sütunları topladığı için yerinde kalıyor;
+      yalnızca bütün ölçüler vazgeçince o da kalkıyor. Eksik olan sütun
+      yönüydü: sağdaki toplam sütununu kapatan bir ayar yoktu, bu yüzden grid
+      düzeyinde `show-column-grand-totals` eklendi ve alttaki satır
+      `show-row-grand-totals` adını aldı (`show-grand-total` eski adı olarak
+      çalışıyor). Sütun ekseninde ara toplamlar hâlâ yok, ayrı bir iş
 - [x] `group-interval` — tarih alanlarını yıl/çeyrek/ay/gün/haftanın-günü olarak
       gruplama. Gruplama başlığın okunduğu yerde olduğu için kaynakta ikinci bir
       kolon gerekmiyor ve **aynı kolon birden fazla seviyede** yer alabiliyor;

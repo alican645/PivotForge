@@ -136,6 +136,17 @@
       }
     });
 
+    // A grand total belongs to a measure: it is that value summed over the whole
+    // row or column axis. A dimension has no such total to switch off. A measure
+    // still waiting in the field list may declare it, because the catalog is the
+    // only place it can live until the user drags it into the data area.
+    const holdsGrandTotals = isData || (area === "available" && role === "measure");
+    if (!holdsGrandTotals && field.showGrandTotals !== undefined) {
+      throw new Error(
+        `"showGrandTotals" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+
     const areaIndex = field.areaIndex;
     if (areaIndex !== undefined &&
       (!Number.isInteger(areaIndex) || areaIndex < 0)) {
@@ -206,6 +217,7 @@
       // these existed.
       expanded: isRow ? field.expanded !== false : null,
       showTotals: isRow ? field.showTotals !== false : null,
+      showGrandTotals: holdsGrandTotals ? field.showGrandTotals !== false : null,
       visible: field.visible !== false
     };
   }

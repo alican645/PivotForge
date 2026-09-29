@@ -292,6 +292,50 @@ test("a non-row field that declares neither is untouched", () => {
   assert.equal(field.showTotals, null);
 });
 
+test("showGrandTotals defaults to true on a data field and is carried as declared", () => {
+  const [plain, declared] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Amount", area: "data" },
+    { dataField: "Quantity", area: "data", showGrandTotals: false }
+  ]);
+
+  assert.equal(plain.showGrandTotals, true);
+  assert.equal(declared.showGrandTotals, false);
+});
+
+test("showGrandTotals is refused on a field that is not a measure", () => {
+  // A grand total is a measure summed over an axis: a dimension has none.
+  ["row", "column", "filter"].forEach(area => {
+    assert.throws(
+      () => PivotForge.PivotRequestBuilder.normalizeFields([
+        { dataField: "Region", area, showGrandTotals: false }
+      ]),
+      /"showGrandTotals" is only valid on a "data" field/,
+      area);
+  });
+
+  assert.throws(
+    () => PivotForge.PivotRequestBuilder.normalizeFields([
+      { dataField: "Region", area: "available", role: "dimension", showGrandTotals: false }
+    ]),
+    /"showGrandTotals" is only valid on a "data" field/);
+});
+
+test("a measure waiting in the field list may declare showGrandTotals", () => {
+  const [field] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Amount", area: "available", role: "measure", showGrandTotals: false }
+  ]);
+
+  assert.equal(field.showGrandTotals, false);
+});
+
+test("a dimension carries no showGrandTotals at all", () => {
+  const [field] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Region", area: "row" }
+  ]);
+
+  assert.equal(field.showGrandTotals, null);
+});
+
 test("areaIndex decides the order of the fields sharing an area", () => {
   const request = PivotRequestBuilder.buildRequest([
     { dataField: "Category", area: "row", areaIndex: 1 },

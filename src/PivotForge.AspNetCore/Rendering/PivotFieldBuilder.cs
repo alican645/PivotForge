@@ -18,6 +18,7 @@ public sealed class PivotFieldBuilder
     private bool _visible = true;
     private bool? _expanded;
     private bool? _showTotals;
+    private bool? _showGrandTotals;
     private int? _areaIndex;
     private PivotSortDirection? _sortOrder;
     private string? _sortByValueKey;
@@ -166,6 +167,23 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Sets whether this data field's values appear in the grand totals.</summary>
+    /// <remarks>
+    /// False drops this value's column from the grand total block on the right; the other values keep
+    /// theirs. The grand total row along the bottom stays until every value has opted out, as in
+    /// DevExtreme, because its cells total the grid's columns. The engine still computes the
+    /// total, so <see cref="PivotShowAs.PercentOfGrandTotal"/> is unaffected. Valid on
+    /// <see cref="PivotArea.Data"/> fields, and on <see cref="PivotArea.Available"/> fields whose
+    /// <see cref="Role"/> is <see cref="PivotFieldRole.Measure"/>.
+    /// </remarks>
+    /// <param name="showGrandTotals">False to leave this value out of the grand totals.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder ShowGrandTotals(bool showGrandTotals)
+    {
+        _showGrandTotals = showGrandTotals;
+        return this;
+    }
+
     /// <summary>Sets this field's position among the fields sharing its area.</summary>
     /// <remarks>
     /// The opening order only: once the user moves a chip the layout owns the order, and a stored
@@ -240,7 +258,8 @@ public sealed class PivotFieldBuilder
     /// a <see cref="Role"/> contradicts its <see cref="Area"/> (e.g., <see cref="PivotFieldRole.Measure"/> outside
     /// <see cref="PivotArea.Data"/>), or <see cref="Aggregation"/>/<see cref="ShowAs"/> was set on a field whose
     /// <see cref="Area"/> is not <see cref="PivotArea.Data"/>, <see cref="Expanded"/>/<see cref="ShowTotals"/>
-    /// was set outside <see cref="PivotArea.Row"/>, or <see cref="SortOrder"/> was set outside
+    /// was set outside <see cref="PivotArea.Row"/>, <see cref="ShowGrandTotals"/> was set on a field that is not a
+    /// measure, or <see cref="SortOrder"/> was set outside
     /// <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/>, or <see cref="SortByValueKey"/> was set
     /// outside <see cref="PivotArea.Row"/>.
     /// </exception>
@@ -284,6 +303,18 @@ public sealed class PivotFieldBuilder
             throw new InvalidOperationException(
                 $"Field \"{_dataField}\" sets Expanded or ShowTotals, but its Area is \"{_area}\". " +
                 "Expanded and ShowTotals are only valid on fields whose Area is Row.");
+        }
+
+        // A grand total is a measure summed over a whole axis, so a dimension has
+        // none to switch off. A measure still in the field list may carry it,
+        // ready for when the user drags it into the data area.
+        var holdsGrandTotals = _area == PivotArea.Data ||
+            (_area == PivotArea.Available && _role == PivotFieldRole.Measure);
+        if (!holdsGrandTotals && _showGrandTotals is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets ShowGrandTotals, but its Area is \"{_area}\". " +
+                "ShowGrandTotals is only valid on fields whose Area is Data, or Available with the Measure role.");
         }
 
         // Only the row and column axes draw a header level to order.
@@ -355,6 +386,11 @@ public sealed class PivotFieldBuilder
         if (_showTotals is { } showTotals)
         {
             field["showTotals"] = showTotals;
+        }
+
+        if (_showGrandTotals is { } showGrandTotals)
+        {
+            field["showGrandTotals"] = showGrandTotals;
         }
 
         if (_areaIndex is { } areaIndex)
