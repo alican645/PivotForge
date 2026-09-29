@@ -98,6 +98,11 @@ the endpoints a way to say no.
 
 ### Fixed
 
+- **AspNetCore** — the large-data endpoint's cache identity now includes
+  `FieldSorts`, `TopN` and `HideEmptySummaryCells`. Two requests differing
+  only in one of them used to share a session, so a changed sort, ranking or
+  empty-cell setting was served the earlier result until the entry expired.
+
 - **AspNetCore** — the header filter funnel's glyph leaked into exported files.
   It had been reaching the `.xlsx` since the header filter shipped, and would
   have reached the new `.csv` too.

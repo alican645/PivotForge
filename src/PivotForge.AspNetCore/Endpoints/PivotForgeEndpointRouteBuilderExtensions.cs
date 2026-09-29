@@ -97,6 +97,11 @@ public static class PivotForgeEndpointRouteBuilderExtensions
                     request.Values,
                     request.Filters,
                     request.RowSort,
+                    // Each of these changes which rows the result holds or their order,
+                    // so two requests differing only here must not share a result.
+                    request.FieldSorts,
+                    request.TopN,
+                    request.HideEmptySummaryCells,
                     SourceRowCount = sourceRowCount,
                     RequestScope = CreateRequestScopeIdentity(httpContext)
                 },
