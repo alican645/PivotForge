@@ -5,7 +5,7 @@
 Let a row field order its own header level by a summary value, declaratively:
 
 ```html
-<pivot-field data-field="Category" area="Row"
+<pivot-field field="Category" area="Row"
              sort-by-value-key="Amount_sum" sort-order="Descending" />
 ```
 

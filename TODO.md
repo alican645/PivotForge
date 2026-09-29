@@ -83,7 +83,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `format` / `precision` | ✅ | ✅ | `0.4.0-preview.1`'de eklendi |
 | `areaIndex` | ✅ | ✅ | `area-index` niteliği ve `AreaIndex()` metodu |
 | `sortOrder` | ✅ | ✅ | `sort-order` niteliği; satır ve sütun ekseninde seviye başına yön |
-| `sortBy` | ⚠️ | ❌ | Özet değere göre seviye sıralaması yok; yalnızca tablo geneli |
+| `sortBy` | ✅ | ✅ | `sort-by-value-key` niteliği ve `SortByValueKey()` metodu; yalnızca satır ekseni |
 | `sortBySummaryField` / `Path` | ⚠️ | ⚠️ | `RowTotalValue` var ama sütun yoluna göre değil |
 | `expanded` | ✅ | ✅ | Alan başına başlangıç durumu; yalnızca ilk çizimde |
 | `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
@@ -110,7 +110,12 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
       (ay adlarını ay numarasına göre sıralayan bir sorgu alfabetik sıralamayla
       bozulurdu). Kullanıcının başlığa tıklayarak kurduğu sıralama bildirime
       üstün gelir
-- [ ] Alan başına `sort-by` — özet değere göre seviye sıralaması
+- [x] Alan başına `sort-by` — `sort-by-value-key="Amount_sum"` satır seviyesini
+      özet değere göre, **üst grubunun içinde** sıralıyor; yön `sort-order`'dan
+      geliyor. Ara seviye alt toplamına, en derin seviye satır toplamına göre,
+      ikisi de `show-as` uygulanmış hâliyle — okuyucunun gördüğü sayıya göre.
+      Boş grup iki yönde de sonda, eşitlik etikete göre artan. Sütun ekseni ve
+      tasarımcı UI'ı kapsam dışı
 - [x] `expanded` başlangıç durumu — `Row` alanında `expanded="false"` o seviyenin
       gruplarını **ilk** çizimde kapatıyor; sonrası kullanıcıya ait ve geri
       yüklenen `state-storing` görünümü ona üstün geliyor

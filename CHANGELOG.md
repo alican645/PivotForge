@@ -86,6 +86,15 @@ the endpoints a way to say no.
 - **AspNetCore** — declarative `pivot-top-n`, `hide-empty-summary-cells`, and an
   `operator` attribute on `pivot-filter`; `designerLabels` reaches the field
   designer's labels for the first time.
+- **Core** — `PivotFieldSort.ValueKey`: a row level orders its groups by a
+  value's summary inside their parent group — an inner level by its subtotal,
+  the deepest by its row total, both as shown after `show-as`. Groups with no
+  value sort last in either direction; equal values break on the label. The
+  record gained a third, optional constructor parameter, so code compiled
+  against an earlier preview must be rebuilt.
+- **AspNetCore** — `sort-by-value-key` on `<pivot-field>` and
+  `PivotFieldBuilder.SortByValueKey()`, row fields only; the direction comes
+  from `sort-order`.
 
 ### Fixed
 
