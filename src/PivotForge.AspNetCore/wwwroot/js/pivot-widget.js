@@ -124,6 +124,16 @@
     return found;
   }
 
+  // Two column paths name the same column when both are absent (the row total)
+  // or they match value for value.
+  function sameSortColumnPath(left, right) {
+    if (!left || !right) {
+      return !left && !right;
+    }
+
+    return left.length === right.length && left.every((value, index) => value === right[index]);
+  }
+
   function normalizePrefix(prefix) {
     const trimmed = String(prefix ?? "").trim();
     const withLeading = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
@@ -479,7 +489,7 @@
         columnFields: columnFields.map(field => field.key),
         columnFieldLabels: columnFields.map(field => field.caption),
         onSortRequested: this.options.allowSorting
-          ? request => { this.sortBy(request); }
+          ? request => { this.sortBy(this.nextHeaderSort(request)); }
           : null,
         onFilterRequested: this.canHeaderFilter()
           ? (field, anchor) => { this.openHeaderFilter(field, anchor); }
@@ -1104,6 +1114,32 @@
       this.controller?.abort();
       this.controller = null;
       this.loading = false;
+    }
+
+    // A header click (or the context menu's "sort by value") carries only what
+    // to sort by, never a direction: the renderer does not know the current
+    // sort's direction well enough to flip it. Left without one, every click
+    // re-sent the same ascending sort, so a second click on the same header
+    // never reversed it. The direction is decided here instead: the header
+    // that is already sorted flips, any other starts where the demo does --
+    // labels A to Z, values largest first.
+    nextHeaderSort(request) {
+      if (!request || request.direction) {
+        return request;
+      }
+
+      const current = this.rowSort;
+      const sameTarget = Boolean(current) && current.mode === request.mode && (
+        request.mode === "RowLabel"
+          ? current.field === request.field
+          : current.valueKey === request.valueKey &&
+            sameSortColumnPath(current.columnPath ?? null, request.columnPath ?? null));
+      const initial = request.mode === "RowTotalValue" ? "Descending" : "Ascending";
+      const direction = sameTarget
+        ? (current.direction === "Descending" ? "Ascending" : "Descending")
+        : initial;
+
+      return { ...request, direction };
     }
 
     async sortBy(sort) {
