@@ -2778,6 +2778,274 @@ select {
   background: rgba(180, 35, 24, 0.06);
 }
 
+/* --- Calculated fields ------------------------------------------------------ */
+
+.pivot-search.has-action {
+  display: flex;
+  gap: 4px;
+}
+
+.pivot-search__add {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--pt-border);
+  border-radius: 4px;
+  background: var(--pt-panel);
+  color: var(--pt-accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pivot-search__add:hover,
+.pivot-search__add:focus-visible {
+  border-color: var(--pt-accent);
+}
+
+/* Says the value is computed rather than read from the source, which the
+   caption alone cannot. */
+.pivot-chip__badge {
+  flex: 0 0 auto;
+  color: var(--pt-accent);
+  font-size: 0.6875rem;
+  font-style: italic;
+  font-weight: 600;
+}
+
+.pivot-value-settings__formula {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: var(--pt-panel-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.pivot-value-settings__formula-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  resize: vertical;
+}
+
+.pivot-value-settings__formula-input[aria-invalid="true"] {
+  border-color: var(--pt-danger);
+}
+
+.pivot-value-settings__error {
+  color: var(--pt-danger);
+  font-size: 0.75rem;
+}
+
+.pivot-value-settings__error[hidden] {
+  display: none;
+}
+
+.pivot-value-settings__hint {
+  margin: 0;
+  color: var(--pt-muted);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+
+/* The formula builder. Everything a reader presses is a large target with a
+   word on it, because it is meant for readers who find a typed formula, and
+   small controls, hard going. */
+.pivot-value-settings__dialog.is-formula {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.pivot-value-settings__body [hidden] {
+  display: none !important;
+}
+
+.pivot-formula__strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 12px;
+  min-height: 64px;
+  padding: 14px 12px 10px;
+  border: 2px dashed var(--pt-border);
+  border-radius: 8px;
+  background: var(--pt-panel-soft);
+}
+
+.pivot-formula__strip.is-drop-target {
+  border-color: var(--pt-accent);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.pivot-formula__empty {
+  color: var(--pt-muted);
+  font-size: 1rem;
+}
+
+.pivot-formula__token {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 4px 14px;
+  border: 1px solid var(--pt-border);
+  border-radius: 8px;
+  background: var(--pt-panel);
+  color: var(--pt-text);
+  font-size: 1rem;
+}
+
+.pivot-formula__token.is-field {
+  border-color: var(--pt-accent);
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--pt-accent-strong);
+  font-weight: 600;
+}
+
+.pivot-formula__token.is-op,
+.pivot-formula__token.is-open,
+.pivot-formula__token.is-close {
+  font-size: 1.375rem;
+  font-weight: 700;
+}
+
+/* Where a dragged field will land. */
+.pivot-formula__token.is-drop-before {
+  box-shadow: -5px 0 0 -1px var(--pt-accent);
+}
+
+.pivot-formula__token.is-drop-after {
+  box-shadow: 5px 0 0 -1px var(--pt-accent);
+}
+
+.pivot-formula__summary {
+  min-height: 32px;
+  border: 1px solid var(--pt-border);
+  border-radius: 6px;
+  background: var(--pt-panel);
+  color: var(--pt-text);
+  font-size: 0.875rem;
+}
+
+/* A corner badge rather than an inline ×, so taking a piece out never looks
+   like the multiplication sign beside it. */
+.pivot-formula__remove {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--pt-border);
+  border-radius: 50%;
+  background: var(--pt-panel);
+  color: var(--pt-danger);
+  cursor: pointer;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.pivot-formula__remove:hover,
+.pivot-formula__remove:focus-visible {
+  border-color: var(--pt-danger);
+  background: rgba(180, 35, 24, 0.1);
+}
+
+.pivot-formula__next {
+  margin: 0;
+  color: var(--pt-accent-strong);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.pivot-formula__palette,
+.pivot-formula__operators {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.pivot-formula__operators {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+
+.pivot-formula__field,
+.pivot-formula__operator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 12px;
+  border: 1px solid var(--pt-border);
+  border-radius: 8px;
+  background: var(--pt-panel);
+  color: var(--pt-text);
+  cursor: pointer;
+  font-size: 1rem;
+  text-align: left;
+}
+
+/* A finger drags a field instead of scrolling the dialog. */
+.pivot-formula__field {
+  border-color: var(--pt-accent);
+  color: var(--pt-accent-strong);
+  font-weight: 600;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.pivot-formula__field:hover,
+.pivot-formula__field:focus-visible,
+.pivot-formula__operator:hover,
+.pivot-formula__operator:focus-visible {
+  border-color: var(--pt-accent);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.pivot-formula__symbol {
+  width: 1.25em;
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pivot-formula__number .pivot-value-settings__input {
+  flex: 1 1 120px;
+  font-size: 1rem;
+}
+
+.pivot-formula__actions .pivot-value-settings__choice {
+  min-width: 110px;
+  min-height: 44px;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.pivot-formula__tools .pivot-value-settings__choice,
+.pivot-formula__number .pivot-value-settings__choice {
+  min-height: 40px;
+  font-size: 0.875rem;
+}
+
+.pivot-formula__ghost {
+  position: fixed;
+  z-index: 10000;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--pt-accent);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  pointer-events: none;
+  transform: translate(-50%, -120%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+}
+
 /* --- Adaptive layout -------------------------------------------------------- */
 
 /* The designer is laid out by the width it was given rather than the viewport:

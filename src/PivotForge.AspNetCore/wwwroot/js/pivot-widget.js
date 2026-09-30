@@ -14,6 +14,9 @@
     // page that turns this off gets no entry rather than a dead one.
     allowConditionalFormatting: true,
     conditionalPanelOptions: null,
+    // The designer's calculated field editor. Only a page with a designer shows
+    // it; a formula declared in the markup works whatever this says.
+    allowCalculatedFields: true,
     largeData: false,
     pageSize: 40,
     sourceRowCount: 100000,
@@ -229,10 +232,23 @@
         }
 
         this.layoutState = this.createLayoutState(restored);
+
+        // The designer shows the restored layout, so the grid has to draw it
+        // too. Without this the chips came back as saved while the first
+        // request still went out with the declared fields.
+        if (restored?.layout) {
+          this.options.fields = this.layoutState.toFields();
+          this.fields = PivotForge.PivotRequestBuilder.normalizeFields(this.options.fields);
+          // Built above from the declaration, and it labels headers from it.
+          if (this.renderer) {
+            this.renderer = this.createRenderer();
+          }
+        }
         this.designer = new PivotForge.PivotFieldDesigner(this.options.fieldDesigner, {
           state: this.layoutState,
           widget: this,
-          labels: this.designerLabels()
+          labels: this.designerLabels(),
+          allowCalculatedFields: this.options.allowCalculatedFields !== false
         });
         // Caption edits and filter-value picks never travel through a widget
         // method, so subscribing here is what makes them persist at all.
@@ -369,7 +385,11 @@
               rows: layout.rows,
               columns: layout.columns,
               values: layout.values,
-              filters: layout.filters
+              filters: layout.filters,
+              // Before the placements on the way back in, which may seat them.
+              ...(layout.calculatedFields.length > 0
+                ? { calculatedFields: layout.calculatedFields }
+                : {})
             },
             captions: layout.captions,
             sortOrders: layout.sortOrders

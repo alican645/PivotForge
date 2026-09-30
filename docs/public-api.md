@@ -9,6 +9,7 @@ This document records the supported public surface for `0.6.0-preview.1`. Public
 - `PivotEngine`: executes object, `DataTable`, and dictionary sources; supports cancellation and drill-down. `DistinctValues` / `DistinctValuesRecords` list the values a filter on a field can accept, in reading order. The parameterless constructor collates row labels with `CultureInfo.CurrentCulture`, resolved per call; `new PivotEngine(CultureInfo)` pins it. `PivotEngine.Project` reduces records to a chosen set of fields, which is how the ASP.NET drill-down endpoint honours an allow-list.
 - `PivotRequest`, `PivotFilter`, `PivotValueDefinition`, `PivotSort`, `PivotFieldSort`: define layout, filtering, values, show-as calculations, and ordering. `PivotSort` orders the row axis as a whole; `PivotRequest.FieldSorts` orders one row or column field's own header level within its parent group, and `PivotSort` wins over it on the row axis. `PivotFieldSort(string Field, PivotSortDirection Direction, string? ValueKey = null)`: with a `ValueKey`, a row level is ordered by that value's summary instead of its labels.
 - `PivotAggregation`, `PivotShowAs`, `PivotSortMode`, `PivotSortDirection`: configure calculations and ordering.
+- `PivotValueDefinition.Calculated(name, expression)` / `PivotValueDefinition.Expression` / `PivotAggregation.Calculated`: a value computed by a formula over other summaries, keyed `Name_calculated`. `PivotExpression.Parse` reads a formula and lists its `Fields`; `PivotExpressionException` reports an unreadable one with its `Position`. `PivotCustomAggregate` and `PivotEngine.CustomAggregates` register summaries a formula may call by name.
 - `PivotFilterMode`: whether a `PivotFilter`'s values are the ones to keep (`Include`, the default) or the ones to drop (`Exclude`). An empty value list restricts nothing in either mode.
 - `PivotResult`, `PivotCell`, `PivotTotal`, `PivotSubtotal`, `PivotMetadata`: represent completed pivot output.
 - `PivotResultPaginator`, `PivotResultPage`: create row-based pages from a completed result.
@@ -30,7 +31,7 @@ This document records the supported public surface for `0.6.0-preview.1`. Public
 - `MapPivotForgeEndpoints(pattern)` maps the route group. The default prefix is `/pivotforge`; a custom prefix may be supplied with or without a leading or trailing slash.
 - `PivotForgeDataProvider<TRecord>` and `PivotForgeDataRequest` define source loading.
 - `PivotTopN` / `PivotTopNMode` limit a row header level to its highest or lowest ranking groups, ranked after aggregation and counted inside each parent group. On `PivotRequest.TopN`; declared as `<pivot-top-n>` or `PivotGridBuilder.TopN`.
-- `PivotForgeOptions` configures cache duration, paging, source-row, drill-down, Excel, and filter value (`FieldValueLimit`) limits, plus `AllowedFields`, the set of source fields the endpoints may read.
+- `PivotForgeOptions` configures cache duration, paging, source-row, drill-down, Excel, and filter value (`FieldValueLimit`) limits, plus `AllowedFields`, the set of source fields the endpoints may read, and `CustomAggregates`, the summaries a calculated field's formula may call.
 
 ### HTTP models and cache extension point
 

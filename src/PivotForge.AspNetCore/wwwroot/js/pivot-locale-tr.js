@@ -94,6 +94,53 @@
         average: "Ortalama",
         min: "Minimum",
         max: "Maksimum"
+      },
+      calculatedField: "Hesaplanan alan",
+      addCalculatedField: "Hesaplanan alan ekle",
+      formula: "Formül",
+      formulaHint: "+ - * / ve parantez kullanın. [Alan] alanın toplamıdır; Sum, Count, Avg, Min ve Max onu başka türlü özetler. Örnek: [Gelir] - [Gider]",
+      insertField: "Alan ekle",
+      save: "Kaydet",
+      cancel: "Vazgeç",
+      editFormula: "Formülü düzenle",
+      deleteCalculatedField: "Hesaplanan alanı sil",
+      formulaErrors: {
+        noName: "Alana bir ad verin.",
+        empty: "Bir formül yazın.",
+        end: "Formül yarım kalmış.",
+        unexpected: "'{0}' burada beklenmiyor.",
+        bareWord: "Alan adlarını köşeli parantezle yazın: [{0}].",
+        unclosed: "Bir alan adının kapanış ] işareti eksik.",
+        emptyReference: "[] hiçbir alanı adlandırmıyor.",
+        number: "'{0}' bir sayı değil.",
+        argument: "{0}() köşeli parantezli bir alan alır, örneğin {0}([Tutar]).",
+        expected: "'{0}' eksik.",
+        unknownField: "[{0}] adında bir alan yok."
+      },
+      formulaBuilder: {
+        pickField: "1. Bir alan seçin",
+        pickOperator: "2. Bir işlem seçin",
+        dropHere: "Bir alanı buraya sürükleyin ya da aşağıdan dokunun.",
+        nextValue: "Sıradaki: bir alan ya da sayı ekleyin.",
+        nextOperator: "Sıradaki: bir işlem seçin ya da Kaydet'e basın.",
+        operators: {
+          "+": "Topla",
+          "-": "Çıkar",
+          "*": "Çarp",
+          "/": "Böl",
+          "(": "Parantez aç",
+          ")": "Parantez kapat"
+        },
+        number: "Sayı",
+        addNumber: "Sayı ekle",
+        invalidNumber: "'{0}' bir sayı değil.",
+        undo: "Geri al",
+        clear: "Temizle",
+        removeToken: "Kaldır",
+        summaryOf: "{0} nasıl özetlensin",
+        typeFormula: "Formülü yazarak gir",
+        useButtons: "Düğmelerle oluştur",
+        cannotShow: "Bu formül düğmelerle gösterilemiyor; yazarak düzenlemeye devam edin."
       }
     },
     filterPicker: {

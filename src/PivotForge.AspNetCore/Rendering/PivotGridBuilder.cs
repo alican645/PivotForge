@@ -92,6 +92,18 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder AllowConditionalFormatting(bool allow) =>
         Set("allowConditionalFormatting", allow);
 
+    /// <summary>Enables or disables defining calculated fields from the field designer.</summary>
+    /// <remarks>
+    /// On by default, and only visible where a field designer is attached. A reader's formula is
+    /// evaluated on the server like a declared one: it reaches only the fields the endpoints
+    /// already allow and the functions registered in <see cref="PivotForgeOptions.CustomAggregates"/>.
+    /// Calculated fields declared with <see cref="PivotFieldBuilder.Expression"/> work either way.
+    /// </remarks>
+    /// <param name="allow">True to offer the designer's calculated field editor.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder AllowCalculatedFields(bool allow) =>
+        Set("allowCalculatedFields", allow);
+
     /// <summary>Enables or disables the initial load performed when the grid is created.</summary>
     /// <param name="autoLoad">True to load data as soon as the grid is created.</param>
     /// <returns>The same builder.</returns>

@@ -12,5 +12,7 @@ public enum PivotAggregation
     /// <summary>Returns the smallest numeric value.</summary>
     Min,
     /// <summary>Returns the largest numeric value.</summary>
-    Max
+    Max,
+    /// <summary>Evaluates a formula over other summaries; see <see cref="PivotValueDefinition.Expression"/>.</summary>
+    Calculated
 }

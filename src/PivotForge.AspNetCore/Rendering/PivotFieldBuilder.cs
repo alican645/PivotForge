@@ -23,6 +23,7 @@ public sealed class PivotFieldBuilder
     private PivotSortDirection? _sortOrder;
     private string? _sortByValueKey;
     private PivotGroupInterval? _groupInterval;
+    private string? _expression;
 
     /// <summary>Sets the source field name.</summary>
     /// <param name="dataField">The source field name.</param>
@@ -66,6 +67,27 @@ public sealed class PivotFieldBuilder
     public PivotFieldBuilder Aggregation(PivotAggregation aggregation)
     {
         _aggregation = aggregation;
+        return this;
+    }
+
+    /// <summary>Makes this a calculated field, computed by a formula over other summaries.</summary>
+    /// <remarks>
+    /// <see cref="DataField"/> then names the calculated field rather than a source column, and
+    /// its value key is <c>Name_calculated</c>. The formula runs on the server after each cell,
+    /// subtotal and grand total has been aggregated, so <c>[Profit] / [Revenue]</c> is a true
+    /// margin at every level. See <see cref="PivotExpression"/> for the grammar. Valid on
+    /// <see cref="PivotArea.Data"/> fields, and on <see cref="PivotArea.Available"/> ones, which
+    /// it makes measures.
+    /// </remarks>
+    /// <param name="expression">The formula, such as <c>[Revenue] - [Cost]</c>.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="PivotExpressionException">The formula cannot be read.</exception>
+    public PivotFieldBuilder Expression(string expression)
+    {
+        // Parsed here so a typo in the markup fails the page that has it, rather than every
+        // request the grid later makes.
+        PivotExpression.Parse(expression);
+        _expression = expression;
         return this;
     }
 
@@ -271,6 +293,34 @@ public sealed class PivotFieldBuilder
                 "A pivot field requires DataField to be set before it can be rendered.");
         }
 
+        // A formula yields a number, so a calculated field in the field list can only ever be
+        // dropped into the data area: its role follows without being declared.
+        if (_expression is not null && _area == PivotArea.Available && _role is null)
+        {
+            _role = PivotFieldRole.Measure;
+        }
+
+        if (_expression is not null && !(_area == PivotArea.Data ||
+            (_area == PivotArea.Available && _role == PivotFieldRole.Measure)))
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets Expression, but its Area is \"{_area}\". " +
+                "Expression is only valid on fields whose Area is Data, or Available with the Measure role.");
+        }
+
+        // The formula is the aggregation: a calculated field has none of its own to choose.
+        if (_expression is not null && _aggregation is not null and not PivotAggregation.Calculated)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets both Expression and Aggregation. A calculated field's formula is its aggregation.");
+        }
+
+        if (_expression is null && _aggregation == PivotAggregation.Calculated)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets Aggregation to Calculated without an Expression.");
+        }
+
         if (_area == PivotArea.Available && _role is null)
         {
             throw new InvalidOperationException(
@@ -343,12 +393,15 @@ public sealed class PivotFieldBuilder
                 "GroupInterval is only valid on fields whose Area is not Data.");
         }
 
-        // Only a data field produces the numbers the renderer formats.
-        if (_area != PivotArea.Data && HasFormat)
+        // Only a data field produces the numbers the renderer formats. A measure still in
+        // the field list may carry one, which is applied when it is dragged into the data
+        // area -- the same allowance ShowGrandTotals makes, and the only way a calculated
+        // field offered in the list can arrive formatted.
+        if (!holdsGrandTotals && HasFormat)
         {
             throw new InvalidOperationException(
                 $"Field \"{_dataField}\" sets a Format, but its Area is \"{_area}\". " +
-                "Format is only valid on fields whose Area is Data.");
+                "Format is only valid on fields whose Area is Data, or Available with the Measure role.");
         }
 
         var field = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -363,7 +416,11 @@ public sealed class PivotFieldBuilder
             field["role"] = ToCamelCase(declaredRole.ToString());
         }
 
-        if (_aggregation is { } aggregation)
+        if (_expression is not null)
+        {
+            field["expression"] = _expression;
+        }
+        else if (_aggregation is { } aggregation)
         {
             field["aggregation"] = ToCamelCase(aggregation.ToString());
         }

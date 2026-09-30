@@ -39,6 +39,15 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("aggregation")]
     public PivotAggregation Aggregation { get; set; }
 
+    /// <summary>Gets or sets the formula that makes this a calculated field.</summary>
+    /// <remarks>
+    /// Such as <c>[Revenue] - [Cost]</c>; <c>field</c> then names the calculated field rather than a
+    /// source column. Valid on <c>Data</c> fields, and on <c>Available</c> ones, which it makes
+    /// measures. See <see cref="PivotExpression"/> for the grammar.
+    /// </remarks>
+    [HtmlAttributeName("expression")]
+    public string? Expression { get; set; }
+
     /// <summary>Gets or sets the secondary calculation applied to a data field.</summary>
     [HtmlAttributeName("show-as")]
     public PivotShowAs ShowAs { get; set; }
@@ -164,6 +173,11 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (_writtenAttributes.Contains("aggregation"))
         {
             builder.Aggregation(Aggregation);
+        }
+
+        if (Expression is not null)
+        {
+            builder.Expression(Expression);
         }
 
         if (_writtenAttributes.Contains("show-as"))

@@ -4,6 +4,12 @@
   const AREAS = ["row", "column", "data", "filter", "available"];
   const ROLES = ["dimension", "measure"];
   const AGGREGATIONS = ["sum", "count", "average", "min", "max"];
+  // Not among the choices above: a calculated field's formula is its aggregation,
+  // so this one is never picked, only implied by an expression.
+  const CALCULATED = "calculated";
+  // The summaries a formula may call without the server registering anything.
+  // Anything else is a custom aggregate, which only the server can resolve.
+  const FORMULA_FUNCTIONS = ["Sum", "Count", "Avg", "Average", "Min", "Max"];
   const FORMAT_TYPES = ["number", "currency", "percent"];
   const SORT_ORDERS = ["Ascending", "Descending"];
   const FILTER_MODES = ["Include", "Exclude"];
@@ -59,6 +65,177 @@
     "runningTotal"
   ];
 
+  // Mirrors PivotExpression on the server, so a formula typed into the designer is
+  // refused where it was typed rather than by a failed request. Evaluation stays on
+  // the server; this only reads the text and reports which fields it names. Errors
+  // carry a code and the position, so a locale can word them and the editor can put
+  // the caret where the problem is.
+  function parseExpression(text) {
+    const source = String(text ?? "");
+    let position = 0;
+    const summaries = [];
+
+    const fail = (code, detail, at = position) => {
+      const messages = {
+        empty: "A calculated field requires a formula.",
+        end: detail
+          ? `The formula ends where '${detail}' was expected.`
+          : "The formula ends where a value was expected.",
+        unexpected: `Unexpected '${detail}'.`,
+        bareWord: `'${detail}' is not a value. Field names are written in brackets, as [${detail}].`,
+        unclosed: "A field name is missing its closing ']'.",
+        emptyReference: "A field reference names no field.",
+        number: `'${detail}' is not a number.`,
+        argument: `${detail}() takes a field in brackets, such as ${detail}([Amount]).`,
+        expected: `Expected '${detail}'.`
+      };
+      const error = new Error(messages[code]);
+      error.code = code;
+      error.detail = detail ?? null;
+      error.position = at;
+      throw error;
+    };
+
+    const skip = () => {
+      while (position < source.length && /\s/.test(source[position])) {
+        position++;
+      }
+    };
+
+    const consume = (...candidates) => {
+      skip();
+      if (position < source.length && candidates.includes(source[position])) {
+        return source[position++];
+      }
+
+      return null;
+    };
+
+    const expect = expected => {
+      if (consume(expected) === null) {
+        fail(position < source.length ? "expected" : "end", expected);
+      }
+    };
+
+    const fieldName = () => {
+      const start = position;
+      const close = source.indexOf("]", position + 1);
+      if (close < 0) {
+        fail("unclosed", null, start);
+      }
+
+      const name = source.slice(position + 1, close).trim();
+      position = close + 1;
+      if (name === "") {
+        fail("emptyReference", null, start);
+      }
+
+      return name;
+    };
+
+    const primary = () => {
+      skip();
+      if (position >= source.length) {
+        fail("end");
+      }
+
+      const current = source[position];
+
+      if (current === "(") {
+        position++;
+        sum();
+        expect(")");
+        return;
+      }
+
+      if (current === "[") {
+        summaries.push({ function: "Sum", field: fieldName() });
+        return;
+      }
+
+      if (/[\d.]/.test(current)) {
+        const start = position;
+        while (position < source.length && /[\d.]/.test(source[position])) {
+          position++;
+        }
+
+        const written = source.slice(start, position);
+        if (!/^(\d+\.?\d*|\.\d+)$/.test(written)) {
+          fail("number", written, start);
+        }
+
+        return;
+      }
+
+      if (/[\p{L}_]/u.test(current)) {
+        const start = position;
+        while (position < source.length && /[\p{L}\p{N}_]/u.test(source[position])) {
+          position++;
+        }
+
+        const name = source.slice(start, position);
+        skip();
+        if (source[position] !== "(") {
+          fail("bareWord", name, start);
+        }
+
+        position++;
+        skip();
+        if (source[position] !== "[") {
+          fail("argument", name);
+        }
+
+        summaries.push({ function: name, field: fieldName() });
+        expect(")");
+        return;
+      }
+
+      fail("unexpected", current);
+    };
+
+    const unary = () => {
+      if (consume("-", "+") !== null) {
+        unary();
+        return;
+      }
+
+      primary();
+    };
+
+    const product = () => {
+      unary();
+      while (consume("*", "/") !== null) {
+        unary();
+      }
+    };
+
+    function sum() {
+      product();
+      while (consume("+", "-") !== null) {
+        product();
+      }
+    }
+
+    if (source.trim() === "") {
+      fail("empty", null, 0);
+    }
+
+    sum();
+    skip();
+    if (position < source.length) {
+      fail("unexpected", source[position]);
+    }
+
+    const fields = [];
+    summaries.forEach(({ field }) => {
+      if (!fields.some(known => known.toLowerCase() === field.toLowerCase())) {
+        fields.push(field);
+      }
+    });
+
+    return { fields, summaries };
+  }
+
   function normalizeField(field, index) {
     if (!field || typeof field !== "object") {
       throw new Error(`Field at index ${index} must be an object.`);
@@ -76,7 +253,36 @@
       );
     }
 
-    const inferredRole = area === "data" ? "measure" : area === "available" ? null : "dimension";
+    // A formula yields a number, so a calculated field can only ever be a measure:
+    // in the field list its role follows without being declared.
+    const expression = field.expression ?? null;
+    if (expression !== null) {
+      if (typeof expression !== "string" || expression.trim() === "") {
+        throw new Error(`"expression" on field "${dataField}" must be a non-empty string.`);
+      }
+
+      if (area !== "data" && area !== "available") {
+        throw new Error(
+          `"expression" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
+        );
+      }
+
+      if (field.aggregation !== undefined && field.aggregation !== CALCULATED) {
+        throw new Error(
+          `Field "${dataField}" sets both "expression" and "aggregation"; a calculated field's formula is its aggregation.`
+        );
+      }
+
+      try {
+        parseExpression(expression);
+      } catch (error) {
+        throw new Error(`Formula of field "${dataField}" is not valid: ${error.message}`);
+      }
+    }
+
+    const inferredRole = area === "data"
+      ? "measure"
+      : area === "available" ? (expression !== null ? "measure" : null) : "dimension";
     const role = field.role ?? inferredRole;
 
     if (role === null) {
@@ -98,7 +304,7 @@
     }
 
     const isData = area === "data";
-    if (!isData && field.aggregation !== undefined) {
+    if (!isData && field.aggregation !== undefined && expression === null) {
       throw new Error(
         `"aggregation" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
       );
@@ -110,8 +316,8 @@
       );
     }
 
-    const aggregation = isData ? field.aggregation ?? "sum" : null;
-    if (isData && !AGGREGATIONS.includes(aggregation)) {
+    const aggregation = isData ? (expression !== null ? CALCULATED : field.aggregation ?? "sum") : null;
+    if (isData && expression === null && !AGGREGATIONS.includes(aggregation)) {
       throw new Error(
         `Unknown aggregation "${aggregation}" on field "${dataField}". Expected one of: ${AGGREGATIONS.join(", ")}.`
       );
@@ -212,6 +418,7 @@
       caption: field.caption ?? dataField,
       aggregation,
       showAs,
+      expression,
       format: field.format ?? null,
       // Default true, so an undeclared field behaves exactly as it did before
       // these existed.
@@ -330,7 +537,8 @@
       values: values.map(field => ({
         field: field.dataField,
         aggregation: field.aggregation,
-        showAs: field.showAs
+        showAs: field.showAs,
+        ...(field.expression !== null ? { expression: field.expression } : {})
       })),
       // A filter names a level, so a grouped one has to be translated back into
       // the source field plus the interval its values are groups of -- the
@@ -409,8 +617,8 @@
 
   PivotForge.PivotRequestBuilder = {
     normalizeFields, normalizeFilter, buildRequest, valueKey, restricts,
-    normalizeRankings, comparisonType,
-    AGGREGATIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS, FILTER_MODES,
+    normalizeRankings, comparisonType, parseExpression,
+    AGGREGATIONS, CALCULATED, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS, FILTER_MODES,
     FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS
   };
 

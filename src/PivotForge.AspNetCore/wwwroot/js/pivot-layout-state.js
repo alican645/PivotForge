@@ -61,9 +61,16 @@
       // apart for the same reason the captions are: the declaration stays
       // recoverable and a saved view carries only what the user changed.
       this.sortOrders = new Map();
+      // Calculated fields the reader defined in the designer, by name. They live
+      // in the catalog like declared ones -- so every consumer handles them the
+      // same way -- and are listed here because they are the reader's to edit,
+      // to delete, and to carry in a saved view.
+      this.userCalculated = new Set();
       this.handlers = new Map();
 
       if (layout) {
+        // Before the placements, which may seat them.
+        this.adoptCalculatedFields(layout.calculatedFields);
         this.layout = this.adoptLayout(layout);
         this.adoptCaptions(layout.captions);
         this.adoptSortOrders(layout.sortOrders);
@@ -87,7 +94,7 @@
         columns: inArea("column").map(field => field.key),
         values: inArea("data").map(field => ({
           field: field.key,
-          aggregation: field.aggregation ?? "sum",
+          aggregation: this.defaultAggregation(field.key),
           showAs: field.showAs ?? "normal",
           ...(field.format ? { format: checkFormat(field.key, field.format) } : {})
         })),
@@ -118,7 +125,10 @@
       const { AGGREGATIONS, SHOW_AS } = PivotForge.PivotRequestBuilder;
 
       const assertAggregation = (name, aggregation) => {
-        if (!AGGREGATIONS.includes(aggregation)) {
+        // A calculated field has exactly one aggregation, and no other field has it.
+        if (this.isCalculated(name)
+          ? aggregation !== PivotForge.PivotRequestBuilder.CALCULATED
+          : !AGGREGATIONS.includes(aggregation)) {
           throw new Error(
             `Layout field "${name}" has unknown aggregation "${aggregation}". Expected one of: ${AGGREGATIONS.join(", ")}.`
           );
@@ -137,7 +147,7 @@
       (layout.columns ?? []).forEach(name => assertPlaceable(name, "column"));
       (layout.values ?? []).forEach(value => {
         assertPlaceable(value.field, "data");
-        assertAggregation(value.field, value.aggregation ?? "sum");
+        assertAggregation(value.field, value.aggregation ?? this.defaultAggregation(value.field));
         assertShowAs(value.field, value.showAs ?? "normal");
       });
       (layout.filters ?? []).forEach(filter => assertPlaceable(filter.field, "filter"));
@@ -152,7 +162,7 @@
 
           return {
             field: value.field,
-            aggregation: value.aggregation ?? "sum",
+            aggregation: value.aggregation ?? this.defaultAggregation(value.field),
             showAs: value.showAs ?? "normal",
             ...(format ? { format } : {})
           };
@@ -163,6 +173,157 @@
           PivotForge.PivotRequestBuilder.normalizeFilter(
             { ...filter, values: filter.values ?? [] }, index))
       };
+    }
+
+    // Whether a field is computed by a formula rather than read from the source.
+    isCalculated(name) {
+      return Boolean(this.catalog.get(name)?.expression);
+    }
+
+    // What a field brings into the data area when nothing says otherwise.
+    defaultAggregation(name) {
+      return this.isCalculated(name) ? PivotForge.PivotRequestBuilder.CALCULATED : "sum";
+    }
+
+    // Whether the reader defined this field, and so may change or delete it.
+    // A declared calculated field belongs to the page, like any declared field.
+    isUserCalculated(name) {
+      return this.userCalculated.has(name);
+    }
+
+    // The source fields a formula typed in the designer may name: every field
+    // the page declared, and no calculated one -- a formula reads summaries of
+    // the source, not the results of other formulas.
+    formulaFields() {
+      const seen = new Map();
+      this.catalog.forEach(field => {
+        if (!field.expression && !seen.has(field.dataField.toLowerCase())) {
+          seen.set(field.dataField.toLowerCase(), {
+            dataField: field.dataField,
+            caption: this.field(field.key).caption,
+            role: field.role
+          });
+        }
+      });
+
+      return [...seen.values()];
+    }
+
+    // Parses a formula and checks every field it names against the catalog.
+    // Throws the parser's error, or one with code "unknownField", so the editor
+    // can say what is wrong before anything reaches the server.
+    checkFormula(expression) {
+      const parsed = PivotForge.PivotRequestBuilder.parseExpression(expression);
+      const known = new Set(this.formulaFields().map(field => field.dataField.toLowerCase()));
+      const unknown = parsed.fields.find(field => !known.has(field.toLowerCase()));
+
+      if (unknown !== undefined) {
+        const error = new Error(`Field "${unknown}" is not in the field list.`);
+        error.code = "unknownField";
+        error.detail = unknown;
+        error.position = String(expression).indexOf(`[${unknown}`);
+        throw error;
+      }
+
+      return parsed;
+    }
+
+    // Defines a calculated field and seats it in the data area, which is the
+    // only place it can go and almost certainly where the reader wants it.
+    // Returns the name it was given: the caption is the reader's, the name is
+    // what keys its values, and it must never collide with a declared one.
+    addCalculatedField({ caption, expression } = {}) {
+      const trimmed = typeof caption === "string" ? caption.trim() : "";
+      if (!trimmed) {
+        const error = new Error("A calculated field requires a name.");
+        error.code = "noName";
+        throw error;
+      }
+
+      this.checkFormula(expression);
+
+      let counter = this.userCalculated.size + 1;
+      while (this.catalog.has(`calculated${counter}`)) {
+        counter++;
+      }
+
+      const name = `calculated${counter}`;
+      this.defineCalculated(name, trimmed, expression);
+      this.layout.values.push({
+        field: name,
+        aggregation: PivotForge.PivotRequestBuilder.CALCULATED,
+        showAs: "normal"
+      });
+      this.emitChange();
+      return name;
+    }
+
+    // Replaces a reader-defined field's formula. The name, the caption and every
+    // setting on its value entry stay as they were.
+    setExpression(name, expression) {
+      if (!this.isUserCalculated(name)) {
+        throw new Error(`Field "${name}" is not a calculated field defined in the designer.`);
+      }
+
+      this.checkFormula(expression);
+      this.defineCalculated(name, this.catalog.get(name).caption, expression);
+      this.emitChange();
+    }
+
+    // Forgets a reader-defined field altogether, rather than returning it to the
+    // field list the way remove() would.
+    deleteCalculatedField(name) {
+      if (!this.isUserCalculated(name)) {
+        throw new Error(`Field "${name}" is not a calculated field defined in the designer.`);
+      }
+
+      if (this.areaOf(name) === "data" && this.layout.values.length === 1) {
+        throw new Error(
+          `Field "${name}" is the last field in the data area and a pivot requires at least one.`
+        );
+      }
+
+      this.detach(name);
+      this.catalog.delete(name);
+      this.captions.delete(name);
+      this.userCalculated.delete(name);
+      this.emitChange();
+    }
+
+    defineCalculated(name, caption, expression) {
+      const [normalized] = PivotForge.PivotRequestBuilder.normalizeFields([
+        { dataField: name, caption, area: "available", expression }
+      ]);
+      this.catalog.set(name, normalized);
+      this.userCalculated.add(name);
+    }
+
+    // Restores what getState() emitted. An entry that no longer makes sense --
+    // a name the page has since declared, a formula naming a field the catalog
+    // dropped -- is skipped rather than fatal, the bargain captions make: a
+    // saved view should still open with what it can honour, and a placement of
+    // a skipped field then falls back to the declared layout as a whole.
+    adoptCalculatedFields(entries) {
+      if (!Array.isArray(entries)) {
+        return;
+      }
+
+      entries.forEach(entry => {
+        const name = entry?.name;
+        const caption = typeof entry?.caption === "string" ? entry.caption.trim() : "";
+
+        if (typeof name !== "string" || !name || !caption || this.catalog.has(name)) {
+          return;
+        }
+
+        try {
+          this.checkFormula(entry.expression);
+        } catch {
+          return;
+        }
+
+        this.defineCalculated(name, caption, entry.expression);
+      });
     }
 
     field(name) {
@@ -331,7 +492,7 @@
       const entry = existing ?? (area === "data"
         ? {
           field: name,
-          aggregation: "sum",
+          aggregation: this.defaultAggregation(name),
           showAs: "normal",
           ...(catalogFormat ? { format: checkFormat(name, catalogFormat) } : {})
         }
@@ -417,6 +578,10 @@
       const value = this.layout.values.find(entry => entry.field === name);
       if (!value) {
         throw new Error(`Field "${name}" is not in the data area.`);
+      }
+
+      if (this.isCalculated(name)) {
+        throw new Error(`Field "${name}" is calculated; its formula is its aggregation.`);
       }
 
       const { AGGREGATIONS } = PivotForge.PivotRequestBuilder;
@@ -536,7 +701,12 @@
         // Exposed so a consumer can persist renamed captions alongside a saved
         // view. adoptLayout does not restore them yet.
         captions: Object.fromEntries(this.captions),
-        sortOrders: Object.fromEntries(this.sortOrders)
+        sortOrders: Object.fromEntries(this.sortOrders),
+        calculatedFields: [...this.userCalculated].map(name => ({
+          name,
+          caption: this.catalog.get(name).caption,
+          expression: this.catalog.get(name).expression
+        }))
       };
     }
 
@@ -622,7 +792,8 @@
 
       return {
         dataField: field?.dataField ?? name,
-        ...(field?.groupInterval ? { groupInterval: field.groupInterval } : {})
+        ...(field?.groupInterval ? { groupInterval: field.groupInterval } : {}),
+        ...(field?.expression ? { expression: field.expression } : {})
       };
     }
 

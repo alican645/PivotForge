@@ -351,4 +351,67 @@ public class PivotFieldBuilderTests
 
         Assert.Contains("SortByValueKey is only valid on fields whose Area is Row", exception.Message);
     }
+
+    [Fact]
+    public void AnExpressionIsEmittedInPlaceOfAnAggregation()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("Profit")
+            .Expression("[Revenue] - [Cost]")
+            .Build();
+
+        Assert.Equal("[Revenue] - [Cost]", field["expression"]);
+        Assert.False(field.ContainsKey("aggregation"));
+    }
+
+    [Fact]
+    public void ACalculatedFieldInTheFieldListIsAMeasure()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("Profit")
+            .Area(PivotArea.Available)
+            .Expression("[Revenue] - [Cost]")
+            .Build();
+
+        Assert.Equal("measure", field["role"]);
+    }
+
+    [Fact]
+    public void AnExpressionOutsideTheDataAreaIsRefused()
+    {
+        var builder = new PivotFieldBuilder().DataField("Profit").Area(PivotArea.Row).Expression("[A]");
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
+    }
+
+    [Fact]
+    public void AnExpressionBesideAnAggregationIsRefused()
+    {
+        var builder = new PivotFieldBuilder()
+            .DataField("Profit")
+            .Aggregation(PivotAggregation.Sum)
+            .Expression("[A]");
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
+    }
+
+    [Fact]
+    public void CalculatedWithoutAnExpressionIsRefused()
+    {
+        var builder = new PivotFieldBuilder().DataField("Profit").Aggregation(PivotAggregation.Calculated);
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
+    }
+
+    [Fact]
+    public void AnUnreadableExpressionIsRefusedWhereItIsWritten()
+    {
+        Assert.Throws<PivotExpressionException>(() => new PivotFieldBuilder().Expression("Revenue - Cost"));
+    }
+
+    [Fact]
+    public void TheValueKeyOfACalculatedField()
+    {
+        Assert.Equal("Profit_calculated", PivotValueKey.For("Profit", PivotAggregation.Calculated));
+    }
 }
