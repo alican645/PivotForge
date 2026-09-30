@@ -249,7 +249,7 @@
         try {
           return new PivotForge.PivotLayoutState(
             this.options.fields,
-            { ...restored.layout, captions: restored.captions });
+            { ...restored.layout, captions: restored.captions, sortOrders: restored.sortOrders });
         } catch {
           this.filters = [...(this.options.filters ?? [])];
         }
@@ -320,6 +320,7 @@
       return {
         layout: payload.layout ?? null,
         captions: payload.captions ?? null,
+        sortOrders: payload.sortOrders ?? null,
         // A filter naming a field the catalog dropped would be rejected by the
         // server, so it is discarded here rather than sent. A mode the vocabulary
         // does not know is discarded the same way rather than thrown on: a view
@@ -370,7 +371,8 @@
               values: layout.values,
               filters: layout.filters
             },
-            captions: layout.captions
+            captions: layout.captions,
+            sortOrders: layout.sortOrders
           }
           : {}),
         filters: layout
@@ -488,8 +490,20 @@
         // funnel: its headers show values, never the field they belong to.
         columnFields: columnFields.map(field => field.key),
         columnFieldLabels: columnFields.map(field => field.caption),
+        // Read at construction only: a column sort changes the fields, and a
+        // field change builds a new renderer.
+        columnFieldSorts: columnFields.map(field => field.sortOrder ?? null),
         onSortRequested: this.options.allowSorting
-          ? request => { this.sortBy(this.nextHeaderSort(request)); }
+          ? request => {
+            // A column field's arrow orders that level's own values, which the
+            // engine takes from the field's sortOrder rather than the row sort.
+            if (request?.mode === "ColumnLabel") {
+              this.sortColumnField(request.field);
+              return;
+            }
+
+            this.sortBy(this.nextHeaderSort(request));
+          }
           : null,
         onFilterRequested: this.canHeaderFilter()
           ? (field, anchor) => { this.openHeaderFilter(field, anchor); }
@@ -1151,6 +1165,32 @@
       this.syncRendererSortState();
       this.saveState();
       await this.refresh();
+    }
+
+    // Orders a column field's own values, flipping on every click: A to Z
+    // first, as a label sort starts. The order lives on the field, so it goes
+    // through the layout state when a designer owns the fields, and straight
+    // into the declaration otherwise.
+    async sortColumnField(field, direction = null) {
+      if (!this.options.allowSorting) {
+        throw new Error("Cannot sort because allowSorting is disabled.");
+      }
+
+      const current = this.fields.find(entry => entry.key === field)?.sortOrder ?? null;
+      const next = direction ?? (current === "Ascending" ? "Descending" : "Ascending");
+
+      if (this.layoutState) {
+        this.layoutState.setSortOrder(field, next);
+        await this.update({ fields: this.layoutState.toFields() });
+        return;
+      }
+
+      // Matched on the level key, which a declaration only has once normalized:
+      // one date column grouped two ways is two fields with one dataField.
+      const { normalizeFields } = PivotForge.PivotRequestBuilder;
+      const fields = this.options.fields.map(entry =>
+        normalizeFields([entry])[0].key === field ? { ...entry, sortOrder: next } : entry);
+      await this.update({ fields });
     }
 
     async setFilter(field, values, mode = "Include", operator = "Equals") {

@@ -14,6 +14,19 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **AspNetCore** — the column axis could not be sorted from its headers. Only a
+  row field's header carried a sort arrow; a column field's header named the
+  field just to hold its funnel, and with a single value no column header could
+  sort the rows either. A column field's header now orders that level's own
+  values (A to Z, then Z to A on the next click) through the field's
+  `sortOrder`, next to the funnel it already had, and it is drawn whenever
+  sorting or filtering is allowed. With a single value, the innermost column
+  header sorts the rows by that column's value, as the value header does when
+  there are several. `PivotLayoutState` gains `setSortOrder()`, and a stored
+  view carries the header sorts alongside the captions.
+
 ## [0.6.0-preview.3] — 2026-09-30
 
 A sorted column reverses on a second click again.

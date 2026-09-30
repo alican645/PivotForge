@@ -1325,6 +1325,20 @@
 
             const state = layoutState.getState();
 
+            // A column field's arrow orders that level's own values. The order
+            // belongs to the field, so it goes into the layout state and reaches
+            // the request through toFields(), leaving the row sort as it was.
+            if (request.mode === "ColumnLabel") {
+                if (!request.field) {
+                    return;
+                }
+
+                const current = layoutState.field(request.field).sortOrder ?? null;
+                layoutState.setSortOrder(request.field, current === "Ascending" ? "Descending" : "Ascending");
+                runPivot();
+                return;
+            }
+
             if (request.mode === "RowLabel") {
                 const field = request.field ?? state.rows[state.rows.length - 1] ?? null;
 

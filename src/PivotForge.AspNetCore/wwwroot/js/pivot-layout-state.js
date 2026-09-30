@@ -57,11 +57,16 @@
       // catalog so resetting is just forgetting the override, and so the
       // declared caption is always recoverable.
       this.captions = new Map();
+      // A header sort the user picked, overriding the catalog's sortOrder. Kept
+      // apart for the same reason the captions are: the declaration stays
+      // recoverable and a saved view carries only what the user changed.
+      this.sortOrders = new Map();
       this.handlers = new Map();
 
       if (layout) {
         this.layout = this.adoptLayout(layout);
         this.adoptCaptions(layout.captions);
+        this.adoptSortOrders(layout.sortOrders);
       } else {
         this.layout = this.layoutFromCatalog(normalized);
       }
@@ -167,10 +172,51 @@
       }
 
       const caption = this.captions.get(name);
+      const sortOrder = this.sortOrders.get(name);
       // Every caption consumer — the chips, toFields(), the renderer's value
       // labels, the detail modal's headers — reads through here, so an override
       // applied once shows up everywhere without any of them knowing about it.
-      return caption === undefined ? found : { ...found, caption };
+      // The sort override travels the same way, into toFields().
+      return {
+        ...found,
+        ...(caption === undefined ? {} : { caption }),
+        ...(sortOrder === undefined ? {} : { sortOrder })
+      };
+    }
+
+    // Orders a row or column field's own level, the way a header click asks
+    // for. Null goes back to the declaration.
+    setSortOrder(name, sortOrder) {
+      this.field(name);
+      const { SORT_ORDERS } = PivotForge.PivotRequestBuilder;
+
+      if (sortOrder !== null && !SORT_ORDERS.includes(sortOrder)) {
+        throw new Error(
+          `Unknown sortOrder "${sortOrder}". Expected one of: ${SORT_ORDERS.join(", ")}.`);
+      }
+
+      if (sortOrder === null || sortOrder === this.catalog.get(name).sortOrder) {
+        this.sortOrders.delete(name);
+      } else {
+        this.sortOrders.set(name, sortOrder);
+      }
+
+      this.emitChange();
+    }
+
+    // Restores the overrides getState() emitted, skipping what the catalog or
+    // the vocabulary no longer knows, as adoptCaptions does.
+    adoptSortOrders(sortOrders) {
+      if (!sortOrders || typeof sortOrders !== "object") {
+        return;
+      }
+
+      const { SORT_ORDERS } = PivotForge.PivotRequestBuilder;
+      Object.entries(sortOrders).forEach(([name, sortOrder]) => {
+        if (this.catalog.has(name) && SORT_ORDERS.includes(sortOrder)) {
+          this.sortOrders.set(name, sortOrder);
+        }
+      });
     }
 
     // The caption as declared, ignoring any override. What "reset" restores and
@@ -489,7 +535,8 @@
         available: [...this.catalog.keys()].filter(name => !placed.has(name)),
         // Exposed so a consumer can persist renamed captions alongside a saved
         // view. adoptLayout does not restore them yet.
-        captions: Object.fromEntries(this.captions)
+        captions: Object.fromEntries(this.captions),
+        sortOrders: Object.fromEntries(this.sortOrders)
       };
     }
 

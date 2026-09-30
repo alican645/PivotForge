@@ -1102,3 +1102,44 @@ test("an adopted layout carrying an unknown filter mode is refused at constructi
     filters: [{ field: "Quarter", values: ["Q1"], mode: "exclude" }]
   }), /Unknown filter mode/);
 });
+
+test("a header sort reaches the column field toFields() emits", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  state.setSortOrder("Year", "Descending");
+
+  assert.equal(state.field("Year").sortOrder, "Descending");
+  assert.equal(
+    state.toFields().find(field => field.dataField === "Year").sortOrder,
+    "Descending");
+  assert.deepEqual(state.getState().sortOrders, { Year: "Descending" });
+});
+
+test("clearing a header sort goes back to the declared order", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+  state.setSortOrder("Year", "Ascending");
+
+  state.setSortOrder("Year", null);
+
+  assert.equal(state.field("Year").sortOrder, null);
+  assert.deepEqual(state.getState().sortOrders, {});
+});
+
+test("an unknown sort order is refused", () => {
+  const state = new PivotForge.PivotLayoutState(catalog);
+
+  assert.throws(() => state.setSortOrder("Year", "Sideways"), /Unknown sortOrder/);
+});
+
+test("a saved header sort is adopted with the layout, an unusable one skipped", () => {
+  const saved = new PivotForge.PivotLayoutState(catalog);
+  saved.setSortOrder("Year", "Descending");
+  const layout = saved.getState();
+
+  const restored = new PivotForge.PivotLayoutState(catalog, {
+    ...layout,
+    sortOrders: { ...layout.sortOrders, Gone: "Ascending", Region: "Sideways" }
+  });
+
+  assert.deepEqual(restored.getState().sortOrders, { Year: "Descending" });
+});

@@ -316,6 +316,50 @@ test("clicking the same sort header again reverses the sort", async () => {
   PivotForge.PivotTableRenderer = previous;
 });
 
+// A column field's arrow orders that level's own values. The engine reads that
+// order from the field's sortOrder, so the click has to land there and leave the
+// row sort alone -- sent as a row sort it named a field the rows do not have.
+test("clicking a column field header orders its values and flips on the next click", async () => {
+  const captured = {};
+  class FakeRenderer {
+    constructor(container, options) { this.options = options; Object.assign(captured, options); }
+    render() {}
+  }
+  const previous = PivotForge.PivotTableRenderer;
+  PivotForge.PivotTableRenderer = FakeRenderer;
+
+  const calls = [];
+  const widget = PivotForge.create(createContainer(), {
+    fields: [...fields, { caption: "Yıl", dataField: "yil", area: "column" }],
+    autoLoad: false,
+    fetchImpl: async (url, init) => {
+      calls.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ cells: [], grandTotals: {} }) };
+    }
+  });
+  await widget.refresh();
+  assert.deepEqual(captured.columnFieldSorts, [null]);
+
+  const click = async () => {
+    captured.onSortRequested({ mode: "ColumnLabel", field: "yil" });
+    await new Promise(resolve => setImmediate(resolve));
+    return calls.at(-1);
+  };
+
+  let request = await click();
+  assert.deepEqual(request.fieldSorts, [{ field: "yil", direction: "Ascending" }]);
+  assert.equal(request.rowSort, null);
+  // The renderer is rebuilt on a field change, so the arrow can show the order.
+  assert.deepEqual(captured.columnFieldSorts, ["Ascending"]);
+
+  request = await click();
+  assert.deepEqual(request.fieldSorts, [{ field: "yil", direction: "Descending" }]);
+  assert.deepEqual(captured.columnFieldSorts, ["Descending"]);
+
+  widget.dispose();
+  PivotForge.PivotTableRenderer = previous;
+});
+
 // --- Conditional formatting ---------------------------------------------------
 
 // The panel the widget builds on first use, recorded rather than rendered.
