@@ -2,7 +2,7 @@
 
 DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge
 karşılaştırıldı. İlk karşılaştırma `0.4.0-preview.8` üzerinde yapıldı; işaretler
-o günden beri güncel tutuluyor ve `0.6.0-preview.4` sürümündeki durumu, artı
+o günden beri güncel tutuluyor ve `0.6.0-preview.5` sürümündeki durumu, artı
 yayınlanmamış hesaplanan alanları gösteriyor. Kaynaklar dosyanın sonunda.
 
 **Kapsam dışı (talep üzerine):** OLAP / SSAS, sunucu tarafı toplama (server mode),

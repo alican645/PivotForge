@@ -14,6 +14,11 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.6.0-preview.5] — 2026-09-30
+
+Calculated fields, custom summary functions, and a formula builder that needs
+no typing.
+
 Calculated fields.
 
 ### Added
@@ -398,7 +403,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.4...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.5...HEAD
+[0.6.0-preview.5]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.4...v0.6.0-preview.5
 [0.6.0-preview.4]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.3...v0.6.0-preview.4
 [0.6.0-preview.3]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.2...v0.6.0-preview.3
 [0.6.0-preview.2]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.1...v0.6.0-preview.2
