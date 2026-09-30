@@ -19,8 +19,6 @@ change will require a new major version.
 Calculated fields, custom summary functions, and a formula builder that needs
 no typing.
 
-Calculated fields.
-
 ### Added
 
 - **Core** — calculated values: `PivotValueDefinition.Calculated("Margin",
