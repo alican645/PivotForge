@@ -105,6 +105,22 @@
       selectAll: "Tümünü seç",
       clear: "Temizle",
       blank: "(Boş)",
+      operatorLabel: "Koşul",
+      // What the value list asks is "one of these", which the designer's chip
+      // does not need to say: it only names an operator other than this one.
+      operators: {
+        Equals: "şunlardan biri",
+        Contains: "içerir",
+        StartsWith: "ile başlar",
+        EndsWith: "ile biter",
+        Between: "arasında",
+        GreaterThan: "büyüktür",
+        LessThan: "küçüktür",
+        Blank: "boş"
+      },
+      argument: "Değer",
+      argumentFrom: "Başlangıç",
+      argumentTo: "Bitiş",
       // The mode's only observable effect is on values the source does not have
       // yet, so the control says that rather than "include"/"exclude".
       modeLabel: "Sonradan eklenen değerler",

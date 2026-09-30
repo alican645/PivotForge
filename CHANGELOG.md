@@ -61,6 +61,10 @@ that opens where it was asked for.
 
 - **AspNetCore** — the filter picker's Include/Exclude row had no styles, so its
   buttons ran out of the dialog and neither showed which mode was selected.
+- **AspNetCore** — the Turkish locale pack left the filter picker's condition
+  row in English (*Condition*, *is one of* and the other operators, *Value*,
+  *From*, *To*). A declared picker operator now also keeps the pack's names for
+  the others, rather than falling back to English for all of them.
 
 ## [0.6.0-preview.1] — 2026-09-29
 

@@ -431,10 +431,14 @@
       };
     }
 
+    // Operators one level down as well: a page renaming one condition keeps
+    // the pack's names for the other seven.
     filterPickerLabels() {
+      const declared = this.options.designerLabels?.filterPicker ?? {};
       return {
         ...this.locale.filterPicker,
-        ...(this.options.designerLabels?.filterPicker ?? {})
+        ...declared,
+        operators: { ...this.locale.filterPicker?.operators, ...declared.operators }
       };
     }
 

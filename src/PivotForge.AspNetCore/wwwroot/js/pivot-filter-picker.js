@@ -84,7 +84,13 @@
       }
 
       this.widget = options.widget;
-      this.labels = { ...DEFAULT_LABELS, ...(options.labels ?? {}) };
+      // Operators merged one level down, as the conditional panel does, so a
+      // page renaming one keeps the pack's -- or English -- names for the rest.
+      this.labels = {
+        ...DEFAULT_LABELS,
+        ...(options.labels ?? {}),
+        operators: { ...DEFAULT_LABELS.operators, ...(options.labels?.operators ?? {}) }
+      };
       this.host = options.host ?? root.document?.body ?? null;
 
       if (!this.host) {
