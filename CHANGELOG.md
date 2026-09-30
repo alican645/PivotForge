@@ -14,6 +14,10 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.6.0-preview.4] — 2026-09-30
+
+The column axis sorts from its headers.
+
 ### Fixed
 
 - **AspNetCore** — the column axis could not be sorted from its headers. Only a
@@ -350,7 +354,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.3...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.4...HEAD
+[0.6.0-preview.4]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.3...v0.6.0-preview.4
 [0.6.0-preview.3]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.2...v0.6.0-preview.3
 [0.6.0-preview.2]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.1...v0.6.0-preview.2
 [0.6.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.5.0-preview.1...v0.6.0-preview.1
