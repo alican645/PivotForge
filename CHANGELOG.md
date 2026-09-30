@@ -14,7 +14,7 @@ change will require a new major version.
 
 ## [Unreleased]
 
-## [0.6.0-preview.2] — 2026-09-29
+## [0.6.0-preview.2] — 2026-09-30
 
 Grand totals a field can leave, a layout that fits a phone, and a filter picker
 that opens where it was asked for.
