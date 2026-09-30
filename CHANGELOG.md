@@ -38,10 +38,15 @@ Calculated fields.
   registers custom summaries for the endpoints. A formula is checked against
   `AllowedFields` by the fields it names, and an unreadable one is answered with
   `400` and the reason.
-- **AspNetCore** — the field designer's **+ ƒx** button opens a formula editor:
-  a name, the formula, and a button per field that inserts it. A formula naming
-  a field the list does not have is refused in the editor, in the reader's
-  language. The new field lands in the data area and survives a reload under
+- **AspNetCore** — the field designer's **+ ƒx** button opens a formula
+  builder that needs no typing: the reader taps (or drags) a field, taps an
+  operation (Add, Subtract, Multiply, Divide, brackets), adds a number if one is
+  needed, and the formula grows as a row of large pieces in their own words,
+  each removable, with Undo, Clear and a "what comes next" line. A field piece
+  can be summarized by average, count, minimum or maximum instead of its sum.
+  The typed formula stays one button away, and a formula the pieces cannot show
+  (a custom function) opens there. A formula naming a field the list does not
+  have is refused in the editor, in the reader's language. The new field lands in the data area and survives a reload under
   `state-storing`; the reader can edit or delete it from its settings.
   `allow-calculated-fields="false"` removes the button. `PivotLayoutState`
   gains `addCalculatedField()`, `setExpression()`, `deleteCalculatedField()`

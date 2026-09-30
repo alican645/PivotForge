@@ -63,10 +63,11 @@ test("a declared calculated field computes a ratio of sums", async ({ page }) =>
 test("a field the reader defines is computed and survives a reload", async ({ page }) => {
   await page.locator('[data-action="add-calculated"]').click();
   await page.fill(editor('[data-action="formula-caption"]'), "Adet Başına Tutar");
-  await page.locator(editor('[data-action="insert-field"][data-value="Amount"]')).click();
-  await page.locator(editor('[data-action="formula"]')).pressSequentially(" / ");
-  await page.locator(editor('[data-action="insert-field"][data-value="Quantity"]')).click();
-  await expect(page.locator(editor('[data-action="formula"]'))).toHaveValue("[Amount] / [Quantity]");
+  await page.locator(editor('[data-action="formula-field"][data-value="Amount"]')).click();
+  await page.locator(editor('[data-action="formula-operator"][data-value="/"]')).click();
+  await page.locator(editor('[data-action="formula-field"][data-value="Quantity"]')).click();
+  await expect(page.locator(editor('[data-role="formula-token"]'))).toHaveCount(3);
+  await expect(page.locator(editor('[data-action="formula"]'))).toBeHidden();
 
   const result = await nextResult(page, () =>
     page.locator(editor('[data-action="formula-save"]')).click());
@@ -87,6 +88,7 @@ test("a field the reader defines is computed and survives a reload", async ({ pa
 test("a formula naming a field that does not exist is refused in the editor", async ({ page }) => {
   await page.locator('[data-action="add-calculated"]').click();
   await page.fill(editor('[data-action="formula-caption"]'), "Kâr");
+  await page.locator(editor('[data-action="formula-advanced"]')).click();
   await page.fill(editor('[data-action="formula"]'), "[Amount] - [Maliyet]");
   await page.locator(editor('[data-action="formula-save"]')).click();
 
@@ -98,6 +100,7 @@ test("a formula naming a field that does not exist is refused in the editor", as
 test("a custom aggregate registered on the server can be called", async ({ page }) => {
   await page.locator('[data-action="add-calculated"]').click();
   await page.fill(editor('[data-action="formula-caption"]'), "Medyan Tutar");
+  await page.locator(editor('[data-action="formula-advanced"]')).click();
   await page.fill(editor('[data-action="formula"]'), "Median([Amount])");
 
   const result = await nextResult(page, () =>
@@ -110,8 +113,37 @@ test("a custom aggregate registered on the server can be called", async ({ page 
 test("a function the server does not know is reported with its name", async ({ page }) => {
   await page.locator('[data-action="add-calculated"]').click();
   await page.fill(editor('[data-action="formula-caption"]'), "X");
+  await page.locator(editor('[data-action="formula-advanced"]')).click();
   await page.fill(editor('[data-action="formula"]'), "Medain([Amount])");
   await page.locator(editor('[data-action="formula-save"]')).click();
 
   await expect(page.locator(".pivot-error")).toContainText("Medain");
+});
+
+test("a field dragged into the formula lands between the pieces already there", async ({ page }) => {
+  await page.locator('[data-action="add-calculated"]').click();
+  await page.fill(editor('[data-action="formula-caption"]'), "Kâr Payı");
+  await page.locator(editor('[data-action="formula-field"][data-value="Amount"]')).click();
+  await page.locator(editor('[data-action="formula-operator"][data-value="/"]')).click();
+
+  // Dropped on the division sign's left half: between the amount and the sign.
+  const sign = page.locator(editor('[data-role="formula-token"]')).nth(1);
+  const box = await sign.boundingBox();
+  await page.locator(editor('[data-action="formula-field"][data-value="Quantity"]'))
+    .dragTo(page.locator(editor('[data-role="formula-strip"]')), {
+      targetPosition: await page.locator(editor('[data-role="formula-strip"]')).evaluate(
+        (strip, point) => {
+          const own = strip.getBoundingClientRect();
+          return { x: point.x - own.left, y: point.y - own.top };
+        },
+        { x: box.x + 4, y: box.y + box.height / 2 })
+    });
+
+  await expect(page.locator(editor('[data-role="formula-token"]'))).toHaveCount(3);
+  await expect(page.locator(editor('[data-role="formula-token"]')).nth(1)).toContainText("Miktar");
+  await expect(page.locator(".pivot-formula__ghost")).toHaveCount(0);
+
+  await page.locator(editor('[data-action="formula-advanced"]')).click();
+  await expect(page.locator(editor('[data-action="formula"]'))).toHaveValue("[Amount] [Quantity] /");
+  expect(page.errors).toEqual([]);
 });

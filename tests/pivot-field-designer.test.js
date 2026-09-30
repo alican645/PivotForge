@@ -1965,28 +1965,187 @@ test("a calculated chip says it is computed", () => {
   assert.equal(chip.classList.contains("is-calculated"), true);
 });
 
+// The formula builder: pieces pressed into place rather than a syntax typed.
+const press = (panel, action, value) => {
+  const button = allByAction(panel, action)
+    .find(entry => value === undefined || entry.dataset.value === value);
+  assert.ok(button, `${action} ${value ?? ""} is on the panel`);
+  return button.dispatch("click", {});
+};
+
+function byRole(node, role, found = []) {
+  if (node.dataset?.role === role) {
+    found.push(node);
+  }
+  Array.from(node.children).forEach(child => byRole(child, role, found));
+  return found;
+}
+
+const pieces = panel => byRole(panel, "formula-token")
+  .map(piece => piece.children[0].textContent);
+
 test("defining a field from the editor places it and refreshes the grid once", async () => {
   const { host, state, updates } = buildCalculated();
   findByAction(host, "add-calculated").dispatch("click", {});
 
   const panel = settingsPanel();
   findByAction(panel, "formula-caption").value = "Kâr";
-  const formula = findByAction(panel, "formula");
-  allByAction(panel, "insert-field").find(button => button.dataset.value === "Amount").dispatch("click", {});
-  formula.value += " - ";
-  formula.selectionStart = formula.value.length;
-  formula.selectionEnd = formula.value.length;
-  allByAction(panel, "insert-field").find(button => button.dataset.value === "Quantity").dispatch("click", {});
+  press(panel, "formula-field", "Amount");
+  press(panel, "formula-operator", "-");
+  press(panel, "formula-field", "Quantity");
 
-  assert.equal(formula.value, "[Amount] - [Quantity]");
+  // Captions and school signs on the pieces, the syntax only behind them.
+  assert.deepEqual(pieces(panel), ["Tutar", "−", "Miktar"]);
+  assert.equal(findByAction(panel, "formula").value, "[Amount] - [Quantity]");
 
   await findByAction(panel, "formula-save").dispatch("click", {});
   await new Promise(resolve => setImmediate(resolve));
 
   assert.deepEqual(state.getState().values.map(value => value.field), ["Amount", "calculated1"]);
+  assert.equal(state.field("calculated1").expression, "[Amount] - [Quantity]");
   assert.equal(updates.length, 1);
   assert.equal(panel.classList.contains("is-open"), false);
   assert.notEqual(chips(zone(host, "data")).find(chip => chip.dataset.field === "calculated1"), undefined);
+});
+
+test("the builder opens with the typed formula hidden and says what comes next", () => {
+  const { designer } = buildCalculated();
+  designer.openFormula(null);
+  const panel = settingsPanel();
+  const next = () => byRole(panel, "formula-next")[0].textContent;
+
+  assert.equal(findByAction(panel, "formula").hidden, true);
+  assert.equal(pieces(panel).length, 0);
+  assert.equal(next(), "Next: add a field or a number.");
+  // Only the measures are offered: summing a region means nothing.
+  assert.deepEqual(allByAction(panel, "formula-field").map(button => button.dataset.value), ["Amount", "Quantity"]);
+
+  press(panel, "formula-field", "Amount");
+  assert.equal(next(), "Next: pick an operation, or save.");
+  press(panel, "formula-operator", "/");
+  assert.equal(next(), "Next: add a field or a number.");
+});
+
+test("a piece can be taken out, and every step undone or cleared", () => {
+  const { designer } = buildCalculated();
+  designer.openFormula(null);
+  const panel = settingsPanel();
+
+  press(panel, "formula-field", "Amount");
+  press(panel, "formula-operator", "+");
+  press(panel, "formula-field", "Quantity");
+  allByAction(panel, "formula-remove-token")[1].dispatch("click", {});
+  assert.deepEqual(pieces(panel), ["Tutar", "Miktar"]);
+
+  press(panel, "formula-undo");
+  assert.deepEqual(pieces(panel), ["Tutar", "+", "Miktar"]);
+
+  press(panel, "formula-clear");
+  assert.deepEqual(pieces(panel), []);
+  press(panel, "formula-undo");
+  assert.deepEqual(pieces(panel), ["Tutar", "+", "Miktar"]);
+});
+
+test("a field in the builder can be summarized other than by its sum", () => {
+  const { designer } = buildCalculated();
+  designer.openFormula(null);
+  const panel = settingsPanel();
+
+  press(panel, "formula-field", "Amount");
+  const summary = findByAction(panel, "formula-summary");
+  summary.value = "average";
+  summary.dispatch("change", {});
+
+  assert.equal(findByAction(panel, "formula").value, "Avg([Amount])");
+});
+
+test("a number is taken with a comma or a dot, and anything else is refused", () => {
+  const { designer } = buildCalculated();
+  designer.openFormula(null);
+  const panel = settingsPanel();
+  const number = findByAction(panel, "formula-number-input");
+  const error = byRole(panel, "formula-error")[0];
+
+  press(panel, "formula-field", "Amount");
+  press(panel, "formula-operator", "*");
+  number.value = "on";
+  press(panel, "formula-number");
+  assert.equal(error.hidden, false);
+  assert.equal(error.textContent, "'on' is not a number.");
+
+  number.value = "0,5";
+  press(panel, "formula-number");
+  assert.equal(error.hidden, true);
+  assert.equal(findByAction(panel, "formula").value, "[Amount] * 0.5");
+});
+
+test("a field dragged into the formula lands where it is let go", () => {
+  const { designer } = buildCalculated();
+  designer.openFormula(null);
+  const panel = settingsPanel();
+
+  press(panel, "formula-field", "Amount");
+  press(panel, "formula-operator", "/");
+  const [first, second] = byRole(panel, "formula-token");
+  first.rect = { top: 0, bottom: 40, left: 0, width: 100, height: 40 };
+  second.rect = { top: 0, bottom: 40, left: 110, width: 40, height: 40 };
+
+  const button = allByAction(panel, "formula-field").find(entry => entry.dataset.value === "Quantity");
+  button.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 0, clientY: 200 });
+  elementUnderPointer = byRole(panel, "formula-strip")[0];
+  // Between the two pieces: past the middle of the first, short of the second.
+  button.dispatch("pointermove", { pointerId: 1, clientX: 105, clientY: 20 });
+  assert.equal(elementUnderPointer.classList.contains("is-drop-target"), true);
+  button.dispatch("pointerup", { pointerId: 1, clientX: 105, clientY: 20 });
+  elementUnderPointer = null;
+
+  assert.deepEqual(pieces(panel), ["Tutar", "Miktar", "÷"]);
+  assert.equal(documentBody._children.some(node => node.className === "pivot-formula__ghost" && !node.removed), false);
+});
+
+test("a drag let go outside the formula adds nothing", () => {
+  const { designer } = buildCalculated();
+  designer.openFormula(null);
+  const panel = settingsPanel();
+
+  const button = allByAction(panel, "formula-field")[0];
+  button.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 0, clientY: 0 });
+  button.dispatch("pointermove", { pointerId: 1, clientX: 50, clientY: 50 });
+  button.dispatch("pointerup", { pointerId: 1, clientX: 50, clientY: 50 });
+
+  assert.deepEqual(pieces(panel), []);
+});
+
+test("the typed formula is one button away and comes back as pieces", () => {
+  const { designer } = buildCalculated();
+  designer.openFormula(null);
+  const panel = settingsPanel();
+  const input = findByAction(panel, "formula");
+
+  press(panel, "formula-field", "Amount");
+  press(panel, "formula-advanced");
+  assert.equal(input.hidden, false);
+  assert.equal(input.value, "[Amount]");
+
+  input.value = "([Amount] - [Quantity]) / 2";
+  press(panel, "formula-advanced");
+  assert.equal(input.hidden, true);
+  assert.deepEqual(pieces(panel), ["(", "Tutar", "−", "Miktar", ")", "÷", "2"]);
+});
+
+test("a formula the pieces cannot show opens as text and stays there", () => {
+  const { state, designer } = buildCalculated();
+  const name = state.addCalculatedField({ caption: "Medyan", expression: "Median([Amount])" });
+  designer.openFormula(name);
+  const panel = settingsPanel();
+  const input = findByAction(panel, "formula");
+
+  assert.equal(input.hidden, false);
+  assert.equal(input.value, "Median([Amount])");
+
+  press(panel, "formula-advanced");
+  assert.equal(input.hidden, false);
+  assert.equal(byRole(panel, "formula-error")[0].hidden, false);
 });
 
 test("a refused formula keeps the editor open with the reason in its language", async () => {
@@ -2002,6 +2161,7 @@ test("a refused formula keeps the editor open with the reason in its language", 
 
   const panel = settingsPanel();
   findByAction(panel, "formula-caption").value = "X";
+  findByAction(panel, "formula-advanced").dispatch("click", {});
   findByAction(panel, "formula").value = "[Amount] - [Cost]";
   await findByAction(panel, "formula-save").dispatch("click", {});
 
@@ -2040,7 +2200,11 @@ test("the reader's own field can be edited and deleted from its settings", async
   let panel = openSettings(host, name);
   findByAction(panel, "edit-formula").dispatch("click", {});
   panel = settingsPanel();
-  findByAction(panel, "formula").value = "[Amount] * 2";
+  // Its formula opens as pieces, and grows by the same buttons.
+  assert.deepEqual(pieces(panel), ["Tutar"]);
+  press(panel, "formula-operator", "*");
+  findByAction(panel, "formula-number-input").value = "2";
+  press(panel, "formula-number");
   await findByAction(panel, "formula-save").dispatch("click", {});
   assert.equal(state.field(name).expression, "[Amount] * 2");
 

@@ -90,6 +90,34 @@
       argument: "{0}() takes a field in brackets, such as {0}([Amount]).",
       expected: "'{0}' is missing.",
       unknownField: "There is no field called [{0}]."
+    },
+    // The builder that puts a formula together from buttons, for readers who
+    // should not have to learn the typed syntax.
+    formulaBuilder: {
+      pickField: "1. Pick a field",
+      pickOperator: "2. Pick an operation",
+      dropHere: "Drag a field here, or tap one below.",
+      nextValue: "Next: add a field or a number.",
+      nextOperator: "Next: pick an operation, or save.",
+      operators: {
+        "+": "Add",
+        "-": "Subtract",
+        "*": "Multiply",
+        "/": "Divide",
+        "(": "Open bracket",
+        ")": "Close bracket"
+      },
+      number: "Number",
+      addNumber: "Add number",
+      invalidNumber: "'{0}' is not a number.",
+      undo: "Undo",
+      clear: "Clear",
+      removeToken: "Remove",
+      // {0} is the field's caption.
+      summaryOf: "How to summarize {0}",
+      typeFormula: "Type the formula instead",
+      useButtons: "Build with buttons",
+      cannotShow: "This formula cannot be shown as buttons; keep editing it as text."
     }
   };
 
@@ -136,6 +164,78 @@
     }
   }
 
+  // The builder's operations, with the sign a reader knows from school rather
+  // than the one a keyboard has.
+  const FORMULA_OPERATORS = [
+    { value: "+", symbol: "+" },
+    { value: "-", symbol: "−" },
+    { value: "*", symbol: "×" },
+    { value: "/", symbol: "÷" },
+    { value: "(", symbol: "(" },
+    { value: ")", symbol: ")" }
+  ];
+  // How a field in the builder is summarized, named by the aggregations the
+  // designer already has words for, and written as the formula's functions.
+  const FORMULA_SUMMARIES = ["sum", "average", "count", "min", "max"];
+  const SUMMARY_FUNCTIONS = { sum: "Sum", average: "Avg", count: "Count", min: "Min", max: "Max" };
+  const FUNCTION_SUMMARIES = { sum: "sum", avg: "average", average: "average", count: "count", min: "min", max: "max" };
+
+  function operatorToken(value) {
+    if (value === "(") return { kind: "open" };
+    if (value === ")") return { kind: "close" };
+    return { kind: "op", value };
+  }
+
+  function operatorValue(token) {
+    if (token.kind === "open") return "(";
+    if (token.kind === "close") return ")";
+    return token.value;
+  }
+
+  // The builder's pieces as the formula the server reads.
+  function formulaText(tokens) {
+    return tokens.map(token => {
+      if (token.kind === "field") {
+        return token.fn === "sum" ? `[${token.dataField}]` : `${SUMMARY_FUNCTIONS[token.fn]}([${token.dataField}])`;
+      }
+      return token.kind === "number" ? token.value : operatorValue(token);
+    }).join(" ");
+  }
+
+  // A typed formula as the builder's pieces, or null when it holds something
+  // the pieces cannot show -- a custom function, a stray character -- and so
+  // has to stay text. Whether the pieces make sense is the parser's call, on
+  // Save, not this one's.
+  function formulaTokens(text) {
+    const pattern = /\s*(?:([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\[([^\]]*)\]\s*\)|\[([^\]]*)\]|(\d+(?:\.\d+)?|\.\d+)|([-+*/()]))\s*/y;
+    const tokens = [];
+    const source = String(text ?? "");
+    pattern.lastIndex = 0;
+
+    while (pattern.lastIndex < source.length) {
+      const match = pattern.exec(source);
+      if (!match) {
+        return source.slice(pattern.lastIndex).trim() === "" ? tokens : null;
+      }
+
+      const [, fn, fnField, field, number, operator] = match;
+      if (fn !== undefined) {
+        const summary = FUNCTION_SUMMARIES[fn.toLowerCase()];
+        if (!summary || !fnField.trim()) return null;
+        tokens.push({ kind: "field", dataField: fnField.trim(), fn: summary });
+      } else if (field !== undefined) {
+        if (!field.trim()) return null;
+        tokens.push({ kind: "field", dataField: field.trim(), fn: "sum" });
+      } else if (number !== undefined) {
+        tokens.push({ kind: "number", value: number });
+      } else if (operator !== undefined) {
+        tokens.push(operatorToken(operator));
+      }
+    }
+
+    return tokens;
+  }
+
   function format(template, ...values) {
     return values.reduce(
       (text, value, index) => text.replaceAll(`{${index}}`, String(value)),
@@ -165,6 +265,16 @@
       this.state = options.state;
       this.widget = options.widget;
       this.labels = { ...DEFAULT_LABELS, ...(options.labels ?? {}) };
+      // One level deeper, so a locale that predates the builder, or words only
+      // part of it, still gets a whole set of its words.
+      this.labels.formulaBuilder = {
+        ...DEFAULT_LABELS.formulaBuilder,
+        ...(options.labels?.formulaBuilder ?? {}),
+        operators: {
+          ...DEFAULT_LABELS.formulaBuilder.operators,
+          ...(options.labels?.formulaBuilder?.operators ?? {})
+        }
+      };
       this.disposed = false;
       // Drag runs on pointer events rather than HTML5 drag-and-drop, which
       // never fires on touch devices. One mechanism now covers mouse, touch
@@ -199,6 +309,8 @@
       // new one is being defined, or null when the editor is closed. It shares
       // the settings overlay, so only one of the two is ever showing.
       this.formulaFor = null;
+      this.formulaEditor = null;
+      this.formulaDrag = null;
       // Off unless asked for, so a designer built by hand looks as it always
       // did; the widget asks for it by default.
       this.allowCalculatedFields = options.allowCalculatedFields === true;
@@ -859,7 +971,7 @@
       root.document.addEventListener("keydown", this.settingsKeydown);
 
       (root.document.body ?? this.host).appendChild(overlay);
-      this.settings = { overlay, title, body };
+      this.settings = { overlay, dialog, title, body };
       return this.settings;
     }
 
@@ -910,6 +1022,7 @@
 
       settings.title.textContent =
         `${this.state.field(name).caption} — ${this.labels.settings}`;
+      settings.dialog?.classList.remove("is-formula");
       settings.body.replaceChildren();
 
       // --- Field name -----------------------------------------------------
@@ -1122,19 +1235,38 @@
       return settings;
     }
 
-    // The formula editor: a name and a formula for a new calculated field, or
-    // the formula alone for an existing one (its name is renamed like any
-    // field's). Nothing reaches the state until Save, and a formula the state
-    // refuses keeps the editor open with the reason under it.
+    // The formula editor. Its first face is a builder: the reader taps (or
+    // drags) a field, taps an operation, taps another field, and the formula
+    // grows as a row of large pieces written in their own words -- nothing to
+    // type, no brackets to spell, nothing to get wrong but the arithmetic. The
+    // typed formula is still one button away for what the pieces cannot say
+    // (a custom function), and a formula the pieces cannot show opens there.
+    // Nothing reaches the state until Save, and a formula the state refuses
+    // keeps the editor open with the reason under it.
     renderFormula(name) {
       const document = root.document;
       const settings = this.buildSettings();
       const existing = name ? this.state.field(name) : null;
+      const words = this.labels.formulaBuilder;
 
       settings.title.textContent = existing
         ? `${existing.caption} — ${this.labels.formula}`
         : this.labels.addCalculatedField;
+      settings.dialog?.classList.add("is-formula");
       settings.body.replaceChildren();
+
+      const fields = this.state.formulaFields?.() ?? [];
+      const captionOf = dataField =>
+        fields.find(field => field.dataField.toLowerCase() === dataField.toLowerCase())?.caption ?? dataField;
+      const initial = existing?.expression ?? "";
+      const tokens = initial ? formulaTokens(initial) : [];
+      const editor = {
+        name,
+        tokens: tokens ?? [],
+        history: [],
+        typing: tokens === null
+      };
+      this.formulaEditor = editor;
 
       let caption = null;
       if (!existing) {
@@ -1148,7 +1280,22 @@
         settings.body.appendChild(naming);
       }
 
+      // --- The formula so far ----------------------------------------------
       const formula = this.settingsSection(this.labels.formula);
+
+      const strip = document.createElement("div");
+      strip.className = "pivot-formula__strip";
+      strip.dataset.role = "formula-strip";
+      strip.setAttribute("role", "list");
+      strip.setAttribute("aria-label", this.labels.formula);
+      formula.appendChild(strip);
+
+      const next = document.createElement("p");
+      next.className = "pivot-formula__next";
+      next.dataset.role = "formula-next";
+      next.setAttribute("aria-live", "polite");
+      formula.appendChild(next);
+
       const hintId = `${this.zoneHeadingId("formula")}-hint`;
       const input = document.createElement("textarea");
       input.className = "pivot-value-settings__input pivot-value-settings__formula-input";
@@ -1157,8 +1304,14 @@
       input.setAttribute("spellcheck", "false");
       input.setAttribute("aria-label", this.labels.formula);
       input.setAttribute("aria-describedby", hintId);
-      input.value = existing?.expression ?? "";
+      input.value = initial;
       formula.appendChild(input);
+
+      const hint = document.createElement("p");
+      hint.className = "pivot-value-settings__hint";
+      hint.id = hintId;
+      hint.textContent = this.labels.formulaHint;
+      formula.appendChild(hint);
 
       const error = document.createElement("div");
       error.className = "pivot-value-settings__error";
@@ -1167,38 +1320,135 @@
       error.hidden = true;
       formula.appendChild(error);
 
-      const hint = document.createElement("p");
-      hint.className = "pivot-value-settings__hint";
-      hint.id = hintId;
-      hint.textContent = this.labels.formulaHint;
-      formula.appendChild(hint);
+      const tools = document.createElement("div");
+      tools.className = "pivot-value-settings__row pivot-formula__tools";
+      const tool = (action, label, onClick) => {
+        const button = document.createElement("button");
+        button.className = "pivot-value-settings__choice";
+        button.setAttribute("type", "button");
+        button.dataset.action = action;
+        button.textContent = label;
+        button.addEventListener("click", onClick);
+        tools.appendChild(button);
+        return button;
+      };
+      const undo = tool("formula-undo", words.undo, () => {
+        if (editor.history.length > 0) {
+          editor.tokens = editor.history.pop();
+          refresh();
+        }
+      });
+      const clear = tool("formula-clear", words.clear, () => change(() => []));
+      const switcher = tool("formula-advanced", "", () => {
+        if (editor.typing) {
+          const parsed = formulaTokens(input.value);
+          if (parsed === null) {
+            showError(words.cannotShow);
+            return;
+          }
+          editor.history.push(editor.tokens);
+          editor.tokens = parsed;
+          editor.typing = false;
+        } else {
+          input.value = formulaText(editor.tokens);
+          editor.typing = true;
+        }
+        refresh();
+        (editor.typing ? input : switcher).focus?.();
+      });
+      formula.appendChild(tools);
       settings.body.appendChild(formula);
 
-      // Typing a bracketed name exactly as the source spells it is the part a
-      // reader gets wrong, so every field they could mean is a button away. Only
-      // the measures: [Region] would sum text. A dimension can still be typed,
-      // as Count([Region]).
-      const fields = (this.state.formulaFields?.() ?? []).filter(field => field.role === "measure");
-      if (fields.length > 0) {
-        const inserting = this.settingsSection(this.labels.insertField);
-        this.settingsChoices(
-          inserting,
-          "insert-field",
-          fields.map(field => ({ value: field.dataField, label: field.caption })),
-          null,
-          dataField => {
-            const token = `[${dataField}]`;
-            const start = input.selectionStart ?? input.value.length;
-            const end = input.selectionEnd ?? start;
-            input.value = `${input.value.slice(0, start)}${token}${input.value.slice(end)}`;
-            input.focus?.();
-            input.setSelectionRange?.(start + token.length, start + token.length);
-          });
-        settings.body.appendChild(inserting);
-      }
+      // --- 1. Pick a field ---------------------------------------------------
+      // Only the measures: [Region] would sum text. A dimension can still be
+      // counted in the typed formula, as Count([Region]).
+      const picking = this.settingsSection(words.pickField);
+      const palette = document.createElement("div");
+      palette.className = "pivot-formula__palette";
+      fields.filter(field => field.role === "measure").forEach(field => {
+        const button = document.createElement("button");
+        button.className = "pivot-formula__field";
+        button.setAttribute("type", "button");
+        button.dataset.action = "formula-field";
+        button.dataset.value = field.dataField;
+        button.textContent = field.caption;
+        button.addEventListener("click", () => {
+          if (Date.now() - (this.formulaDragEnded ?? 0) < 400) {
+            return;
+          }
+          change(list => [...list, { kind: "field", dataField: field.dataField, fn: "sum" }]);
+        });
+        button.addEventListener("pointerdown", event => this.beginFormulaDrag(event, button, field, strip, change));
+        palette.appendChild(button);
+      });
+      picking.appendChild(palette);
+      settings.body.appendChild(picking);
 
+      // --- 2. Pick an operation ----------------------------------------------
+      const operating = this.settingsSection(words.pickOperator);
+      const operators = document.createElement("div");
+      operators.className = "pivot-formula__operators";
+      FORMULA_OPERATORS.forEach(({ value, symbol }) => {
+        const button = document.createElement("button");
+        button.className = "pivot-formula__operator";
+        button.setAttribute("type", "button");
+        button.dataset.action = "formula-operator";
+        button.dataset.value = value;
+        const mark = document.createElement("span");
+        mark.className = "pivot-formula__symbol";
+        mark.setAttribute("aria-hidden", "true");
+        mark.textContent = symbol;
+        const word = document.createElement("span");
+        word.textContent = words.operators[value];
+        button.appendChild(mark);
+        button.appendChild(word);
+        button.setAttribute("aria-label", words.operators[value]);
+        button.addEventListener("click", () => change(list => [...list, operatorToken(value)]));
+        operators.appendChild(button);
+      });
+      operating.appendChild(operators);
+
+      // A number for the formulas that need one: "× 100" for a percentage, a
+      // tax rate. Typed in the reader's own habit, so a comma works as well.
+      const numbering = document.createElement("div");
+      numbering.className = "pivot-value-settings__row pivot-formula__number";
+      const number = document.createElement("input");
+      number.className = "pivot-value-settings__input";
+      number.dataset.action = "formula-number-input";
+      number.setAttribute("type", "text");
+      number.setAttribute("inputmode", "decimal");
+      number.setAttribute("aria-label", words.number);
+      number.setAttribute("placeholder", words.number);
+      const addNumber = document.createElement("button");
+      addNumber.className = "pivot-value-settings__choice";
+      addNumber.setAttribute("type", "button");
+      addNumber.dataset.action = "formula-number";
+      addNumber.textContent = words.addNumber;
+      const pushNumber = () => {
+        const text = String(number.value ?? "").trim().replace(",", ".");
+        if (!/^(\d+(\.\d+)?|\.\d+)$/.test(text)) {
+          showError(format(words.invalidNumber, number.value ?? ""));
+          number.focus?.();
+          return;
+        }
+        number.value = "";
+        change(list => [...list, { kind: "number", value: text }]);
+      };
+      addNumber.addEventListener("click", pushNumber);
+      number.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+          event.preventDefault?.();
+          pushNumber();
+        }
+      });
+      numbering.appendChild(number);
+      numbering.appendChild(addNumber);
+      operating.appendChild(numbering);
+      settings.body.appendChild(operating);
+
+      // --- Save ----------------------------------------------------------------
       const actions = document.createElement("div");
-      actions.className = "pivot-value-settings__row";
+      actions.className = "pivot-value-settings__row pivot-formula__actions";
 
       const save = document.createElement("button");
       save.className = "pivot-value-settings__choice";
@@ -1225,25 +1475,287 @@
       actions.appendChild(cancel);
       settings.body.appendChild(actions);
 
-      return { settings, focus: caption ?? input };
+      function showError(message) {
+        error.textContent = message;
+        error.hidden = false;
+      }
+
+      // Every edit goes through here, so each one can be undone and the strip
+      // never disagrees with what Save would send.
+      const change = (edit, at) => {
+        editor.history.push(editor.tokens);
+        editor.tokens = edit(editor.tokens, at);
+        refresh();
+      };
+
+      const refresh = () => {
+        error.hidden = true;
+        input.removeAttribute?.("aria-invalid");
+        this.renderFormulaStrip(strip, editor, captionOf, change);
+
+        const last = editor.tokens.at(-1);
+        next.textContent = editor.typing
+          ? ""
+          : last && (last.kind === "field" || last.kind === "number" || last.kind === "close")
+            ? words.nextOperator
+            : words.nextValue;
+
+        input.hidden = !editor.typing;
+        hint.hidden = !editor.typing;
+        strip.hidden = editor.typing;
+        next.hidden = editor.typing;
+        picking.hidden = editor.typing;
+        operating.hidden = editor.typing;
+        undo.hidden = editor.typing;
+        clear.hidden = editor.typing;
+        undo.disabled = editor.history.length === 0;
+        clear.disabled = editor.tokens.length === 0;
+        switcher.textContent = editor.typing ? words.useButtons : words.typeFormula;
+        if (!editor.typing) {
+          input.value = formulaText(editor.tokens);
+        }
+      };
+
+      refresh();
+      return { settings, focus: caption ?? (editor.typing ? input : palette.children[0] ?? input) };
+    }
+
+    // The pieces of the formula so far, each with a way to take it back out
+    // and, for a field, a way to summarize it other than by its sum.
+    renderFormulaStrip(strip, editor, captionOf, change) {
+      const document = root.document;
+      const words = this.labels.formulaBuilder;
+      strip.replaceChildren();
+
+      if (editor.tokens.length === 0) {
+        const empty = document.createElement("span");
+        empty.className = "pivot-formula__empty";
+        empty.textContent = words.dropHere;
+        strip.appendChild(empty);
+        return;
+      }
+
+      editor.tokens.forEach((token, index) => {
+        const piece = document.createElement("span");
+        piece.className = `pivot-formula__token is-${token.kind}`;
+        piece.dataset.role = "formula-token";
+        piece.dataset.index = String(index);
+        piece.setAttribute("role", "listitem");
+
+        const text = document.createElement("span");
+        text.className = "pivot-formula__token-text";
+        if (token.kind === "field") {
+          text.textContent = captionOf(token.dataField);
+          piece.appendChild(text);
+
+          // "Sum of" is what a bare field means and what almost everyone wants,
+          // so the choice stays quiet until it is changed.
+          const summary = document.createElement("select");
+          summary.className = "pivot-formula__summary";
+          summary.dataset.action = "formula-summary";
+          summary.dataset.index = String(index);
+          summary.setAttribute("aria-label", format(words.summaryOf, captionOf(token.dataField)));
+          FORMULA_SUMMARIES.forEach(fn => {
+            const option = document.createElement("option");
+            option.value = fn;
+            option.textContent = this.labels.aggregations[fn] ?? fn;
+            option.selected = fn === token.fn;
+            summary.appendChild(option);
+          });
+          summary.value = token.fn;
+          summary.addEventListener("change", () => change(list =>
+            list.map((entry, at) => at === index ? { ...entry, fn: summary.value } : entry)));
+          piece.appendChild(summary);
+        } else {
+          text.textContent = token.kind === "number"
+            ? token.value
+            : FORMULA_OPERATORS.find(entry => entry.value === operatorValue(token)).symbol;
+          if (token.kind !== "number") {
+            text.setAttribute("aria-label", words.operators[operatorValue(token)]);
+          }
+          piece.appendChild(text);
+        }
+
+        const remove = document.createElement("button");
+        remove.className = "pivot-formula__remove";
+        remove.setAttribute("type", "button");
+        remove.dataset.action = "formula-remove-token";
+        remove.dataset.index = String(index);
+        remove.setAttribute("aria-label", words.removeToken);
+        remove.title = words.removeToken;
+        remove.textContent = "✕";
+        remove.addEventListener("click", () =>
+          change(list => list.filter((_, at) => at !== index)));
+        piece.appendChild(remove);
+
+        strip.appendChild(piece);
+      });
+    }
+
+    // A field dragged from the palette into the strip lands where it is let
+    // go. The same pointer events the zones use, so it works with a finger;
+    // a press that never travels is left to the button's own click.
+    beginFormulaDrag(event, button, field, strip, change) {
+      if (event.button !== undefined && event.button !== 0) {
+        return;
+      }
+
+      this.endFormulaDrag();
+      const drag = {
+        button,
+        field,
+        strip,
+        change,
+        pointerId: event.pointerId,
+        startX: event.clientX ?? 0,
+        startY: event.clientY ?? 0,
+        started: false,
+        ghost: null
+      };
+
+      drag.move = moved => {
+        if (moved.pointerId !== undefined && moved.pointerId !== drag.pointerId) {
+          return;
+        }
+
+        if (!drag.started) {
+          if (Math.hypot((moved.clientX ?? 0) - drag.startX, (moved.clientY ?? 0) - drag.startY) < DRAG_THRESHOLD) {
+            return;
+          }
+          drag.started = true;
+          drag.ghost = root.document.createElement("div");
+          drag.ghost.className = "pivot-formula__ghost";
+          drag.ghost.textContent = field.caption;
+          (root.document.body ?? this.host).appendChild(drag.ghost);
+        }
+
+        moved.preventDefault?.();
+        drag.ghost.style.left = `${moved.clientX}px`;
+        drag.ghost.style.top = `${moved.clientY}px`;
+        this.markFormulaDrop(drag, moved.clientX, moved.clientY);
+      };
+
+      drag.up = released => {
+        if (released.pointerId !== undefined && released.pointerId !== drag.pointerId) {
+          return;
+        }
+
+        const at = drag.started ? this.formulaDropIndex(drag, released.clientX, released.clientY) : null;
+        this.endFormulaDrag();
+        if (at !== null) {
+          change((list, index) => [
+            ...list.slice(0, index),
+            { kind: "field", dataField: field.dataField, fn: "sum" },
+            ...list.slice(index)
+          ], at);
+        }
+      };
+
+      drag.cancel = () => this.endFormulaDrag();
+
+      this.formulaDrag = drag;
+      capturePointer(button, event.pointerId);
+      button.addEventListener("pointermove", drag.move);
+      button.addEventListener("pointerup", drag.up);
+      button.addEventListener("pointercancel", drag.cancel);
+    }
+
+    endFormulaDrag() {
+      const drag = this.formulaDrag;
+      this.formulaDrag = null;
+      if (!drag) {
+        return;
+      }
+
+      releasePointer(drag.button, drag.pointerId);
+      drag.button.removeEventListener("pointermove", drag.move);
+      drag.button.removeEventListener("pointerup", drag.up);
+      drag.button.removeEventListener("pointercancel", drag.cancel);
+      drag.ghost?.remove();
+      drag.strip.classList.remove("is-drop-target");
+      this.clearFormulaCaret(drag.strip);
+
+      // The release after a real drag may also click the button, which would
+      // add the field a second time at the end. Whether that click comes at
+      // all depends on where the pointer was let go, so rather than a
+      // listener that could linger and eat the reader's next real tap, a
+      // click arriving straight after a drag is ignored.
+      if (drag.started) {
+        this.formulaDragEnded = Date.now();
+      }
+    }
+
+    // Where in the strip a drop at this point lands, or null off the strip.
+    // Pieces wrap onto several lines, so a piece counts as "after" the pointer
+    // when it sits on a lower line, or on the same line to its right.
+    formulaDropIndex(drag, clientX, clientY) {
+      if (typeof clientX !== "number" || typeof clientY !== "number") {
+        return null;
+      }
+
+      const element = root.document?.elementFromPoint?.(clientX, clientY);
+      if (!element || !drag.strip.contains(element)) {
+        return null;
+      }
+
+      const pieces = Array.from(drag.strip.children)
+        .filter(child => child.dataset?.role === "formula-token");
+      const after = pieces.findIndex(piece => {
+        const box = piece.getBoundingClientRect();
+        return box.top > clientY || (box.bottom >= clientY && box.left + box.width / 2 > clientX);
+      });
+
+      return after < 0 ? pieces.length : after;
+    }
+
+    markFormulaDrop(drag, clientX, clientY) {
+      this.clearFormulaCaret(drag.strip);
+      const at = this.formulaDropIndex(drag, clientX, clientY);
+      drag.strip.classList.toggle("is-drop-target", at !== null);
+      if (at === null) {
+        return;
+      }
+
+      const pieces = Array.from(drag.strip.children)
+        .filter(child => child.dataset?.role === "formula-token");
+      pieces[at]?.classList.add("is-drop-before");
+      if (at === pieces.length && at > 0) {
+        pieces[at - 1].classList.add("is-drop-after");
+      }
+    }
+
+    clearFormulaCaret(strip) {
+      Array.from(strip.children).forEach(child =>
+        child.classList.remove("is-drop-before", "is-drop-after"));
     }
 
     async saveFormula(name, caption, input, error) {
+      const editor = this.formulaEditor;
+      const expression = !editor || editor.typing ? input.value : formulaText(editor.tokens);
+
       try {
         if (name) {
-          this.state.setExpression(name, input.value);
+          this.state.setExpression(name, expression);
         } else {
-          this.state.addCalculatedField({ caption: caption.value, expression: input.value });
+          this.state.addCalculatedField({ caption: caption.value, expression });
         }
       } catch (refused) {
         error.textContent = this.formulaError(refused);
         error.hidden = false;
-        input.setAttribute("aria-invalid", "true");
 
-        const target = refused.code === "noName" ? caption : input;
-        target?.focus?.();
-        if (target === input && Number.isInteger(refused.position) && refused.position >= 0) {
-          input.setSelectionRange?.(refused.position, refused.position);
+        if (refused.code === "noName") {
+          caption?.focus?.();
+          return;
+        }
+
+        // The position is a character in the typed formula, which only means
+        // something where that formula is showing.
+        if (!editor || editor.typing) {
+          input.setAttribute("aria-invalid", "true");
+          input.focus?.();
+          if (Number.isInteger(refused.position) && refused.position >= 0) {
+            input.setSelectionRange?.(refused.position, refused.position);
+          }
         }
         return;
       }
@@ -1270,7 +1782,9 @@
     }
 
     openSettings(name) {
+      this.endFormulaDrag();
       this.formulaFor = null;
+      this.formulaEditor = null;
       this.settingsFor = name;
       const settings = this.renderSettings(name);
       settings.overlay.classList.add("is-open");
@@ -1278,8 +1792,10 @@
     }
 
     closeSettings() {
+      this.endFormulaDrag();
       this.settingsFor = null;
       this.formulaFor = null;
+      this.formulaEditor = null;
       if (this.settings) {
         this.settings.overlay.classList.remove("is-open");
         this.settings.overlay.setAttribute("aria-hidden", "true");

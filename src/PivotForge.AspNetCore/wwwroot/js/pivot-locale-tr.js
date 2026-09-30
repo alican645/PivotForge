@@ -116,6 +116,31 @@
         argument: "{0}() köşeli parantezli bir alan alır, örneğin {0}([Tutar]).",
         expected: "'{0}' eksik.",
         unknownField: "[{0}] adında bir alan yok."
+      },
+      formulaBuilder: {
+        pickField: "1. Bir alan seçin",
+        pickOperator: "2. Bir işlem seçin",
+        dropHere: "Bir alanı buraya sürükleyin ya da aşağıdan dokunun.",
+        nextValue: "Sıradaki: bir alan ya da sayı ekleyin.",
+        nextOperator: "Sıradaki: bir işlem seçin ya da Kaydet'e basın.",
+        operators: {
+          "+": "Topla",
+          "-": "Çıkar",
+          "*": "Çarp",
+          "/": "Böl",
+          "(": "Parantez aç",
+          ")": "Parantez kapat"
+        },
+        number: "Sayı",
+        addNumber: "Sayı ekle",
+        invalidNumber: "'{0}' bir sayı değil.",
+        undo: "Geri al",
+        clear: "Temizle",
+        removeToken: "Kaldır",
+        summaryOf: "{0} nasıl özetlensin",
+        typeFormula: "Formülü yazarak gir",
+        useButtons: "Düğmelerle oluştur",
+        cannotShow: "Bu formül düğmelerle gösterilemiyor; yazarak düzenlemeye devam edin."
       }
     },
     filterPicker: {
