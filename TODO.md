@@ -2,8 +2,8 @@
 
 DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge
 karşılaştırıldı. İlk karşılaştırma `0.4.0-preview.8` üzerinde yapıldı; işaretler
-o günden beri güncel tutuluyor ve `0.6.0-preview.4` sürümündeki durumu
-gösteriyor. Kaynaklar dosyanın sonunda.
+o günden beri güncel tutuluyor ve `0.6.0-preview.4` sürümündeki durumu, artı
+yayınlanmamış hesaplanan alanları gösteriyor. Kaynaklar dosyanın sonunda.
 
 **Kapsam dışı (talep üzerine):** OLAP / SSAS, sunucu tarafı toplama (server mode),
 uzaktan gruplama, milyon satır ölçeğinde sanal kaydırma.
@@ -94,8 +94,8 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `groupInterval` (yıl/çeyrek/ay/gün) | ✅ | ✅ | `group-interval` niteliği ve `GroupInterval()` metodu; aynı kolon birden fazla seviyede |
 | `selector` / `sortingMethod` | ❌ | ❌ | Özel gruplama/sıralama fonksiyonu |
 | `customizeText` | ❌ | ❌ | Hücre metnini özelleştirme |
-| `calculateCustomSummary` | ❌ | ❌ | Bkz. Bölüm 3 |
-| `calculateSummaryValue` | ❌ | ❌ | Özet sonrası işleme |
+| `calculateCustomSummary` | ✅ | ✅ | `PivotForgeOptions.CustomAggregates`, formülden adıyla çağrılır; bkz. Bölüm 3 |
+| `calculateSummaryValue` | ✅ | ✅ | `expression` niteliği; özet sonrası formül, bkz. Bölüm 3 |
 | `runningTotal` + `allowCrossGroupCalculation` | ⚠️ | ⚠️ | `RunningTotal` showAs modu var, çapraz grup seçeneği yok |
 | `width`, `wordWrapEnabled` | ❌ | ❌ | |
 | `displayFolder` | ❌ | ❌ | Alan seçicide klasörleme |
@@ -230,15 +230,33 @@ Top-N.
 
 ## Bölüm 3 — Hesaplanmış alanlar
 
-Hiç yok. DevExpress'te üç ayrı mekanizma var:
+**Tamamlandı.** DevExpress'teki üç mekanizma tek bir kavramla karşılandı: **formül**.
+Formül her zaman sunucuda, toplama bittikten sonra ve her kova için ayrı çalışıyor
+(hücre, satır/sütun toplamı, ara toplam, genel toplam). Tasarım kararı buydu: istemcide
+JS fonksiyonu çalıştırmak ne sayfalamaya ne Excel'e ne de Top-N'e ulaşırdı, ve bir
+oranın toplamı ya da ortalaması yanlış sayıdır — `[Kâr] / [Gelir]` her seviyede
+toplamların oranı olmalı.
 
-- [ ] `calculateCustomSummary` — özel toplama fonksiyonu
-- [ ] `calculateSummaryValue` — hücre değerinin sonradan hesaplanması
-      (ör. `Kâr = Gelir − Gider`, iki ölçüden türetilen üçüncü ölçü)
-- [ ] İfade tabanlı hesaplanmış alan (kullanıcının UI'dan tanımlayabildiği)
+- [x] `calculateSummaryValue` — `<pivot-field field="Marj" expression="([Gelir] - [Gider]) / [Gelir]" />`.
+      `[Alan]` alanın toplamı; `Sum`, `Count`, `Avg`, `Min`, `Max` başka türlü özetler;
+      `+ - * /`, parantez, tekli eksi. Boş özet ya da sıfıra bölme hücreyi boş bırakır.
+      Değer anahtarı `Ad_calculated`; show-as, değere göre sıralama ve Top-N onu
+      diğer ölçüler gibi kullanır. Formül yalnızca okunur, hiçbir şey yürütülmez;
+      `AllowedFields` formülün adladığı alanlara uygulanır
+- [x] `calculateCustomSummary` — `PivotForgeOptions.CustomAggregates["Median"] = ...`
+      ile kaydedilen fonksiyon formülden adıyla çağrılır: `Median([Tutar])`. Ayrı bir
+      toplama türü yerine formülün bir fonksiyonu olması, ikisini tek mekanizmada topladı
+- [x] Kullanıcının UI'dan tanımladığı alan — tasarımcıda arama kutusunun yanındaki
+      **+ ƒx** düğmesi: ad, formül, alan ekleme düğmeleri. Bilinmeyen alan editörde,
+      okuyucunun dilinde reddediliyor; alan veri bölgesine iniyor ve `state-storing`
+      ile yenilemeden sağ çıkıyor. Okuyucunun kendi alanı düzenlenip silinebiliyor,
+      bildirilen formül salt okunur. `allow-calculated-fields="false"` düğmeyi kaldırır
 
-Bunun bir kısmı sunucu tarafında (`PivotForge.Core`) delegate ile, bir kısmı istemcide
-JS fonksiyonuyla çözülebilir. Tasarım kararı gerektirir.
+Açık kalanlar:
+
+- [ ] Bir formülün başka bir hesaplanan alana başvurması (bugün yalnızca kaynak alanlar)
+- [ ] Tarayıcının kayıtlı özel fonksiyon adlarını bilmesi — bugün yanlış yazılmış bir
+      fonksiyon adı editörde değil, grid yüklenirken sunucu tarafından bildiriliyor
 
 ---
 
@@ -444,7 +462,7 @@ Sizin önceliğiniz "az kodla çok iş" olduğu için sıralama işlevsel büyü
 2. **Bölüm 1'in ucuz kalemleri** — `show-as`, `area-index`, `expanded`, alan başına toplamlar.
 3. ~~**Bölüm 2** — filtreleme.~~ Tamamlandı.
 4. ~~**Bölüm 8** — dokunmatik + klavye + ARIA + mobil düzen.~~ Tamamlandı.
-5. **Bölüm 3** — hesaplanmış alanlar. En büyük tasarım işi, en sona.
+5. ~~**Bölüm 3** — hesaplanmış alanlar.~~ Tamamlandı.
 
 ---
 

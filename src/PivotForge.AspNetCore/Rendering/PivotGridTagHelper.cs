@@ -41,6 +41,10 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("allow-conditional-formatting")]
     public bool? AllowConditionalFormatting { get; set; }
 
+    /// <summary>Gets or sets whether a reader may define calculated fields from the field designer.</summary>
+    [HtmlAttributeName("allow-calculated-fields")]
+    public bool? AllowCalculatedFields { get; set; }
+
     /// <summary>Gets or sets whether the grid loads data as soon as it is created.</summary>
     [HtmlAttributeName("auto-load")]
     public bool? AutoLoad { get; set; }
@@ -276,6 +280,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (AllowConditionalFormatting is { } allowConditionalFormatting)
         {
             builder.AllowConditionalFormatting(allowConditionalFormatting);
+        }
+
+        if (AllowCalculatedFields is { } allowCalculatedFields)
+        {
+            builder.AllowCalculatedFields(allowCalculatedFields);
         }
 
         if (AutoLoad is { } autoLoad)

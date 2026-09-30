@@ -8,7 +8,7 @@
       this.lastStateKey = options.lastStateKey ?? "pivot-table:last-state:v1";
       this.savedViewsKey = options.savedViewsKey ?? "pivot-table:saved-views:v1";
       this.fields = new Set(options.fields ?? []);
-      this.aggregations = new Set(options.aggregations ?? ["sum", "count", "average", "min", "max"]);
+      this.aggregations = new Set(options.aggregations ?? ["sum", "count", "average", "min", "max", "calculated"]);
       this.formatTypes = new Set(options.formatTypes ?? ["number", "currency", "percent"]);
       this.showAsModes = new Set(options.showAsModes ?? [
         "normal",

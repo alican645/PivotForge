@@ -94,6 +94,28 @@
         average: "Ortalama",
         min: "Minimum",
         max: "Maksimum"
+      },
+      calculatedField: "Hesaplanan alan",
+      addCalculatedField: "Hesaplanan alan ekle",
+      formula: "Formül",
+      formulaHint: "+ - * / ve parantez kullanın. [Alan] alanın toplamıdır; Sum, Count, Avg, Min ve Max onu başka türlü özetler. Örnek: [Gelir] - [Gider]",
+      insertField: "Alan ekle",
+      save: "Kaydet",
+      cancel: "Vazgeç",
+      editFormula: "Formülü düzenle",
+      deleteCalculatedField: "Hesaplanan alanı sil",
+      formulaErrors: {
+        noName: "Alana bir ad verin.",
+        empty: "Bir formül yazın.",
+        end: "Formül yarım kalmış.",
+        unexpected: "'{0}' burada beklenmiyor.",
+        bareWord: "Alan adlarını köşeli parantezle yazın: [{0}].",
+        unclosed: "Bir alan adının kapanış ] işareti eksik.",
+        emptyReference: "[] hiçbir alanı adlandırmıyor.",
+        number: "'{0}' bir sayı değil.",
+        argument: "{0}() köşeli parantezli bir alan alır, örneğin {0}([Tutar]).",
+        expected: "'{0}' eksik.",
+        unknownField: "[{0}] adında bir alan yok."
       }
     },
     filterPicker: {

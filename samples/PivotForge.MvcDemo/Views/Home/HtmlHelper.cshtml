@@ -81,6 +81,9 @@
                             .Area(PivotArea.Available).Role(PivotFieldRole.Measure);
                         fields.Add().Caption("İskonto").DataField("Discount")
                             .Area(PivotArea.Available).Role(PivotFieldRole.Measure);
+                        fields.Add().Caption("Ortalama Birim Fiyat").DataField("UnitPrice")
+                            .Area(PivotArea.Available).Expression("[Amount] / [Quantity]")
+                            .FormatType(PivotValueFormatType.Currency).FormatDecimals(2).FormatCurrency("TRY");
                     }))
             </div>
         </div>
@@ -130,6 +133,9 @@
             .Area(PivotArea.Available).Role(PivotFieldRole.Measure);
         fields.Add().Caption("İskonto").DataField("Discount")
             .Area(PivotArea.Available).Role(PivotFieldRole.Measure);
+        fields.Add().Caption("Ortalama Birim Fiyat").DataField("UnitPrice")
+            .Area(PivotArea.Available).Expression("[Amount] / [Quantity]")
+            .FormatType(PivotValueFormatType.Currency).FormatDecimals(2).FormatCurrency("TRY");
     }))</code></pre>
             <p>
                 Akıcı API C# olduğu için alan adları ve enum değerleri derleme zamanında

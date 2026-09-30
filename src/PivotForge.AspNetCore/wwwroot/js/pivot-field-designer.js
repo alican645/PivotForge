@@ -66,6 +66,30 @@
       average: "Average",
       min: "Minimum",
       max: "Maksimum"
+    },
+    calculatedField: "Calculated field",
+    addCalculatedField: "Add calculated field",
+    formula: "Formula",
+    formulaHint: "Use + - * / and parentheses. [Field] is the field's sum; Sum, Count, Avg, Min and Max summarize it another way. Example: [Revenue] - [Cost]",
+    insertField: "Insert field",
+    save: "Save",
+    cancel: "Cancel",
+    editFormula: "Edit formula",
+    deleteCalculatedField: "Delete calculated field",
+    // {0} is the part of the formula the problem is about: a character, a word
+    // or a field name, depending on the code.
+    formulaErrors: {
+      noName: "Give the field a name.",
+      empty: "Write a formula.",
+      end: "The formula is incomplete.",
+      unexpected: "'{0}' is not expected here.",
+      bareWord: "Write field names in brackets: [{0}].",
+      unclosed: "A field name is missing its closing ].",
+      emptyReference: "[] names no field.",
+      number: "'{0}' is not a number.",
+      argument: "{0}() takes a field in brackets, such as {0}([Amount]).",
+      expected: "'{0}' is missing.",
+      unknownField: "There is no field called [{0}]."
     }
   };
 
@@ -171,6 +195,13 @@
       // triggers and does not need to be rebuilt by render().
       this.settingsFor = null;
       this.settings = null;
+      // The calculated field the formula editor is open for: a name, "" while a
+      // new one is being defined, or null when the editor is closed. It shares
+      // the settings overlay, so only one of the two is ever showing.
+      this.formulaFor = null;
+      // Off unless asked for, so a designer built by hand looks as it always
+      // did; the widget asks for it by default.
+      this.allowCalculatedFields = options.allowCalculatedFields === true;
       // Built on first use, so a designer whose filter zone is never opened
       // never creates the picker's overlay. A host may supply its own.
       this.filterPicker = options.filterPicker ?? null;
@@ -254,6 +285,18 @@
         funnel.setAttribute("aria-label", `${field.caption} — ${this.labels.filterValues}`);
         funnel.addEventListener("click", () => this.openFilterPicker(name, funnel));
         chip.appendChild(funnel);
+      }
+
+      // A calculated field reads like any other once placed, so the chip is what
+      // says it is computed rather than read from the source.
+      if (this.state.isCalculated?.(name)) {
+        chip.classList.add("is-calculated");
+        const badge = document.createElement("span");
+        badge.className = "pivot-chip__badge";
+        badge.textContent = "ƒx";
+        badge.title = this.labels.calculatedField;
+        badge.setAttribute("aria-hidden", "true");
+        chip.appendChild(badge);
       }
 
       const label = document.createElement("span");
@@ -809,7 +852,7 @@
       });
 
       this.settingsKeydown = event => {
-        if (event.key === "Escape" && this.settingsFor) {
+        if (event.key === "Escape" && (this.settingsFor || this.formulaFor !== null)) {
           this.closeSettings();
         }
       };
@@ -955,7 +998,52 @@
         settings.body.appendChild(filtering);
       }
 
-      if (area === "data") {
+      if (area === "data" && this.state.isCalculated?.(name)) {
+        // --- Formula ------------------------------------------------------
+        // In place of the aggregation: the formula is what summarizes this one.
+        const formula = this.settingsSection(this.labels.formula);
+        const text = document.createElement("code");
+        text.className = "pivot-value-settings__formula";
+        text.textContent = this.state.field(name).expression;
+        formula.appendChild(text);
+
+        // A declared formula is the page's, like any declared field; only the
+        // reader's own can be changed or deleted.
+        if (this.state.isUserCalculated?.(name)) {
+          const row = document.createElement("div");
+          row.className = "pivot-value-settings__row";
+
+          const edit = document.createElement("button");
+          edit.className = "pivot-value-settings__choice";
+          edit.setAttribute("type", "button");
+          edit.dataset.action = "edit-formula";
+          edit.textContent = this.labels.editFormula;
+          edit.addEventListener("click", () => this.openFormula(name));
+          row.appendChild(edit);
+
+          const drop = document.createElement("button");
+          drop.className = "pivot-value-settings__choice is-danger";
+          drop.setAttribute("type", "button");
+          drop.dataset.action = "delete-calculated";
+          drop.textContent = this.labels.deleteCalculatedField;
+          if (this.canReturn(name)) {
+            drop.addEventListener("click", () => {
+              this.closeSettings();
+              this.apply(() => this.state.deleteCalculatedField(name));
+            });
+          } else {
+            drop.disabled = true;
+            drop.title = this.labels.lastValue;
+          }
+          row.appendChild(drop);
+
+          formula.appendChild(row);
+        }
+
+        settings.body.appendChild(formula);
+      }
+
+      if (area === "data" && !this.state.isCalculated?.(name)) {
         // --- Aggregation --------------------------------------------------
         const aggregation = this.settingsSection(this.labels.aggregation);
         this.settingsChoices(
@@ -965,7 +1053,9 @@
           value?.aggregation ?? "sum",
           picked => this.apply(() => this.state.setAggregation(name, picked)));
         settings.body.appendChild(aggregation);
+      }
 
+      if (area === "data") {
         // --- Show as ------------------------------------------------------
         const showAs = this.settingsSection(this.labels.showAs);
         // These labels are sentences rather than words, so they stack one per
@@ -1032,7 +1122,155 @@
       return settings;
     }
 
+    // The formula editor: a name and a formula for a new calculated field, or
+    // the formula alone for an existing one (its name is renamed like any
+    // field's). Nothing reaches the state until Save, and a formula the state
+    // refuses keeps the editor open with the reason under it.
+    renderFormula(name) {
+      const document = root.document;
+      const settings = this.buildSettings();
+      const existing = name ? this.state.field(name) : null;
+
+      settings.title.textContent = existing
+        ? `${existing.caption} — ${this.labels.formula}`
+        : this.labels.addCalculatedField;
+      settings.body.replaceChildren();
+
+      let caption = null;
+      if (!existing) {
+        const naming = this.settingsSection(this.labels.fieldName);
+        caption = document.createElement("input");
+        caption.className = "pivot-value-settings__input";
+        caption.dataset.action = "formula-caption";
+        caption.setAttribute("type", "text");
+        caption.setAttribute("aria-label", this.labels.fieldName);
+        naming.appendChild(caption);
+        settings.body.appendChild(naming);
+      }
+
+      const formula = this.settingsSection(this.labels.formula);
+      const hintId = `${this.zoneHeadingId("formula")}-hint`;
+      const input = document.createElement("textarea");
+      input.className = "pivot-value-settings__input pivot-value-settings__formula-input";
+      input.dataset.action = "formula";
+      input.setAttribute("rows", "3");
+      input.setAttribute("spellcheck", "false");
+      input.setAttribute("aria-label", this.labels.formula);
+      input.setAttribute("aria-describedby", hintId);
+      input.value = existing?.expression ?? "";
+      formula.appendChild(input);
+
+      const error = document.createElement("div");
+      error.className = "pivot-value-settings__error";
+      error.dataset.role = "formula-error";
+      error.setAttribute("role", "alert");
+      error.hidden = true;
+      formula.appendChild(error);
+
+      const hint = document.createElement("p");
+      hint.className = "pivot-value-settings__hint";
+      hint.id = hintId;
+      hint.textContent = this.labels.formulaHint;
+      formula.appendChild(hint);
+      settings.body.appendChild(formula);
+
+      // Typing a bracketed name exactly as the source spells it is the part a
+      // reader gets wrong, so every field they could mean is a button away. Only
+      // the measures: [Region] would sum text. A dimension can still be typed,
+      // as Count([Region]).
+      const fields = (this.state.formulaFields?.() ?? []).filter(field => field.role === "measure");
+      if (fields.length > 0) {
+        const inserting = this.settingsSection(this.labels.insertField);
+        this.settingsChoices(
+          inserting,
+          "insert-field",
+          fields.map(field => ({ value: field.dataField, label: field.caption })),
+          null,
+          dataField => {
+            const token = `[${dataField}]`;
+            const start = input.selectionStart ?? input.value.length;
+            const end = input.selectionEnd ?? start;
+            input.value = `${input.value.slice(0, start)}${token}${input.value.slice(end)}`;
+            input.focus?.();
+            input.setSelectionRange?.(start + token.length, start + token.length);
+          });
+        settings.body.appendChild(inserting);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "pivot-value-settings__row";
+
+      const save = document.createElement("button");
+      save.className = "pivot-value-settings__choice";
+      save.setAttribute("type", "button");
+      save.dataset.action = "formula-save";
+      save.dataset.selected = "true";
+      save.textContent = this.labels.save;
+      save.addEventListener("click", () => this.saveFormula(name, caption, input, error));
+
+      const cancel = document.createElement("button");
+      cancel.className = "pivot-value-settings__choice";
+      cancel.setAttribute("type", "button");
+      cancel.dataset.action = "formula-cancel";
+      cancel.textContent = this.labels.cancel;
+      cancel.addEventListener("click", () => {
+        if (name) {
+          this.openSettings(name);
+        } else {
+          this.closeSettings();
+        }
+      });
+
+      actions.appendChild(save);
+      actions.appendChild(cancel);
+      settings.body.appendChild(actions);
+
+      return { settings, focus: caption ?? input };
+    }
+
+    async saveFormula(name, caption, input, error) {
+      try {
+        if (name) {
+          this.state.setExpression(name, input.value);
+        } else {
+          this.state.addCalculatedField({ caption: caption.value, expression: input.value });
+        }
+      } catch (refused) {
+        error.textContent = this.formulaError(refused);
+        error.hidden = false;
+        input.setAttribute("aria-invalid", "true");
+
+        const target = refused.code === "noName" ? caption : input;
+        target?.focus?.();
+        if (target === input && Number.isInteger(refused.position) && refused.position >= 0) {
+          input.setSelectionRange?.(refused.position, refused.position);
+        }
+        return;
+      }
+
+      this.closeSettings();
+      this.render();
+      await this.widget.update(this.state.toRequestState());
+    }
+
+    // In the reader's language where the locale words the code, and in the
+    // parser's English where it does not.
+    formulaError(error) {
+      const template = this.labels.formulaErrors?.[error?.code];
+      return template ? format(template, error.detail ?? "") : String(error?.message ?? error);
+    }
+
+    openFormula(name = null) {
+      this.settingsFor = null;
+      this.formulaFor = name ?? "";
+      const { settings, focus } = this.renderFormula(name);
+      settings.overlay.classList.add("is-open");
+      settings.overlay.setAttribute("aria-hidden", "false");
+      focus?.focus?.();
+    }
+
     openSettings(name) {
+      this.formulaFor = null;
       this.settingsFor = name;
       const settings = this.renderSettings(name);
       settings.overlay.classList.add("is-open");
@@ -1041,6 +1279,7 @@
 
     closeSettings() {
       this.settingsFor = null;
+      this.formulaFor = null;
       if (this.settings) {
         this.settings.overlay.classList.remove("is-open");
         this.settings.overlay.setAttribute("aria-hidden", "true");
@@ -1136,6 +1375,22 @@
         this.renderAvailableChips(body);
       });
       searchWrap.appendChild(search);
+
+      // Beside the search box rather than under it: the list keeps its height,
+      // and the badge is the same one a calculated chip carries.
+      if (this.allowCalculatedFields && typeof this.state.addCalculatedField === "function") {
+        const add = document.createElement("button");
+        add.className = "pivot-search__add";
+        add.setAttribute("type", "button");
+        add.dataset.action = "add-calculated";
+        add.textContent = "+ ƒx";
+        add.title = this.labels.addCalculatedField;
+        add.setAttribute("aria-label", this.labels.addCalculatedField);
+        add.addEventListener("click", () => this.openFormula(null));
+        searchWrap.classList.add("has-action");
+        searchWrap.appendChild(add);
+      }
+
       section.appendChild(searchWrap);
 
       const body = document.createElement("div");
@@ -1243,6 +1498,12 @@
       // refreshed by hand, or its selected states would show the value from
       // before the edit. A field that left the layout has nothing left to
       // configure, so its modal closes instead.
+      // The formula editor holds what the reader is typing, so a re-render
+      // leaves it alone -- unless its field has been deleted from under it.
+      if (this.formulaFor && !this.state.catalog?.has?.(this.formulaFor)) {
+        this.closeSettings();
+      }
+
       if (this.settingsFor) {
         if (this.state.areaOf(this.settingsFor) === "available") {
           this.closeSettings();

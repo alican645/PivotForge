@@ -33,6 +33,17 @@ public sealed class PivotEngine
     // Read per call rather than cached, because CurrentCulture is per request.
     private CultureInfo Culture => this.culture ?? CultureInfo.CurrentCulture;
 
+    /// <summary>Gets the custom summary functions a calculated field's formula may call.</summary>
+    /// <remarks>
+    /// Keyed by the name the formula uses, e.g. <c>Median</c> for <c>Median([Amount])</c>. The
+    /// built-in names (<c>Sum</c>, <c>Count</c>, <c>Avg</c>, <c>Average</c>, <c>Min</c>,
+    /// <c>Max</c>) always mean the built-in summary, so a registration cannot change what an
+    /// existing formula computes. Supply a case-insensitive dictionary to let formulas spell the
+    /// name in any case.
+    /// </remarks>
+    public IReadOnlyDictionary<string, PivotCustomAggregate> CustomAggregates { get; init; } =
+        new Dictionary<string, PivotCustomAggregate>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Builds a pivot result from strongly typed records.</summary>
     /// <typeparam name="T">The source record type.</typeparam>
     /// <param name="records">The source records.</param>
@@ -358,7 +369,7 @@ public sealed class PivotEngine
                 .ToArray();
     }
 
-    private static IReadOnlyList<object> DrillDownCore(
+    private IReadOnlyList<object> DrillDownCore(
         IEnumerable<object> records,
         PivotRequest request,
         IReadOnlyList<string?> rowPath,
@@ -366,7 +377,7 @@ public sealed class PivotEngine
         IRecordReader reader,
         CultureInfo culture)
     {
-        ValidateRequest(request, reader);
+        ValidateRequest(request, reader, CustomAggregates);
         ValidateDrillDownPath(rowPath, request.Rows, nameof(rowPath));
         ValidateDrillDownPath(columnPath, request.Columns, nameof(columnPath));
         var filters = CompileFilters(request.Filters);
@@ -412,16 +423,16 @@ public sealed class PivotEngine
         return true;
     }
 
-    private static PivotResult ExecuteCore(
+    private PivotResult ExecuteCore(
         IEnumerable<object> records,
         PivotRequest request,
         IRecordReader reader,
         CultureInfo culture,
         CancellationToken cancellationToken)
     {
-        ValidateRequest(request, reader);
+        var plan = ValidateRequest(request, reader, CustomAggregates);
 
-        var scan = Scan(records, request, reader, culture, null, cancellationToken);
+        var scan = Scan(records, request, plan, reader, culture, null, cancellationToken);
 
         // Top-N ranks groups that do not exist until the records have been summed, so the
         // rows it drops can only be known after a pass. Running the pass again without them
@@ -435,7 +446,7 @@ public sealed class PivotEngine
 
             if (excluded.Count > 0)
             {
-                scan = Scan(records, request, reader, culture, excluded, cancellationToken);
+                scan = Scan(records, request, plan, reader, culture, excluded, cancellationToken);
             }
         }
 
@@ -463,24 +474,24 @@ public sealed class PivotEngine
             {
                 Row = pair.Key.Row,
                 Column = RemapColumnIndex(pair.Key.Column, columnIndex.Headers, columnLookup),
-                Values = pair.Value.Finalize(request.Values)
+                Values = pair.Value.Finalize()
             })
             .ToArray();
         var rawRowTotals = rowTotalBuckets
             .OrderBy(pair => pair.Key)
-            .Select(pair => new PivotTotal { Index = pair.Key, Values = pair.Value.Finalize(request.Values) })
+            .Select(pair => new PivotTotal { Index = pair.Key, Values = pair.Value.Finalize() })
             .ToArray();
         var rawColumnTotals = columnTotalBuckets
             .Select(pair => new PivotTotal
             {
                 Index = RemapColumnIndex(pair.Key, columnIndex.Headers, columnLookup),
-                Values = pair.Value.Finalize(request.Values)
+                Values = pair.Value.Finalize()
             })
             .OrderBy(total => total.Index)
             .ToArray();
-        var rawGrandTotals = grandTotalBucket.Finalize(request.Values);
+        var rawGrandTotals = grandTotalBucket.Finalize();
         var rawSubtotals = subtotalBuckets.Values
-            .Select(subtotal => subtotal.Finalize(request.Values, columnIndex.Headers, columnLookup))
+            .Select(subtotal => subtotal.Finalize(columnIndex.Headers, columnLookup))
             .ToArray();
         var transformed = TransformValues(
             rowIndex.Headers.Count,
@@ -531,6 +542,7 @@ public sealed class PivotEngine
     private static ScanResult Scan(
         IEnumerable<object> records,
         PivotRequest request,
+        MeasurePlan plan,
         IRecordReader reader,
         CultureInfo culture,
         IReadOnlySet<HeaderKey>? excludedGroups,
@@ -543,7 +555,7 @@ public sealed class PivotEngine
         var rowTotalBuckets = new Dictionary<int, AggregateBucket>();
         var columnTotalBuckets = new Dictionary<int, AggregateBucket>();
         var subtotalBuckets = new Dictionary<HeaderKey, SubtotalBuckets>();
-        var grandTotalBucket = new AggregateBucket(request.Values);
+        var grandTotalBucket = new AggregateBucket(plan);
         var filters = CompileFilters(request.Filters);
         var sourceRowCount = 0;
 
@@ -580,12 +592,14 @@ public sealed class PivotEngine
 
             if (!buckets.TryGetValue(key, out var bucket))
             {
-                bucket = new AggregateBucket(request.Values);
+                bucket = new AggregateBucket(plan);
                 buckets.Add(key, bucket);
             }
 
-            var rowTotalBucket = GetOrAddBucket(rowTotalBuckets, row, request.Values);
-            var columnTotalBucket = GetOrAddBucket(columnTotalBuckets, column, request.Values);
+            var rowTotalBucket = GetOrAddBucket(rowTotalBuckets, row, plan);
+            var columnTotalBucket = GetOrAddBucket(columnTotalBuckets, column, plan);
+            // Read once and handed to every bucket the record lands in.
+            var values = plan.Read(record, reader);
 
             for (var level = 1; level < rowValues.Count; level++)
             {
@@ -594,21 +608,17 @@ public sealed class PivotEngine
 
                 if (!subtotalBuckets.TryGetValue(subtotalKey, out var subtotal))
                 {
-                    subtotal = new SubtotalBuckets(path, request.Values);
+                    subtotal = new SubtotalBuckets(path, plan);
                     subtotalBuckets.Add(subtotalKey, subtotal);
                 }
 
-                subtotal.Add(column, request.Values, record, reader);
+                subtotal.Add(column, plan, values);
             }
 
-            foreach (var valueDefinition in request.Values)
-            {
-                var value = reader.GetValue(record, valueDefinition.Field);
-                bucket.Add(valueDefinition, value);
-                rowTotalBucket.Add(valueDefinition, value);
-                columnTotalBucket.Add(valueDefinition, value);
-                grandTotalBucket.Add(valueDefinition, value);
-            }
+            bucket.Add(values);
+            rowTotalBucket.Add(values);
+            columnTotalBucket.Add(values);
+            grandTotalBucket.Add(values);
         }
 
         return new ScanResult(
@@ -698,9 +708,9 @@ public sealed class PivotEngine
         // At the deepest level a group is one row, and its total is already the row's own.
         // Above it, the subtotal buckets hold exactly this prefix's aggregate.
         depth == request.Rows.Count
-            ? Lookup(scan.RowTotals[row].Finalize(request.Values), valueKey)
+            ? Lookup(scan.RowTotals[row].Finalize(), valueKey)
             : scan.Subtotals.TryGetValue(group, out var subtotal)
-                ? Lookup(subtotal.FinalizeTotals(request.Values), valueKey)
+                ? Lookup(subtotal.FinalizeTotals(), valueKey)
                 : null;
 
     private static decimal? Lookup(IReadOnlyDictionary<string, decimal?> values, string key) =>
@@ -765,14 +775,14 @@ public sealed class PivotEngine
     private static AggregateBucket GetOrAddBucket(
         Dictionary<int, AggregateBucket> buckets,
         int index,
-        IReadOnlyList<PivotValueDefinition> definitions)
+        MeasurePlan plan)
     {
         if (buckets.TryGetValue(index, out var bucket))
         {
             return bucket;
         }
 
-        bucket = new AggregateBucket(definitions);
+        bucket = new AggregateBucket(plan);
         buckets.Add(index, bucket);
         return bucket;
     }
@@ -1064,15 +1074,27 @@ public sealed class PivotEngine
     private static decimal? GetValue(IReadOnlyDictionary<string, decimal?>? values, string key) =>
         values is not null && values.TryGetValue(key, out var value) ? value : null;
 
-    private static void ValidateRequest(PivotRequest request, IRecordReader reader)
+    private static MeasurePlan ValidateRequest(
+        PivotRequest request,
+        IRecordReader reader,
+        IReadOnlyDictionary<string, PivotCustomAggregate> customAggregates)
     {
         if (request.Values.Count == 0)
         {
             throw new ArgumentException("At least one pivot value definition is required.", nameof(request));
         }
 
+        if (request.Values.Any(value => string.IsNullOrWhiteSpace(value.Field)))
+        {
+            throw new ArgumentException("Pivot fields cannot be empty.", nameof(request));
+        }
+
+        var plan = MeasurePlan.Create(request.Values, customAggregates);
+
+        // A calculated value's own name is not a source field, so what has to exist is
+        // every field its formula reads -- which the plan's inputs already list.
         foreach (var field in request.Rows.Concat(request.Columns).Select(level => level.Field)
-                     .Concat(request.Values.Select(value => value.Field))
+                     .Concat(plan.Inputs.Select(input => input.Field))
                      .Concat(request.Filters.Select(filter => filter.Field)))
         {
             if (string.IsNullOrWhiteSpace(field))
@@ -1108,6 +1130,8 @@ public sealed class PivotEngine
                     "A pivot ranking must be ranked by a declared value.", nameof(request));
             }
         }
+
+        return plan;
     }
 
     private static IReadOnlyList<CompiledFilter> CompileFilters(IReadOnlyList<PivotFilter> filters)
@@ -1788,36 +1812,24 @@ public sealed class PivotEngine
         private readonly AggregateBucket _total;
         private readonly Dictionary<int, AggregateBucket> _cells = [];
 
-        public SubtotalBuckets(IReadOnlyList<string?> rowHeader, IReadOnlyList<PivotValueDefinition> definitions)
+        public SubtotalBuckets(IReadOnlyList<string?> rowHeader, MeasurePlan plan)
         {
             RowHeader = rowHeader;
-            _total = new AggregateBucket(definitions);
+            _total = new AggregateBucket(plan);
         }
 
         public IReadOnlyList<string?> RowHeader { get; }
 
-        public void Add(
-            int column,
-            IReadOnlyList<PivotValueDefinition> definitions,
-            object record,
-            IRecordReader reader)
+        public void Add(int column, MeasurePlan plan, object?[] values)
         {
-            var cell = GetOrAddBucket(_cells, column, definitions);
-
-            foreach (var definition in definitions)
-            {
-                var value = reader.GetValue(record, definition.Field);
-                cell.Add(definition, value);
-                _total.Add(definition, value);
-            }
+            GetOrAddBucket(_cells, column, plan).Add(values);
+            _total.Add(values);
         }
 
         /// <summary>The aggregate of the whole group, which is what a ranking compares.</summary>
-        public IReadOnlyDictionary<string, decimal?> FinalizeTotals(
-            IReadOnlyList<PivotValueDefinition> definitions) => _total.Finalize(definitions);
+        public IReadOnlyDictionary<string, decimal?> FinalizeTotals() => _total.Finalize();
 
         public PivotSubtotal Finalize(
-            IReadOnlyList<PivotValueDefinition> definitions,
             IReadOnlyList<IReadOnlyList<string?>> observedColumnHeaders,
             IReadOnlyDictionary<HeaderKey, int> columnLookup)
         {
@@ -1828,11 +1840,11 @@ public sealed class PivotEngine
                     {
                         Row = 0,
                         Column = RemapColumnIndex(pair.Key, observedColumnHeaders, columnLookup),
-                        Values = pair.Value.Finalize(definitions)
+                        Values = pair.Value.Finalize()
                     })
                     .OrderBy(cell => cell.Column)
                     .ToArray(),
-                Totals = _total.Finalize(definitions)
+                Totals = _total.Finalize()
             };
         }
     }

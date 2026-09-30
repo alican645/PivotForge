@@ -59,6 +59,10 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         {
             throw;
         }
+        catch (PivotExpressionException exception)
+        {
+            return FormulaNotValid(exception);
+        }
         catch (Exception exception) when (IsInvalidPivotRequest(exception))
         {
             return BadRequest("Pivot request is not valid.");
@@ -118,6 +122,10 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (PivotExpressionException exception)
+        {
+            return FormulaNotValid(exception);
         }
         catch (Exception exception) when (IsInvalidPivotRequest(exception))
         {
@@ -189,6 +197,10 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (PivotExpressionException exception)
+        {
+            return FormulaNotValid(exception);
         }
         catch (Exception exception) when (IsInvalidPivotRequest(exception))
         {
@@ -269,6 +281,11 @@ public static class PivotForgeEndpointRouteBuilderExtensions
     // endpoint into a way of asking what the record type holds.
     private static IResult FieldNotAllowed() =>
         BadRequest("The request names a field that is not available.");
+
+    // Unlike a missing field, a formula error is worth describing: it says only what is wrong
+    // with the text the caller sent, and the reader who typed it needs to know where.
+    private static IResult FormulaNotValid(PivotExpressionException exception) =>
+        BadRequest($"Formula is not valid: {exception.Message}");
 
     private static IResult BadRequest(string message) =>
         Results.BadRequest(new PivotForgeErrorResponse(message));

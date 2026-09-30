@@ -31,7 +31,8 @@ public class PivotTagHelperTests
         int? AreaIndex = null,
         PivotSortDirection? SortOrder = null,
         PivotGroupInterval? GroupInterval = null,
-        string? SortByValueKey = null);
+        string? SortByValueKey = null,
+        string? Expression = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -139,6 +140,12 @@ public class PivotTagHelperTests
         {
             helper.SortByValueKey = spec.SortByValueKey;
             attributes.Add(new TagHelperAttribute("sort-by-value-key", spec.SortByValueKey));
+        }
+
+        if (spec.Expression is not null)
+        {
+            helper.Expression = spec.Expression;
+            attributes.Add(new TagHelperAttribute("expression", spec.Expression));
         }
 
         return (helper, attributes);
@@ -328,6 +335,29 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task AnExpressionMakesTheFieldCalculated()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data),
+            new FieldSpec("Margin", PivotArea.Available, Caption: "Marj",
+                Expression: "([Amount] - [Cost]) / [Amount]")));
+
+        var margin = config.GetProperty("fields")[1];
+        Assert.Equal("([Amount] - [Cost]) / [Amount]", margin.GetProperty("expression").GetString());
+        Assert.Equal("measure", margin.GetProperty("role").GetString());
+        Assert.False(margin.TryGetProperty("aggregation", out _));
+    }
+
+    [Fact]
+    public async Task AnUnreadableExpressionFailsThePage()
+    {
+        await Assert.ThrowsAsync<PivotExpressionException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Margin", PivotArea.Data, Expression: "[Amount] -")));
+    }
+
+    [Fact]
     public async Task EveryWrittenGridOptionReachesTheConfiguration()
     {
         var html = await RenderAsync(
@@ -339,6 +369,7 @@ public class PivotTagHelperTests
                 AllowDrillDown = false,
                 AllowExcelExport = true,
                 AllowConditionalFormatting = false,
+                AllowCalculatedFields = false,
                 AutoLoad = false,
                 LargeData = true,
                 PageSize = 75,
@@ -354,6 +385,7 @@ public class PivotTagHelperTests
         Assert.False(config.GetProperty("allowDrillDown").GetBoolean());
         Assert.True(config.GetProperty("allowExcelExport").GetBoolean());
         Assert.False(config.GetProperty("allowConditionalFormatting").GetBoolean());
+        Assert.False(config.GetProperty("allowCalculatedFields").GetBoolean());
         Assert.False(config.GetProperty("autoLoad").GetBoolean());
         Assert.True(config.GetProperty("largeData").GetBoolean());
         Assert.Equal(75, config.GetProperty("pageSize").GetInt32());

@@ -37,6 +37,18 @@ for (const url of PAGES) {
   });
 }
 
+test("the grid draws the restored layout, not only the chips", async ({ page }) => {
+  await open(page, PAGES[0]);
+
+  await page.dragAndDrop(availableChip("Quarter"), zoneBody("row"));
+  await expect(page.locator(".pivot-table__table thead")).toContainText("Çeyrek");
+
+  await open(page, PAGES[0]);
+  await page.waitForSelector(".pivot-table__table td");
+
+  await expect(page.locator(".pivot-table__table thead")).toContainText("Çeyrek");
+});
+
 test("a renamed caption survives a reload", async ({ page }) => {
   await open(page, PAGES[0]);
 

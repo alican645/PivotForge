@@ -2,23 +2,38 @@ namespace PivotForge.Core.Aggregation;
 
 internal sealed class AggregateBucket
 {
-    private readonly Dictionary<string, AggregateState> _states;
+    private readonly MeasurePlan _plan;
+    private readonly AggregateState[] _states;
 
-    public AggregateBucket(IEnumerable<PivotValueDefinition> definitions)
+    public AggregateBucket(MeasurePlan plan)
     {
-        _states = definitions.ToDictionary(definition => definition.Key, _ => new AggregateState(), StringComparer.Ordinal);
+        _plan = plan;
+        _states = new AggregateState[plan.Inputs.Count];
+
+        for (var index = 0; index < _states.Length; index++)
+        {
+            _states[index] = new AggregateState(plan.Inputs[index]);
+        }
     }
 
-    public void Add(PivotValueDefinition definition, object? value)
+    /// <summary>Adds one record's values, as <see cref="MeasurePlan.Read"/> returned them.</summary>
+    public void Add(object?[] values)
     {
-        _states[definition.Key].Add(definition, value);
+        for (var index = 0; index < _states.Length; index++)
+        {
+            _states[index].Add(values[index]);
+        }
     }
 
-    public IReadOnlyDictionary<string, decimal?> Finalize(IReadOnlyList<PivotValueDefinition> definitions)
+    public IReadOnlyDictionary<string, decimal?> Finalize()
     {
-        return definitions.ToDictionary(
-            definition => definition.Key,
-            definition => _states[definition.Key].Finalize(definition.Aggregation),
-            StringComparer.Ordinal);
+        var summaries = new decimal?[_states.Length];
+
+        for (var index = 0; index < summaries.Length; index++)
+        {
+            summaries[index] = _states[index].Finalize();
+        }
+
+        return _plan.Finalize(summaries);
     }
 }

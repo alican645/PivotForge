@@ -14,6 +14,45 @@ change will require a new major version.
 
 ## [Unreleased]
 
+Calculated fields.
+
+### Added
+
+- **Core** — calculated values: `PivotValueDefinition.Calculated("Margin",
+  "([Revenue] - [Cost]) / [Revenue]")`, keyed `Margin_calculated`. The formula
+  runs on each cell, total, subtotal and grand total after aggregation, so a
+  ratio is the ratio of the sums at every level. `[Field]` is a field's sum;
+  `Sum`, `Count`, `Avg`, `Min` and `Max` summarize it another way; `+ - * /`,
+  parentheses and unary minus work as in arithmetic; an empty summary or a
+  division by zero leaves the cell empty. Show-as, value sorting and Top-N
+  accept a calculated value like any other. `PivotExpression.Parse` reads a
+  formula without running it, and `PivotExpressionException` says what is
+  wrong and where.
+- **Core** — custom aggregates: `PivotEngine.CustomAggregates` registers a
+  summary by name (`Median`, a distinct count, anything over a cell's values),
+  which any formula can then call: `Median([Amount])`.
+- **AspNetCore** — `<pivot-field expression="...">` and
+  `PivotFieldBuilder.Expression()` declare a calculated field; one left in
+  `Available` is a measure without declaring the role, and may now carry a
+  format like any available measure. `PivotForgeOptions.CustomAggregates`
+  registers custom summaries for the endpoints. A formula is checked against
+  `AllowedFields` by the fields it names, and an unreadable one is answered with
+  `400` and the reason.
+- **AspNetCore** — the field designer's **+ ƒx** button opens a formula editor:
+  a name, the formula, and a button per field that inserts it. A formula naming
+  a field the list does not have is refused in the editor, in the reader's
+  language. The new field lands in the data area and survives a reload under
+  `state-storing`; the reader can edit or delete it from its settings.
+  `allow-calculated-fields="false"` removes the button. `PivotLayoutState`
+  gains `addCalculatedField()`, `setExpression()`, `deleteCalculatedField()`
+  and `checkFormula()`, and the Turkish locale pack words every message.
+
+### Fixed
+
+- **AspNetCore** — a layout restored by `state-storing` put the chips back
+  where they were saved, but the grid's first request still used the declared
+  fields, so the table did not match the designer until the next edit.
+
 ## [0.6.0-preview.4] — 2026-09-30
 
 The column axis sorts from its headers.

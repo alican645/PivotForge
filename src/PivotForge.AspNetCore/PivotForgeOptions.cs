@@ -1,3 +1,5 @@
+using PivotForge.Core;
+
 namespace PivotForge.AspNetCore;
 
 /// <summary>Configures PivotForge endpoint limits and cache behavior.</summary>
@@ -14,6 +16,17 @@ public sealed class PivotForgeOptions
     /// </remarks>
     public ISet<string> AllowedFields { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Gets the custom summary functions a calculated field's formula may call.</summary>
+    /// <remarks>
+    /// Registered by the name a formula uses, e.g. <c>options.CustomAggregates["Median"] = ...</c>
+    /// for <c>Median([Amount])</c>, and matched without regard to case. The function receives a
+    /// cell's non-null values and is not called for a cell that has none. It runs on the
+    /// server, which is the only place a formula ever runs: a reader who types one into the
+    /// designer can call what is registered here and nothing else.
+    /// </remarks>
+    public IDictionary<string, PivotCustomAggregate> CustomAggregates { get; } =
+        new Dictionary<string, PivotCustomAggregate>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Gets or sets the sliding expiration used for completed large pivot results.</summary>
     public TimeSpan CacheSlidingExpiration { get; set; } = TimeSpan.FromMinutes(5);

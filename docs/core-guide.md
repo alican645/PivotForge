@@ -91,6 +91,59 @@ Supported modes:
 
 Percentage modes return ratios. For example, `0.25m` represents 25 percent; formatting belongs to the consuming UI.
 
+## Calculated Fields
+
+A calculated value is a formula over other summaries:
+
+```csharp
+var request = new PivotRequest
+{
+    Rows = ["Region"],
+    Values =
+    [
+        PivotValueDefinition.Sum("Revenue"),
+        PivotValueDefinition.Calculated("Margin", "([Revenue] - [Cost]) / [Revenue]")
+    ]
+};
+
+// result.GrandTotals["Margin_calculated"]
+```
+
+The formula runs after each cell, row total, column total, subtotal and grand total has been aggregated, on that bucket's own summaries. `[Profit] / [Revenue]` is therefore the ratio of the sums at every level, never a sum or an average of per-record ratios. Show-as modes, value sorting and Top-N treat a calculated value like any other.
+
+The grammar:
+
+- `[Field]` is the sum of a source field; `Sum`, `Count`, `Avg` (or `Average`), `Min` and `Max` summarize it another way: `Count([OrderId])`.
+- `+ - * /`, parentheses and unary minus, with the usual precedence.
+- Numbers are written with a dot as the decimal separator, whatever the culture.
+- Function and field names are matched without regard to case.
+- An empty summary or a division by zero leaves the cell empty.
+
+`PivotExpression.Parse(text)` reads a formula without running it and lists the source fields it names; a formula that cannot be read throws `PivotExpressionException`, which carries the character `Position` the problem starts at.
+
+### Custom Aggregates
+
+A summary the engine does not have is registered by name and called from a formula:
+
+```csharp
+var engine = new PivotEngine
+{
+    CustomAggregates = new Dictionary<string, PivotCustomAggregate>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Median"] = values =>
+        {
+            var sorted = values.Order().ToArray();
+            var middle = sorted.Length / 2;
+            return sorted.Length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+        }
+    }
+};
+
+var value = PivotValueDefinition.Calculated("MedianAmount", "Median([Amount])");
+```
+
+The function receives a cell's non-null values and is not called for a cell that has none. The built-in names always mean the built-in summaries.
+
 ## Result Contract
 
 `PivotResult` contains:

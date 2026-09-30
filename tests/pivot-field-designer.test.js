@@ -1933,3 +1933,118 @@ test("the picker opens for a field that has no filter entry yet", async () => {
     { field: "Region", values: ["Q2", "Q3"], mode: "Include" });
   assert.equal(state.areaOf("Region"), "row");
 });
+
+// --- Calculated fields ----------------------------------------------------
+
+const calculatedCatalog = [
+  { dataField: "Region", caption: "Bölge", area: "row" },
+  { dataField: "Amount", caption: "Tutar", area: "data" },
+  { dataField: "Quantity", caption: "Miktar", area: "available", role: "measure" },
+  { dataField: "UnitPrice", caption: "Birim Fiyat", area: "available", expression: "[Amount] / [Quantity]" }
+];
+
+function buildCalculated(options = { allowCalculatedFields: true }) {
+  const updates = [];
+  const widget = { update: async payload => { updates.push(payload); } };
+  const state = new PivotForge.PivotLayoutState(calculatedCatalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget, ...options });
+
+  return { designer, state, host, updates };
+}
+
+test("the calculated field editor is offered only when asked for", () => {
+  assert.equal(findByAction(buildCalculated({}).host, "add-calculated"), null);
+  assert.notEqual(findByAction(buildCalculated().host, "add-calculated"), null);
+});
+
+test("a calculated chip says it is computed", () => {
+  const { host } = buildCalculated();
+  const chip = chips(host).find(entry => entry.dataset.field === "UnitPrice");
+
+  assert.equal(chip.classList.contains("is-calculated"), true);
+});
+
+test("defining a field from the editor places it and refreshes the grid once", async () => {
+  const { host, state, updates } = buildCalculated();
+  findByAction(host, "add-calculated").dispatch("click", {});
+
+  const panel = settingsPanel();
+  findByAction(panel, "formula-caption").value = "Kâr";
+  const formula = findByAction(panel, "formula");
+  allByAction(panel, "insert-field").find(button => button.dataset.value === "Amount").dispatch("click", {});
+  formula.value += " - ";
+  formula.selectionStart = formula.value.length;
+  formula.selectionEnd = formula.value.length;
+  allByAction(panel, "insert-field").find(button => button.dataset.value === "Quantity").dispatch("click", {});
+
+  assert.equal(formula.value, "[Amount] - [Quantity]");
+
+  await findByAction(panel, "formula-save").dispatch("click", {});
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(state.getState().values.map(value => value.field), ["Amount", "calculated1"]);
+  assert.equal(updates.length, 1);
+  assert.equal(panel.classList.contains("is-open"), false);
+  assert.notEqual(chips(zone(host, "data")).find(chip => chip.dataset.field === "calculated1"), undefined);
+});
+
+test("a refused formula keeps the editor open with the reason in its language", async () => {
+  const updates = [];
+  const state = new PivotForge.PivotLayoutState(calculatedCatalog);
+  const designer = new PivotForge.PivotFieldDesigner(createElement("div"), {
+    state,
+    widget: { update: async payload => updates.push(payload) },
+    allowCalculatedFields: true,
+    labels: { formulaErrors: { unknownField: "[{0}] yok." } }
+  });
+  designer.openFormula(null);
+
+  const panel = settingsPanel();
+  findByAction(panel, "formula-caption").value = "X";
+  findByAction(panel, "formula").value = "[Amount] - [Cost]";
+  await findByAction(panel, "formula-save").dispatch("click", {});
+
+  const message = (function find(node) {
+    if (node.dataset?.role === "formula-error") return node;
+    for (const child of node.children) { const hit = find(child); if (hit) return hit; }
+    return null;
+  })(panel);
+
+  assert.equal(message.hidden, false);
+  assert.equal(message.textContent, "[Cost] yok.");
+  assert.equal(panel.classList.contains("is-open"), true);
+  assert.equal(updates.length, 0);
+  assert.equal(state.getState().values.length, 1);
+});
+
+test("a calculated value's settings show its formula instead of an aggregation", () => {
+  const { host, state, designer } = buildCalculated();
+  state.move("UnitPrice", "data");
+  designer.render();
+  const panel = openSettings(host, "UnitPrice");
+
+  assert.equal(findByAction(panel, "aggregation"), null);
+  assert.notEqual(findByAction(panel, "show-as"), null);
+  // The page declared this one, so the reader may not change or delete it.
+  assert.equal(findByAction(panel, "edit-formula"), null);
+  assert.equal(findByAction(panel, "delete-calculated"), null);
+});
+
+test("the reader's own field can be edited and deleted from its settings", async () => {
+  const { host, state, designer } = buildCalculated();
+  const name = state.addCalculatedField({ caption: "Kâr", expression: "[Amount]" });
+  // Defined straight on the state, which the designer only notices when it renders.
+  designer.render();
+
+  let panel = openSettings(host, name);
+  findByAction(panel, "edit-formula").dispatch("click", {});
+  panel = settingsPanel();
+  findByAction(panel, "formula").value = "[Amount] * 2";
+  await findByAction(panel, "formula-save").dispatch("click", {});
+  assert.equal(state.field(name).expression, "[Amount] * 2");
+
+  panel = openSettings(host, name);
+  await findByAction(panel, "delete-calculated").dispatch("click", {});
+  assert.equal(state.catalog.has(name), false);
+});

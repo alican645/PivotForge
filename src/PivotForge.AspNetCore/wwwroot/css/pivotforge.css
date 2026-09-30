@@ -2778,6 +2778,78 @@ select {
   background: rgba(180, 35, 24, 0.06);
 }
 
+/* --- Calculated fields ------------------------------------------------------ */
+
+.pivot-search.has-action {
+  display: flex;
+  gap: 4px;
+}
+
+.pivot-search__add {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--pt-border);
+  border-radius: 4px;
+  background: var(--pt-panel);
+  color: var(--pt-accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pivot-search__add:hover,
+.pivot-search__add:focus-visible {
+  border-color: var(--pt-accent);
+}
+
+/* Says the value is computed rather than read from the source, which the
+   caption alone cannot. */
+.pivot-chip__badge {
+  flex: 0 0 auto;
+  color: var(--pt-accent);
+  font-size: 0.6875rem;
+  font-style: italic;
+  font-weight: 600;
+}
+
+.pivot-value-settings__formula {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: var(--pt-panel-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.pivot-value-settings__formula-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  resize: vertical;
+}
+
+.pivot-value-settings__formula-input[aria-invalid="true"] {
+  border-color: var(--pt-danger);
+}
+
+.pivot-value-settings__error {
+  color: var(--pt-danger);
+  font-size: 0.75rem;
+}
+
+.pivot-value-settings__error[hidden] {
+  display: none;
+}
+
+.pivot-value-settings__hint {
+  margin: 0;
+  color: var(--pt-muted);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+
 /* --- Adaptive layout -------------------------------------------------------- */
 
 /* The designer is laid out by the width it was given rather than the viewport:

@@ -974,6 +974,40 @@ A comparison costs one `/field-values` request when the picker opens straight
 into it — the list is not shown, only consulted. A text condition asks for
 nothing.
 
+### Calculated fields
+
+`expression` turns a field into a formula over other summaries; `field` then names it rather than a source column, and its value key is `Name_calculated`:
+
+```cshtml
+<pivot-field field="Margin" caption="Marj" area="Data"
+             expression="([Amount] - [Cost]) / [Amount]"
+             format-type="Percent" format-decimals="1" />
+<pivot-field field="UnitPrice" caption="Birim Fiyat" area="Available"
+             expression="[Amount] / [Quantity]" />
+```
+
+The fluent builder has the same member: `fields.Add().DataField("Margin").Expression("([Amount] - [Cost]) / [Amount]")`. A calculated field in `Available` is a measure without declaring the role. The grammar and the way totals are computed are in the [Core guide](core-guide.md#calculated-fields); the formula is evaluated on the server, after aggregation, so a ratio is right at every level.
+
+The field designer adds a **+ ƒx** button beside its search box. It opens an editor with a name, the formula and a button per field that inserts `[Field]` at the caret; a formula naming a field the list does not have is refused there, in the reader's language, before anything is sent. The new field lands in the data area and is carried by `state-storing`. A reader's own field can be edited or deleted from its settings; a declared one shows its formula read-only. `allow-calculated-fields="false"` (or `AllowCalculatedFields(false)`) removes the button; declared calculated fields work either way.
+
+A formula typed by a reader is as safe as a declared one. It is only ever read as the grammar above and evaluated on the server; `AllowedFields` is checked against the fields it names, so it can reach nothing a header could not; and a formula that cannot be read is answered with `400` and a message saying what is wrong with the text.
+
+Custom summaries are registered on the options and called from any formula:
+
+```csharp
+builder.Services.AddPivotForge<Sale>(provider, options =>
+{
+    options.CustomAggregates["Median"] = values =>
+    {
+        var sorted = values.Order().ToArray();
+        var middle = sorted.Length / 2;
+        return sorted.Length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+    };
+});
+```
+
+Limitations: a formula reads source fields, not other calculated fields, and the browser cannot check a custom function's name, so a misspelled one is reported by the server when the grid loads.
+
 ### Date grouping
 
 `group-interval` collapses a date column into header groups, so a year over
@@ -1194,6 +1228,7 @@ The authenticated user identifier, endpoint path, and query string are included 
 | Option | Default |
 | --- | ---: |
 | `AllowedFields` | empty (every field readable) |
+| `CustomAggregates` | empty (only the built-in summaries) |
 | `CacheSlidingExpiration` | 5 minutes |
 | `MinimumLargeDataSourceRowCount` | 1,000 |
 | `MaximumSourceRowCount` | 500,000 |

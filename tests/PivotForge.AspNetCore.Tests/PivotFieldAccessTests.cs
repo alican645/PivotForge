@@ -291,4 +291,87 @@ public sealed class PivotFieldAccessTests
             Assert.Equal("secret-one", record.GetProperty("passwordHash").GetString());
         });
     }
+
+    private static string CalculatedPivot(string formula) => $$"""
+        {
+          "rows": ["Department"],
+          "values": [{ "field": "Ratio", "aggregation": "calculated", "expression": {{JsonSerializer.Serialize(formula)}} }]
+        }
+        """;
+
+    [Fact]
+    public async Task ACalculatedValueIsComputedByTheEndpoint()
+    {
+        await WithAppAsync(["Department", "Salary"], async client =>
+        {
+            using var response = await client.PostAsync(
+                "/pivotforge/pivot", Json(CalculatedPivot("[Salary] * 2")));
+
+            response.EnsureSuccessStatusCode();
+            var result = await ReadAsync(response);
+            Assert.Equal(600m, result.GetProperty("grandTotals").GetProperty("Ratio_calculated").GetDecimal());
+        });
+    }
+
+    [Fact]
+    public async Task AFormulaCannotReachAnUnlistedField()
+    {
+        // The formula names the field, not the value: its own name is not a source field
+        // and must not be what the list is checked against.
+        await WithAppAsync(["Department", "Salary"], async client =>
+        {
+            using var response = await client.PostAsync(
+                "/pivotforge/pivot", Json(CalculatedPivot("Count([PasswordHash])")));
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var body = await ReadAsync(response);
+            Assert.DoesNotContain("PasswordHash", body.GetProperty("message").GetString());
+        });
+    }
+
+    [Fact]
+    public async Task AnUnreadableFormulaIsRefusedWithTheReason()
+    {
+        await WithAppAsync(null, async client =>
+        {
+            using var response = await client.PostAsync(
+                "/pivotforge/pivot", Json(CalculatedPivot("[Salary] + Medain([Salary])")));
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var body = await ReadAsync(response);
+            Assert.Contains("Medain", body.GetProperty("message").GetString());
+        });
+    }
+
+    [Fact]
+    public async Task ARegisteredCustomAggregateIsCallable()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Employee>(
+            (_, _) => ValueTask.FromResult<IReadOnlyList<Employee>>(People),
+            options => options.CustomAggregates["Spread"] = values => values.Max() - values.Min());
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+            using var response = await client.PostAsync(
+                "/pivotforge/pivot", Json(CalculatedPivot("spread([Salary])")));
+
+            response.EnsureSuccessStatusCode();
+            var result = await ReadAsync(response);
+            Assert.Equal(100m, result.GetProperty("grandTotals").GetProperty("Ratio_calculated").GetDecimal());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
 }

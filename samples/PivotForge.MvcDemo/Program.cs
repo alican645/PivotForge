@@ -18,11 +18,23 @@ builder.Services.AddPivotForge<SalesRecord>(
     // What the endpoints may read. The source record also carries CustomerEmail,
     // which no report needs: leaving it off means the browser can neither pivot on
     // it nor receive it in a drill-down, whatever it asks for.
-    options => options.AllowedFields.UnionWith(
-    [
-        "Region", "Category", "SalesPerson", "Year", "Quarter",
-        "OrderDate", "Amount", "Quantity", "Discount"
-    ]));
+    options =>
+    {
+        options.AllowedFields.UnionWith(
+        [
+            "Region", "Category", "SalesPerson", "Year", "Quarter",
+            "OrderDate", "Amount", "Quantity", "Discount"
+        ]);
+
+        // Callable from any calculated field's formula, declared or typed into the
+        // designer: Median([Amount]).
+        options.CustomAggregates["Median"] = values =>
+        {
+            var sorted = values.Order().ToArray();
+            var middle = sorted.Length / 2;
+            return sorted.Length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+        };
+    });
 
 var app = builder.Build();
 

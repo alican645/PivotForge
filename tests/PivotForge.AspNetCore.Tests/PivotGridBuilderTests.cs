@@ -131,6 +131,7 @@ public class PivotGridBuilderTests
             .AllowFiltering(true)
             .AllowExcelExport(true)
             .AllowConditionalFormatting(false)
+            .AllowCalculatedFields(false)
             .LargeData(true)
             .AutoLoad(false)
             .PageSize(75)
@@ -141,6 +142,7 @@ public class PivotGridBuilderTests
         Assert.True(config.GetProperty("allowFiltering").GetBoolean());
         Assert.True(config.GetProperty("allowExcelExport").GetBoolean());
         Assert.False(config.GetProperty("allowConditionalFormatting").GetBoolean());
+        Assert.False(config.GetProperty("allowCalculatedFields").GetBoolean());
         Assert.True(config.GetProperty("largeData").GetBoolean());
         Assert.False(config.GetProperty("autoLoad").GetBoolean());
         Assert.Equal(75, config.GetProperty("pageSize").GetInt32());

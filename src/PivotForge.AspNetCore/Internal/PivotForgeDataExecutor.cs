@@ -1,10 +1,21 @@
+using Microsoft.Extensions.Options;
 using PivotForge.Core;
 
 namespace PivotForge.AspNetCore.Internal;
 
-internal sealed class PivotForgeDataExecutor<TRecord>(IPivotForgeDataProvider<TRecord> provider)
+internal sealed class PivotForgeDataExecutor<TRecord>(
+    IPivotForgeDataProvider<TRecord> provider,
+    IOptions<PivotForgeOptions> options)
     : IPivotForgeDataExecutor
 {
+    // Copied per engine rather than shared, so a registration made after startup cannot
+    // change a result halfway through computing it.
+    private PivotEngine CreateEngine() => new()
+    {
+        CustomAggregates = new Dictionary<string, PivotCustomAggregate>(
+            options.Value.CustomAggregates, StringComparer.OrdinalIgnoreCase)
+    };
+
     public async ValueTask<PivotResult> ExecuteAsync(
         PivotRequest request,
         int? sourceRowCount,
@@ -13,7 +24,7 @@ internal sealed class PivotForgeDataExecutor<TRecord>(IPivotForgeDataProvider<TR
         var records = await GetRecordsAsync(sourceRowCount, cancellationToken);
 
         return await Task.Run(
-            () => new PivotEngine().Execute(records, request, cancellationToken),
+            () => CreateEngine().Execute(records, request, cancellationToken),
             cancellationToken);
     }
 
@@ -41,7 +52,7 @@ internal sealed class PivotForgeDataExecutor<TRecord>(IPivotForgeDataProvider<TR
         var records = await GetRecordsAsync(sourceRowCount, cancellationToken);
 
         var matches = await Task.Run(
-            () => new PivotEngine().DrillDown(records, request, rowPath, columnPath),
+            () => CreateEngine().DrillDown(records, request, rowPath, columnPath),
             cancellationToken);
 
         // The detail list is the one response that hands back whole source records, so an

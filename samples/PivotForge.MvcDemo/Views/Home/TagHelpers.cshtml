@@ -76,6 +76,9 @@
                                             threshold="900000" color="Green" id="yuksek" />
 
                     <pivot-field field="Discount" caption="İskonto" area="Available" role="Measure" />
+                    <pivot-field field="UnitPrice" caption="Ortalama Birim Fiyat" area="Available"
+                                 expression="[Amount] / [Quantity]"
+                                 format-type="Currency" format-decimals="2" format-currency="TRY" />
                 </pivot-grid>
             </div>
         </div>
@@ -112,6 +115,9 @@
     &lt;pivot-field field="Quarter"     caption="Çeyrek"           area="Available" role="Dimension" /&gt;
     &lt;pivot-field field="Quantity"    caption="Miktar"           area="Available" role="Measure" /&gt;
     &lt;pivot-field field="Discount"    caption="İskonto"          area="Available" role="Measure" /&gt;
+    &lt;pivot-field field="UnitPrice"   caption="Ortalama Birim Fiyat" area="Available"
+                 expression="[Amount] / [Quantity]"
+                 format-type="Currency" format-decimals="2" format-currency="TRY" /&gt;
 &lt;/pivot-grid&gt;</code></pre>
             <p>
                 <code>area</code>, <code>aggregation</code> ve <code>role</code> nitelikleri enum'a

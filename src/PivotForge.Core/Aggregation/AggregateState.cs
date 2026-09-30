@@ -2,16 +2,19 @@ using System.Globalization;
 
 namespace PivotForge.Core.Aggregation;
 
-internal sealed class AggregateState
+internal sealed class AggregateState(MeasureInput input)
 {
+    // Only a custom aggregate keeps the values themselves: it is handed the whole list, so a
+    // median or a distinct count can be written without the engine knowing what it is.
+    private readonly List<decimal>? _values = input.Custom is null ? null : [];
     private decimal _sum;
     private int _count;
     private decimal? _min;
     private decimal? _max;
 
-    public void Add(PivotValueDefinition definition, object? value)
+    public void Add(object? value)
     {
-        if (definition.Aggregation == PivotAggregation.Count)
+        if (input.Aggregation == PivotAggregation.Count)
         {
             if (value is not null)
             {
@@ -26,9 +29,15 @@ internal sealed class AggregateState
             return;
         }
 
-        var numericValue = ConvertToDecimal(definition, value);
+        var numericValue = ConvertToDecimal(input, value);
 
-        switch (definition.Aggregation)
+        if (_values is not null)
+        {
+            _values.Add(numericValue);
+            return;
+        }
+
+        switch (input.Aggregation)
         {
             case PivotAggregation.Sum:
             case PivotAggregation.Average:
@@ -42,24 +51,29 @@ internal sealed class AggregateState
                 _max = _max is null || numericValue > _max.Value ? numericValue : _max;
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(definition), definition.Aggregation, "Unsupported pivot aggregation.");
+                throw new InvalidOperationException($"Unsupported pivot aggregation '{input.Aggregation}'.");
         }
     }
 
-    public decimal? Finalize(PivotAggregation aggregation)
+    public decimal? Finalize()
     {
-        return aggregation switch
+        if (_values is not null)
+        {
+            return _values.Count == 0 ? null : input.Custom!(_values);
+        }
+
+        return input.Aggregation switch
         {
             PivotAggregation.Sum => _count == 0 ? null : _sum,
             PivotAggregation.Count => _count,
             PivotAggregation.Average => _count == 0 ? null : _sum / _count,
             PivotAggregation.Min => _min,
             PivotAggregation.Max => _max,
-            _ => throw new ArgumentOutOfRangeException(nameof(aggregation), aggregation, "Unsupported pivot aggregation.")
+            _ => throw new InvalidOperationException($"Unsupported pivot aggregation '{input.Aggregation}'.")
         };
     }
 
-    private static decimal ConvertToDecimal(PivotValueDefinition definition, object value)
+    private static decimal ConvertToDecimal(MeasureInput definition, object value)
     {
         try
         {
