@@ -252,7 +252,7 @@
         funnel.tabIndex = -1;
         funnel.textContent = "▼";
         funnel.setAttribute("aria-label", `${field.caption} — ${this.labels.filterValues}`);
-        funnel.addEventListener("click", () => this.openFilterPicker(name));
+        funnel.addEventListener("click", () => this.openFilterPicker(name, funnel));
         chip.appendChild(funnel);
       }
 
@@ -721,7 +721,9 @@
         ?? { field: name, values: [], mode: "Include" };
     }
 
-    openFilterPicker(name) {
+    // `anchor` is the element the picker drops down under on a wide screen;
+    // without one it opens as a modal.
+    openFilterPicker(name, anchor = null) {
       this.filterPicker ??= new PivotForge.PivotFilterPicker({
         widget: this.widget,
         labels: this.labels.filterPicker
@@ -735,6 +737,7 @@
         selected: filter.values,
         mode: filter.mode,
         operator: filter.operator ?? "Equals",
+        anchor,
         // One apply(), so a picker that changed all three produces a single
         // refresh. The operator leads, because it decides what the values mean.
         onApply: (values, mode, operator) => this.apply(() => {
@@ -944,7 +947,9 @@
         open.textContent = this.labels.filterValues;
         open.addEventListener("click", () => {
           this.closeSettings();
-          this.openFilterPicker(name);
+          // Dropped down under the chip the settings belonged to, where the
+          // funnel would have opened it.
+          this.openFilterPicker(name, this.chipFor(name));
         });
         filtering.appendChild(open);
         settings.body.appendChild(filtering);

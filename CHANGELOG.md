@@ -14,6 +14,11 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.6.0-preview.2] — 2026-09-29
+
+Grand totals a field can leave, a layout that fits a phone, and a filter picker
+that opens where it was asked for.
+
 ### Added
 
 - **AspNetCore** — the field designer and the filter picker adapt to phones.
@@ -23,9 +28,8 @@ change will require a new major version.
   On a coarse pointer every chip control is at least 24px, as the grip already
   was, and inputs use 16px text so iOS does not zoom in on focus. Under 560px
   the filter picker fills the screen, the field settings dialog takes its full
-  width, and the picker's button rows wrap instead of running past the edge. The designer adds a
-  `pivot-field-designer` class to its host.
-
+  width, and the picker's button rows wrap instead of running past the edge.
+  The designer adds a `pivot-field-designer` class to its host.
 - **AspNetCore** — the grand total column on the right can be switched off with
   `show-column-grand-totals` / `ShowColumnGrandTotals(bool)`. The bottom row gets
   the matching name `show-row-grand-totals` / `ShowRowGrandTotals(bool)`, after
@@ -35,10 +39,32 @@ change will require a new major version.
   right-hand block goes while the other values keep theirs, and the bottom row
   goes only once every value has opted out, as in DevExtreme.
 
+### Changed
+
+- **AspNetCore** — on a screen wider than 560px the filter picker drops down
+  under the funnel it was opened from, on a table header or a designer chip,
+  instead of opening as a modal in the middle of the page, and is laid out like
+  Excel's filter dropdown: 300px wide and as tall as its content, no heading,
+  smaller controls, the values in a framed list of about ten rows, and a
+  **Select all** box at the head of the list (mixed while only some of the
+  searched values are checked) in place of the toolbar's two buttons. It opens
+  above the funnel when there is more room there, stays inside the window, and
+  follows the funnel when the page or the table scrolls; a click outside closes
+  it, as the backdrop did. Opened from a field's settings it drops down under that
+  field's chip. On a phone, or in a window too short for a dropdown either way,
+  it is still the modal. `PivotFilterPicker.open` takes the element as
+  `anchor`, `PivotFieldDesigner.openFilterPicker` as its second argument, and
+  the renderer's `onFilterRequested` callback now receives the pressed funnel
+  after the field name.
+
 ### Fixed
 
 - **AspNetCore** — the filter picker's Include/Exclude row had no styles, so its
   buttons ran out of the dialog and neither showed which mode was selected.
+- **AspNetCore** — the Turkish locale pack left the filter picker's condition
+  row in English (*Condition*, *is one of* and the other operators, *Value*,
+  *From*, *To*). A declared picker operator now also keeps the pack's names for
+  the others, rather than falling back to English for all of them.
 
 ## [0.6.0-preview.1] — 2026-09-29
 
@@ -299,6 +325,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.2...HEAD
+[0.6.0-preview.2]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.1...v0.6.0-preview.2
 [0.6.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.5.0-preview.1...v0.6.0-preview.1
 [0.5.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.4.0-preview.8...v0.5.0-preview.1
 [0.4.0-preview.8]: https://github.com/alican645/PivotForge/compare/v0.4.0-preview.7...v0.4.0-preview.8

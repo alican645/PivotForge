@@ -431,10 +431,14 @@
       };
     }
 
+    // Operators one level down as well: a page renaming one condition keeps
+    // the pack's names for the other seven.
     filterPickerLabels() {
+      const declared = this.options.designerLabels?.filterPicker ?? {};
       return {
         ...this.locale.filterPicker,
-        ...(this.options.designerLabels?.filterPicker ?? {})
+        ...declared,
+        operators: { ...this.locale.filterPicker?.operators, ...declared.operators }
       };
     }
 
@@ -478,7 +482,7 @@
           ? request => { this.sortBy(request); }
           : null,
         onFilterRequested: this.canHeaderFilter()
-          ? field => { this.openHeaderFilter(field); }
+          ? (field, anchor) => { this.openHeaderFilter(field, anchor); }
           : null,
         filteredFields: this.filteredFields(),
         // Without this the renderer treats every result as unsorted and re-orders
@@ -610,9 +614,11 @@
     // The row header's funnel and the designer's filter chip open one picker
     // over one entry; only the way in differs. With a designer attached the
     // layout state owns the filters, so the picker is opened through it.
-    openHeaderFilter(field) {
+    // `anchor` is the funnel that was pressed, so the picker can drop down
+    // under it.
+    openHeaderFilter(field, anchor = null) {
       if (this.designer) {
-        return this.designer.openFilterPicker(field);
+        return this.designer.openFilterPicker(field, anchor);
       }
 
       this.headerFilterPicker ??= new PivotForge.PivotFilterPicker({
@@ -627,6 +633,7 @@
         selected: current?.values ?? [],
         mode: current?.mode ?? "Include",
         operator: current?.operator ?? "Equals",
+        anchor,
         onApply: (values, mode, operator) => this.setFilter(field, values, mode, operator)
       });
     }

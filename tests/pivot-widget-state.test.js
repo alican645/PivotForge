@@ -39,6 +39,8 @@ function createElement(tagName = "div") {
     hidden: false,
     title: "",
     value: "",
+    // Inline style, which the picker writes to place itself as a dropdown.
+    style: {},
     classList: {
       names: new Set(),
       add(...names) { names.forEach(name => this.names.add(name)); },

@@ -231,11 +231,16 @@ test("the header funnel defers to an attached designer", async () => {
   // rather than building a second one that would show a stale selection.
   await withFakeRenderer((widget, captured) => {
     const asked = [];
-    widget.designer = { openFilterPicker: field => asked.push(field), dispose() {} };
+    widget.designer = {
+      openFilterPicker: (field, anchor) => asked.push([field, anchor]),
+      dispose() {}
+    };
+    const funnel = {};
 
-    captured.onFilterRequested("urun");
+    captured.onFilterRequested("urun", funnel);
 
-    assert.deepEqual(asked, ["urun"]);
+    // The funnel travels along, so the borrowed picker drops down under it.
+    assert.deepEqual(asked, [["urun", funnel]]);
     assert.equal(widget.headerFilterPicker, null);
   });
 });

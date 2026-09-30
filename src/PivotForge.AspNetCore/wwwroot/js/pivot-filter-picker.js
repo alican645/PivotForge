@@ -13,6 +13,22 @@
   // erasing it.
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+  // Opened from a button, the picker drops down under it -- but only where
+  // there is room beside the button for a dropdown to be one. On a phone it
+  // would be a modal without the backdrop, so it stays a modal there. The
+  // width matches the stylesheet's phone breakpoint.
+  const DROPDOWN_MEDIA = "(min-width: 561px)";
+  const DROPDOWN_GAP = 4;
+  const VIEWPORT_MARGIN = 8;
+  // Excel-sized: narrow, and as tall as its content. The height is what the
+  // compact layout takes with a full list, so it decides whether the dropdown
+  // fits below the button or has to open above it.
+  const DROPDOWN_WIDTH = 300;
+  const DROPDOWN_HEIGHT = 400;
+  // The controls take about 150px before the list gets any; with less room
+  // than this on both sides a centred modal beats a dropdown of three rows.
+  const DROPDOWN_MIN_HEIGHT = 240;
+
   const DEFAULT_LABELS = {
     // {0} is replaced with the field caption.
     title: "{0} filter",
@@ -68,7 +84,13 @@
       }
 
       this.widget = options.widget;
-      this.labels = { ...DEFAULT_LABELS, ...(options.labels ?? {}) };
+      // Operators merged one level down, as the conditional panel does, so a
+      // page renaming one keeps the pack's -- or English -- names for the rest.
+      this.labels = {
+        ...DEFAULT_LABELS,
+        ...(options.labels ?? {}),
+        operators: { ...DEFAULT_LABELS.operators, ...(options.labels?.operators ?? {}) }
+      };
       this.host = options.host ?? root.document?.body ?? null;
 
       if (!this.host) {
@@ -95,6 +117,12 @@
       this.isOpen = false;
       this.disposed = false;
       this.elements = null;
+      // The button the picker was opened from, when it was; null opens it as a
+      // modal. Kept while open so a scroll or resize can move the dropdown
+      // with it.
+      this.anchor = null;
+      this.watching = false;
+      this.reposition = () => this.place();
     }
 
     build() {
@@ -272,13 +300,15 @@
 
       this.host.appendChild(overlay);
       this.elements = {
-        overlay, title, summary, search, notice, state, list, apply, modeButtons,
+        overlay, dialog, title, summary, search, notice, state, list, apply, modeButtons,
         toolbar, operator, argumentInputs, argumentCounts: FILTER_ARGUMENTS
       };
       return this.elements;
     }
 
-    async open({ field, caption, selected = [], mode = "Include", operator = "Equals", onApply } = {}) {
+    async open({
+      field, caption, selected = [], mode = "Include", operator = "Equals", onApply, anchor = null
+    } = {}) {
       if (this.disposed || !field) {
         return;
       }
@@ -320,6 +350,9 @@
       elements.list.replaceChildren();
       elements.overlay.classList.add("is-open");
       elements.overlay.setAttribute("aria-hidden", "false");
+      this.anchor = anchor;
+      this.place();
+      this.watchAnchor(anchor !== null);
       elements.title.textContent = format(this.labels.title, caption ?? field);
       elements.summary.textContent = "";
       this.setState(this.labels.loading, false);
@@ -430,6 +463,30 @@
       this.setState("", false);
       elements.list.hidden = false;
 
+      // Excel's "(Select All)": one box over the rows the search is showing,
+      // checked when all of them are and mixed when only some are. The
+      // dropdown shows it in place of the toolbar's two buttons; the modal
+      // keeps the buttons and hides this row.
+      const all = document.createElement("label");
+      all.className = "pivot-filter-picker__select-all";
+      const allBox = document.createElement("input");
+      allBox.setAttribute("type", "checkbox");
+      allBox.dataset.action = "filter-toggle-all";
+      const allText = document.createElement("span");
+      allText.textContent = this.labels.selectAll;
+      all.appendChild(allBox);
+      all.appendChild(allText);
+
+      const syncAll = () => {
+        const count = visible.filter(value => this.selected.has(value)).length;
+        allBox.checked = count === visible.length;
+        allBox.indeterminate = count > 0 && count < visible.length;
+      };
+      syncAll();
+      // A mixed box turns checked when clicked, so "some" goes to "all" first,
+      // as it does in Excel.
+      allBox.addEventListener("change", () => this.setVisibleSelection(allBox.checked));
+
       const rows = visible.map(value => {
         const row = document.createElement("label");
         row.className = "pivot-filter-picker__value";
@@ -447,6 +504,7 @@
           }
           elements.summary.textContent =
             format(this.labels.summary, this.selected.size, this.values.length);
+          syncAll();
         });
 
         const text = document.createElement("span");
@@ -457,7 +515,7 @@
         return row;
       });
 
-      elements.list.replaceChildren(...rows);
+      elements.list.replaceChildren(all, ...rows);
     }
 
     // Hiding alone would leave the previous field's values in the DOM, where a
@@ -648,8 +706,81 @@
       this.isOpen = false;
       this.field = null;
       this.onApply = null;
+      this.watchAnchor(false);
+      this.anchor = null;
       this.elements.overlay.classList.remove("is-open");
       this.elements.overlay.setAttribute("aria-hidden", "true");
+    }
+
+    // Where the dropdown goes: under the anchor, or above it when the space
+    // below is short of a full dropdown and the space above is longer. Opened
+    // above, it is pinned by its bottom edge, so a list that loads after it
+    // opens grows away from the button instead of over it. Null means a modal
+    // -- no anchor, a phone-sized screen, or a window too short either way.
+    dropdownBox() {
+      if (!this.anchor || !(root.matchMedia?.(DROPDOWN_MEDIA).matches ?? true)) {
+        return null;
+      }
+
+      const rect = this.anchor.getBoundingClientRect();
+      const viewportWidth = root.innerWidth;
+      const viewportHeight = root.innerHeight;
+      const below = viewportHeight - rect.bottom - DROPDOWN_GAP - VIEWPORT_MARGIN;
+      const above = rect.top - DROPDOWN_GAP - VIEWPORT_MARGIN;
+
+      if (Math.max(below, above) < DROPDOWN_MIN_HEIGHT) {
+        return null;
+      }
+
+      const flip = below < DROPDOWN_HEIGHT && above > below;
+      const width = Math.min(DROPDOWN_WIDTH, viewportWidth - 2 * VIEWPORT_MARGIN);
+      // Aligned to the button's left edge, pushed back in where that would run
+      // past the right edge -- the designer's funnels sit near it.
+      const left = Math.max(
+        VIEWPORT_MARGIN,
+        Math.min(rect.left, viewportWidth - width - VIEWPORT_MARGIN));
+
+      return {
+        top: flip ? null : rect.bottom + DROPDOWN_GAP,
+        bottom: flip ? viewportHeight - rect.top + DROPDOWN_GAP : null,
+        left,
+        width,
+        maxHeight: flip ? above : below
+      };
+    }
+
+    place() {
+      if (!this.elements || !this.isOpen) {
+        return;
+      }
+
+      const { overlay, dialog } = this.elements;
+      const box = this.dropdownBox();
+
+      overlay.classList.toggle("is-anchored", box !== null);
+      // A dropdown leaves the page usable around it, so it does not claim to be
+      // modal; a click outside it still closes it, as the backdrop's did.
+      dialog.setAttribute("aria-modal", String(box === null));
+      const px = value => (value === null || value === undefined ? "" : `${Math.round(value)}px`);
+      dialog.style.top = px(box?.top);
+      dialog.style.bottom = px(box?.bottom);
+      dialog.style.left = px(box?.left);
+      dialog.style.width = px(box?.width);
+      dialog.style.maxHeight = px(box?.maxHeight);
+    }
+
+    // Scrolling the table or the page moves the button, and a resize can cross
+    // the phone breakpoint, so either one places the dialog again. Capture
+    // catches the scroll of any container the button sits in.
+    watchAnchor(on) {
+      if (on === this.watching) {
+        return;
+      }
+
+      const method = on ? "addEventListener" : "removeEventListener";
+      root[method]?.("scroll", this.reposition, true);
+      root[method]?.("resize", this.reposition);
+      this.watching = on;
     }
 
     dispose() {
@@ -659,6 +790,8 @@
 
       this.disposed = true;
       this.isOpen = false;
+      this.watchAnchor(false);
+      this.anchor = null;
 
       if (this.keydownHandler) {
         root.document?.removeEventListener("keydown", this.keydownHandler);

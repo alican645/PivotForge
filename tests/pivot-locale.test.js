@@ -197,3 +197,42 @@ test("a declared panel label wins over the pack, key by key", () => {
     PivotForge.PivotConditionalPanel = previous;
   }
 });
+
+// The pack is merged over each component's English defaults, so a key it lacks
+// shows in English on an otherwise Turkish page -- which is how the value
+// picker's condition row stayed English. Checked against what each component
+// actually defaults to, so a key added upstream fails here until translated.
+test("the Turkish pack translates every string the pickers and panels default", () => {
+  require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-filter-picker.js");
+  require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-conditional-panel.js");
+  require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-drill-down-modal.js");
+  const host = {};
+  const widget = { fieldValues() {}, drillDown() {} };
+  const components = {
+    filterPicker: new PivotForge.PivotFilterPicker({ widget, host }),
+    conditionalPanel: new PivotForge.PivotConditionalPanel({ host }),
+    drillDown: new PivotForge.PivotDrillDownModal({ widget, host })
+  };
+
+  const missing = [];
+  const walk = (defaults, pack, path) => Object.entries(defaults).forEach(([key, value]) => {
+    if (!(key in (pack ?? {}))) {
+      missing.push(`${path}.${key}`);
+    } else if (value && typeof value === "object") {
+      walk(value, pack[key], `${path}.${key}`);
+    }
+  });
+  Object.entries(components).forEach(([section, component]) =>
+    walk(component.labels, PivotForge.locales.tr[section], section));
+
+  assert.deepEqual(missing, []);
+});
+
+test("a declared picker operator wins over the pack without costing the others", () => {
+  withWidget(widget => {
+    const operators = widget.filterPickerLabels().operators;
+
+    assert.equal(operators.Equals, "listede");
+    assert.equal(operators.Contains, "içerir");
+  }, { locale: "tr", designerLabels: { filterPicker: { operators: { Equals: "listede" } } } });
+});

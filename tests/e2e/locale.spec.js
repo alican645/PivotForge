@@ -42,6 +42,13 @@ test("the value picker the designer opens is localized as well", async ({ page }
 
   await expect(picker.locator('[data-action="filter-apply"]')).toHaveText("Uygula");
   await expect(picker.locator('[data-action="filter-select-all"]')).toHaveText("Tümünü seç");
+  // The condition row was the part the pack had missed.
+  await expect(picker.locator(".pivot-filter-picker__condition-label")).toHaveText("Koşul");
+  await expect(picker.locator('[data-action="filter-operator"] option[value="Equals"]'))
+    .toHaveText("şunlardan biri");
+  await picker.locator('[data-action="filter-operator"]').selectOption("Between");
+  await expect(picker.locator('[data-action="filter-argument"]').first())
+    .toHaveAttribute("placeholder", "Başlangıç");
   expect(page.problems).toEqual([]);
 });
 

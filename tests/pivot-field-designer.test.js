@@ -47,6 +47,8 @@ function createElement(tagName) {
     checked: false,
     title: "",
     value: "",
+    // Inline style, which the picker writes to place itself as a dropdown.
+    style: {},
     classList: {
       names: new Set(),
       add(...names) { names.forEach(name => this.names.add(name)); },
@@ -1163,6 +1165,28 @@ test("the funnel asks the widget for that field's values", async () => {
   await findByAction(filterChip(host), "filter").dispatch("click", {});
 
   assert.deepEqual(requested, ["Quarter"]);
+});
+
+test("the funnel hands the picker itself to drop down under", async () => {
+  const { designer, host } = buildWithFilter();
+  const opened = [];
+  designer.filterPicker = { open: request => { opened.push(request); }, dispose() {} };
+  const funnel = findByAction(filterChip(host), "filter");
+
+  await funnel.dispatch("click", {});
+
+  assert.equal(opened[0].anchor, funnel);
+});
+
+test("the settings route to the picker anchors it on the chip", async () => {
+  const { designer, host } = buildWithFilter();
+  const opened = [];
+  designer.filterPicker = { open: request => { opened.push(request); }, dispose() {} };
+
+  designer.openSettings("Quarter");
+  await findByAction(designer.settings.body, "filter-values").dispatch("click", {});
+
+  assert.equal(opened[0].anchor, filterChip(host));
 });
 
 test("applying a selection writes it to the state and reaches the widget", async () => {
