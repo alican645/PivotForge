@@ -16,7 +16,11 @@ function trackRequests(page) {
   return requests;
 }
 
-const columnHeaders = page => page.locator(".pivot-table__column-header").allTextContents();
+// The funnel and the sort arrow draw as glyphs inside the header, so the value a
+// header names is its text without them.
+const withoutGlyphs = text => text.replace(/[↕▲▼]/g, "").trim();
+const columnHeaders = async page =>
+  (await page.locator(".pivot-table__column-header").allTextContents()).map(withoutGlyphs);
 
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -98,7 +102,7 @@ test("a level of a grouped column axis names itself too", async ({ page }) => {
 
   const names = await page.locator(".pivot-table__column-field").allTextContents();
 
-  expect(names.map(name => name.replace("▼", "").trim())).toEqual(["Çeyrek", "Haftanın Günü"]);
+  expect(names.map(withoutGlyphs)).toEqual(["Çeyrek", "Haftanın Günü"]);
   await expect(page.locator(columnField)).toHaveCount(2);
 });
 
@@ -297,7 +301,7 @@ test("a hidden column field is not named", async ({ page }) => {
 
     const result = Array.from(
       host.querySelectorAll(".pivot-table__column-field"),
-      cell => cell.textContent.replace("▼", "").trim());
+      cell => cell.textContent.replace(/[↕▲▼]/g, "").trim());
     host.remove();
     return result;
   });

@@ -733,3 +733,20 @@ test("the grid-wide switches win over a value asking for its grand totals", () =
   assert.equal(renderer.showsGrandTotalRow(values, { showColumnGrandTotals: false }), true);
   assert.equal(renderer.totalColumnValues(values, { showGrandTotal: false }).length, 1);
 });
+
+test("a column field header reads its sort from the column levels, not the row sort", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const settings = {
+    columnFields: ["Year", "Quarter"],
+    columnFieldSorts: [null, "Descending"],
+    sortState: { mode: "RowLabel", field: "Year", direction: "Ascending" }
+  };
+
+  assert.equal(renderer.activeSortDirection({ mode: "ColumnLabel", field: "Year" }, settings), null);
+  assert.equal(
+    renderer.activeSortDirection({ mode: "ColumnLabel", field: "Quarter" }, settings),
+    "Descending");
+  assert.equal(
+    renderer.activeSortDirection({ mode: "RowLabel", field: "Year" }, settings),
+    "Ascending");
+});

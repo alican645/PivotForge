@@ -159,6 +159,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       rowFieldLabels: [],
       columnFields: [],
       columnFieldLabels: [],
+      // Parallel to columnFields: the direction each column level is ordered
+      // in ("Ascending", "Descending"), or null for the order the data arrived
+      // in. Only marks the field header's arrow; the ordering is the server's.
+      columnFieldSorts: [],
       // Parallel to rowFields, following rowFieldLabels' shape. A false entry
       // means that row field starts collapsed, or produces no total.
       rowFieldExpanded: null,
@@ -557,14 +561,16 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const valueSpan = values.length;
     const totalValues = this.totalColumnValues(values, settings);
     // A column header names a value -- "2024" -- never the field behind it, so
-    // there is nowhere to hang a funnel the way the row axis hangs one on its
-    // corner. The field names get a cell of their own in the corner block, one
-    // per column level, which pushes the row field names down to a row of their
-    // own. Drawn only when both halves are there: nothing to filter, or no way
-    // to filter it, and the table keeps the shape it always had.
+    // there is nowhere to hang a sort arrow or a funnel the way the row axis
+    // hangs them on its corner. The field names get a cell of their own in the
+    // corner block, one per column level, which pushes the row field names down
+    // to a row of their own. Drawn only when there is a field to name and
+    // something to do with it -- sorting or filtering -- so a table with
+    // neither keeps the shape it always had.
     const columnFields = settings.columnFields ?? [];
-    const namesColumnFields =
-      typeof settings.onFilterRequested === "function" && columnFields.length > 0;
+    const namesColumnFields = columnFields.length > 0 && (
+      typeof settings.onFilterRequested === "function" ||
+      typeof settings.onSortRequested === "function");
     const rowFieldRow = namesColumnFields ? this.createRow() : null;
 
     const appendRowFieldHeaders = row => {
@@ -592,13 +598,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     };
 
     // The corner cell of a column level's own row: it names the field whose
-    // values that row shows, and carries that field's funnel.
+    // values that row shows, and carries that field's sort arrow and funnel.
+    // The arrow orders the level's own values -- 2023, 2024 or 2024, 2023 --
+    // which is the column axis' half of what a row field's arrow does.
     const appendColumnFieldHeader = (row, level) => {
       const field = columnFields[level] ?? null;
       const label = settings.columnFieldLabels?.[level] ?? field ?? "";
       const cell = this.createCell("th", label, "pivot-table__corner pivot-table__column-field");
       cell.colSpan = rowDepth;
       cell.dataset.stickyColumn = "0";
+      if (field) {
+        this.decorateSortableHeader(cell, label, { mode: "ColumnLabel", field }, settings);
+      }
       this.decorateFilterableHeader(cell, label, field, settings);
       row.appendChild(cell);
     };
@@ -622,6 +633,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
         if (group.value === null || group.value === undefined || group.value === "") {
           header.classList.add("is-empty");
+        }
+
+        // With a single value there is no value-header row underneath, so the
+        // innermost column header is the only cell naming that column: it takes
+        // the sort-rows-by-this-column arrow the value header carries otherwise.
+        if (measureDepth === 0 && values.length === 1 && level === columnDepth - 1 &&
+            columnHeaders.length > 0) {
+          this.decorateSortableHeader(header, this.displayValue(group.value, settings), {
+            mode: "RowTotalValue",
+            valueKey: values[0].key,
+            columnPath: columnHeaders[group.start] ?? []
+          }, settings);
         }
 
         row.appendChild(header);
@@ -2093,8 +2116,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     // The arrow glyph is aria-hidden, so without aria-sort the active sort is
     // visible and nothing more. It belongs on the header cell rather than the
     // button: the cell is what carries the columnheader role.
-    if (this.isActiveSort(request, settings.sortState)) {
-      const descending = settings.sortState.direction === "Descending";
+    const activeDirection = this.activeSortDirection(request, settings);
+    if (activeDirection) {
+      const descending = activeDirection === "Descending";
       indicator.textContent = descending ? "▼" : "▲";
       button.classList.add("is-active");
       button.title = formatText(settings.texts.sortActive, label);
@@ -2146,6 +2170,20 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     });
 
     cell.appendChild(button);
+  }
+
+  // The direction a header's own sort is in, or null when it is not sorted. A
+  // column field's order is not the row sort: it rides on the field itself, so
+  // it is read from what the host says each column level is sorted by.
+  activeSortDirection(request, settings) {
+    if (request?.mode === "ColumnLabel") {
+      const level = (settings.columnFields ?? []).indexOf(request.field);
+      return level >= 0 ? settings.columnFieldSorts?.[level] ?? null : null;
+    }
+
+    return this.isActiveSort(request, settings.sortState)
+      ? settings.sortState.direction
+      : null;
   }
 
   isActiveSort(request, sortState) {
