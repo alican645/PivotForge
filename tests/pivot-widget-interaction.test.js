@@ -268,6 +268,54 @@ test("the renderer receives a sort callback when sorting is enabled", () => {
   PivotForge.PivotTableRenderer = previous;
 });
 
+// A header click sends what to sort by and no direction, so the widget is the
+// one that has to flip it on a second click of the same header.
+test("clicking the same sort header again reverses the sort", async () => {
+  const captured = {};
+  class FakeRenderer {
+    constructor(container, options) { this.options = options; Object.assign(captured, options); }
+    render() {}
+  }
+  const previous = PivotForge.PivotTableRenderer;
+  PivotForge.PivotTableRenderer = FakeRenderer;
+
+  const calls = [];
+  const widget = PivotForge.create(createContainer(), {
+    fields,
+    autoLoad: false,
+    fetchImpl: async (url, init) => {
+      calls.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ cells: [], grandTotals: {} }) };
+    }
+  });
+  await widget.refresh();
+
+  const click = async request => {
+    captured.onSortRequested(request);
+    // sortBy runs asynchronously; let its refresh settle before reading.
+    await new Promise(resolve => setImmediate(resolve));
+    return widget.getState().rowSort.direction;
+  };
+
+  const label = { mode: "RowLabel", field: "urun" };
+  assert.equal(await click(label), "Ascending");
+  assert.equal(await click(label), "Descending");
+  assert.equal(await click(label), "Ascending");
+
+  // Another header starts over, values largest first like the demo page.
+  const total = { mode: "RowTotalValue", valueKey: "tutar_sum" };
+  assert.equal(await click(total), "Descending");
+  assert.equal(await click(total), "Ascending");
+
+  // A column's own value header is a different target from the row total.
+  assert.equal(await click({ ...total, columnPath: ["2024"] }), "Descending");
+
+  assert.equal(calls.at(-1).rowSort.direction, "Descending");
+
+  widget.dispose();
+  PivotForge.PivotTableRenderer = previous;
+});
+
 // --- Conditional formatting ---------------------------------------------------
 
 // The panel the widget builds on first use, recorded rather than rendered.

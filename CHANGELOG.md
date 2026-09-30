@@ -14,6 +14,14 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **AspNetCore** — a grid built with the tag helpers or the HTML helper sorted a
+  column on the first header click but never reversed it: the header sends no
+  direction, and the widget re-sent the same ascending sort on every click. A
+  second click on the sorted header now flips the direction; another header
+  starts labels A to Z and values largest first.
+
 ## [0.6.0-preview.2] — 2026-09-30
 
 Grand totals a field can leave, a layout that fits a phone, and a filter picker
