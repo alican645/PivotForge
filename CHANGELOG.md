@@ -14,6 +14,10 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.6.0-preview.3] — 2026-09-30
+
+A sorted column reverses on a second click again.
+
 ### Fixed
 
 - **AspNetCore** — a grid built with the tag helpers or the HTML helper sorted a
@@ -333,7 +337,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.2...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.3...HEAD
+[0.6.0-preview.3]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.2...v0.6.0-preview.3
 [0.6.0-preview.2]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.1...v0.6.0-preview.2
 [0.6.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.5.0-preview.1...v0.6.0-preview.1
 [0.5.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.4.0-preview.8...v0.5.0-preview.1
