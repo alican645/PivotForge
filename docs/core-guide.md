@@ -151,7 +151,8 @@ The function receives a cell's non-null values and is not called for a cell that
 - `RowHeaders` and `ColumnHeaders`
 - sparse `Cells` with row and column indexes
 - `RowTotals`, `ColumnTotals`, and `GrandTotals`
-- hierarchical row `Subtotals`
+- hierarchical row `Subtotals`, each carrying its values in every column subtotal
+- hierarchical `ColumnSubtotals`, one per outer column group, with a value per row and a total across all rows
 - source, header, and cell counts in `Metadata`
 
 Cells and totals store values in dictionaries keyed by the value definition key.

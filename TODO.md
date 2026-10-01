@@ -36,6 +36,7 @@ böylece renderer kendi varsayılanını korur.
 - [x] `selection-mode="Single|None"` → `selectionMode` — renderer yalnızca bu ikisini tanıyor
 - [x] `context-menu="true|false"` → `contextMenu`
 - [x] `subtotals="true|false"` → `subtotals`
+- [x] `column-subtotals="true|false"` → `columnSubtotals` — sütun ekseninde ara toplam sütunları
 - [x] `show-grand-total="true|false"` → `showGrandTotal`
 - [x] `layout-mode="Tabular|Compact"` → `layoutMode`
 - [x] `repeat-row-labels="true|false"` → `repeatRowLabels`
@@ -132,7 +133,9 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
       yönüydü: sağdaki toplam sütununu kapatan bir ayar yoktu, bu yüzden grid
       düzeyinde `show-column-grand-totals` eklendi ve alttaki satır
       `show-row-grand-totals` adını aldı (`show-grand-total` eski adı olarak
-      çalışıyor). Sütun ekseninde ara toplamlar hâlâ yok, ayrı bir iş
+      çalışıyor). Sütun ekseninde ara toplamlar da artık var: her dış sütun
+      grubunu bir toplam sütunu kapatıyor (`column-subtotals`), alan başına
+      `show-totals` sütun alanlarında da geçerli
 - [x] `group-interval` — tarih alanlarını yıl/çeyrek/ay/gün/haftanın-günü olarak
       gruplama. Gruplama başlığın okunduğu yerde olduğu için kaynakta ikinci bir
       kolon gerekmiyor ve **aynı kolon birden fazla seviyede** yer alabiliyor;

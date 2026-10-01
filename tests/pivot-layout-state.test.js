@@ -918,14 +918,29 @@ test("a declared sortOrder survives a layout mutation", () => {
 test("a row-only declaration is dropped when the field moves to another area", () => {
   const state = new PivotForge.PivotLayoutState(
     catalog.map(field =>
-      field.dataField === "Category" ? { ...field, showTotals: false } : field));
+      field.dataField === "Category" ? { ...field, expanded: false } : field));
 
-  // showTotals means nothing on the column axis and normalizeField refuses it
+  // expanded means nothing on the column axis and normalizeField refuses it
   // there, so carrying it along would turn a legal drag into an exception.
   state.move("Category", "column", 0);
   const emitted = state.toFields().find(field => field.dataField === "Category");
 
-  assert.equal(emitted.showTotals, undefined);
+  assert.equal(emitted.expanded, undefined);
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
+});
+
+test("showTotals follows a field onto the column axis and is dropped in the filter area", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Category" ? { ...field, showTotals: false } : field));
+
+  // Both header axes draw subtotals, so the declaration still means something
+  // in the column area; the filter area has no totals for it to switch off.
+  state.move("Category", "column", 0);
+  assert.equal(state.toFields().find(field => field.dataField === "Category").showTotals, false);
+
+  state.move("Category", "filter", 0);
+  assert.equal(state.toFields().find(field => field.dataField === "Category").showTotals, undefined);
   assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
 });
 

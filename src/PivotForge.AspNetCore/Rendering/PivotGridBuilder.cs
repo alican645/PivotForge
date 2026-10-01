@@ -167,6 +167,15 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     public PivotGridBuilder Subtotals(bool show) => SetRenderer("subtotals", show);
 
+    /// <summary>Shows or hides subtotal columns.</summary>
+    /// <remarks>
+    /// The column axis' counterpart of <see cref="Subtotals"/>: a total column after each group of
+    /// an outer column field. On by default, as subtotal rows are.
+    /// </remarks>
+    /// <param name="show">True to show subtotal columns.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ColumnSubtotals(bool show) => SetRenderer("columnSubtotals", show);
+
     /// <summary>Shows or hides the grand total row along the bottom of the grid.</summary>
     /// <remarks>The name this setting had before the column grand totals could be switched off; see <see cref="ShowRowGrandTotals"/>.</remarks>
     /// <param name="show">True to show the grand total row.</param>

@@ -21,6 +21,9 @@ public sealed class PivotResult
     /// <summary>Gets the subtotal rows for grouped row headers.</summary>
     public IReadOnlyList<PivotSubtotal> Subtotals { get; init; } = [];
 
+    /// <summary>Gets the subtotal columns for grouped column headers.</summary>
+    public IReadOnlyList<PivotColumnSubtotal> ColumnSubtotals { get; init; } = [];
+
     /// <summary>Gets the grand total for each value definition key.</summary>
     public IReadOnlyDictionary<string, decimal?> GrandTotals { get; init; } = new Dictionary<string, decimal?>();
 
@@ -62,6 +65,33 @@ public sealed class PivotSubtotal
 
     /// <summary>Gets subtotal values across all columns.</summary>
     public IReadOnlyDictionary<string, decimal?> Totals { get; init; } = new Dictionary<string, decimal?>();
+
+    /// <summary>Gets this row group's values in each column subtotal.</summary>
+    /// <remarks>The cells where a subtotal row crosses a subtotal column.</remarks>
+    public IReadOnlyList<PivotColumnSubtotalCell> ColumnSubtotals { get; init; } = [];
+}
+
+/// <summary>Represents a subtotal for a grouped column-header path.</summary>
+public sealed class PivotColumnSubtotal
+{
+    /// <summary>Gets the column-header prefix represented by the subtotal.</summary>
+    public IReadOnlyList<string?> ColumnHeader { get; init; } = [];
+
+    /// <summary>Gets subtotal values for each row, addressed by row-header index.</summary>
+    public IReadOnlyList<PivotTotal> Cells { get; init; } = [];
+
+    /// <summary>Gets subtotal values across all rows.</summary>
+    public IReadOnlyDictionary<string, decimal?> Totals { get; init; } = new Dictionary<string, decimal?>();
+}
+
+/// <summary>Represents a row group's values in one column subtotal.</summary>
+public sealed class PivotColumnSubtotalCell
+{
+    /// <summary>Gets the column-header prefix of the column subtotal.</summary>
+    public IReadOnlyList<string?> ColumnHeader { get; init; } = [];
+
+    /// <summary>Gets aggregated values keyed by value definition.</summary>
+    public IReadOnlyDictionary<string, decimal?> Values { get; init; } = new Dictionary<string, decimal?>();
 }
 
 /// <summary>Describes the size of a generated pivot result.</summary>

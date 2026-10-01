@@ -11,7 +11,7 @@ This document records the supported public surface for `0.6.0-preview.1`. Public
 - `PivotAggregation`, `PivotShowAs`, `PivotSortMode`, `PivotSortDirection`: configure calculations and ordering.
 - `PivotValueDefinition.Calculated(name, expression)` / `PivotValueDefinition.Expression` / `PivotAggregation.Calculated`: a value computed by a formula over other summaries, keyed `Name_calculated`. `PivotExpression.Parse` reads a formula and lists its `Fields`; `PivotExpressionException` reports an unreadable one with its `Position`. `PivotCustomAggregate` and `PivotEngine.CustomAggregates` register summaries a formula may call by name.
 - `PivotFilterMode`: whether a `PivotFilter`'s values are the ones to keep (`Include`, the default) or the ones to drop (`Exclude`). An empty value list restricts nothing in either mode.
-- `PivotResult`, `PivotCell`, `PivotTotal`, `PivotSubtotal`, `PivotMetadata`: represent completed pivot output.
+- `PivotResult`, `PivotCell`, `PivotTotal`, `PivotSubtotal`, `PivotColumnSubtotal`, `PivotColumnSubtotalCell`, `PivotMetadata`: represent completed pivot output.
 - `PivotResultPaginator`, `PivotResultPage`: create row-based pages from a completed result.
 - `PivotFieldNotFoundException`, `PivotFieldTypeException`: report invalid fields and incompatible aggregation values.
 

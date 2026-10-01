@@ -110,6 +110,10 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("subtotals")]
     public bool? Subtotals { get; set; }
 
+    /// <summary>Gets or sets whether subtotal columns are shown.</summary>
+    [HtmlAttributeName("column-subtotals")]
+    public bool? ColumnSubtotals { get; set; }
+
     /// <summary>Gets or sets whether the grand total row is shown.</summary>
     /// <remarks>The earlier name of <see cref="ShowRowGrandTotals"/>; the two may not disagree.</remarks>
     [HtmlAttributeName("show-grand-total")]
@@ -325,6 +329,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (Subtotals is { } subtotals)
         {
             builder.Subtotals(subtotals);
+        }
+
+        if (ColumnSubtotals is { } columnSubtotals)
+        {
+            builder.ColumnSubtotals(columnSubtotals);
         }
 
         // Two names for one setting: honouring whichever came last would make the
