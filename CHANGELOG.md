@@ -14,6 +14,22 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- Subtotal columns on the column axis. Each group of an outer column field
+  now closes with a total column (`2024 Toplam` after 2024's quarters), drawn
+  in every row: detail rows, subtotal rows and the grand total row. On by
+  default, like subtotal rows; switched grid-wide with `column-subtotals` /
+  `ColumnSubtotals(bool)` / `columnSubtotals`, and per level with
+  `show-totals="false"`, which is now valid on `Column` fields too.
+  Double-clicking a subtotal cell drills into the whole group. The engine
+  computes them (`PivotResult.ColumnSubtotals`, and
+  `PivotSubtotal.ColumnSubtotals` where a subtotal row crosses one), so
+  averages, counts and calculated fields are true group values, not sums of
+  the columns. Show-as percentages divide by the subtotal's own row, column
+  and grand total; previous-value comparisons leave it empty. (Core,
+  AspNetCore)
+
 ## [0.6.0-preview.5] — 2026-09-30
 
 Calculated fields, custom summary functions, and a formula builder that needs

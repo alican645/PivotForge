@@ -750,3 +750,67 @@ test("a column field header reads its sort from the column levels, not the row s
     renderer.activeSortDirection({ mode: "RowLabel", field: "Year" }, settings),
     "Ascending");
 });
+
+test("the column plan closes each outer column group with a subtotal", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const headers = [["2025", "Q1"], ["2025", "Q2"], ["2026", "Q1"]];
+
+  const plan = renderer.createColumnPlan(headers, {});
+
+  assert.deepEqual(plan.map(entry => entry.type === "subtotal"
+    ? `total:${entry.columnHeader.join("/")}`
+    : entry.columnHeader.join("/")), ["2025/Q1", "2025/Q2", "total:2025", "2026/Q1", "total:2026"]);
+  assert.deepEqual(plan[2].columnIndexes, [0, 1]);
+});
+
+test("column subtotals are switched off grid-wide or per column level", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const headers = [["Ege", "2025", "Q1"], ["Ege", "2025", "Q2"], ["Ege", "2026", "Q1"]];
+  const totals = settings => renderer.createColumnPlan(headers, settings)
+    .filter(entry => entry.type === "subtotal")
+    .map(entry => entry.columnHeader.join("/"));
+
+  assert.deepEqual(totals({}), ["Ege/2025", "Ege/2026", "Ege"]);
+  assert.deepEqual(totals({ columnSubtotals: false }), []);
+  assert.deepEqual(totals({ columnFieldSubtotals: [false, true, true] }), ["Ege/2025", "Ege/2026"]);
+  assert.deepEqual(totals({ columnFieldSubtotals: [true, false, true] }), ["Ege"]);
+});
+
+test("a single column level has no subtotal columns", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+
+  assert.equal(renderer.createColumnPlan([["2025"], ["2026"]], {}).length, 2);
+  assert.equal(renderer.createColumnPlan([], {}).length, 0);
+});
+
+test("the head gives a subtotal its own cell at its level and none below", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const plan = renderer.createColumnPlan([["2025", "Q1"], ["2025", "Q2"], ["2026", "Q1"]], {});
+
+  assert.deepEqual(renderer.createColumnHeaderGroups(plan, 0), [
+    { value: "2025", span: 2, start: 0 },
+    { value: "2025", span: 1, start: 2, subtotal: true },
+    { value: "2026", span: 1, start: 3 },
+    { value: "2026", span: 1, start: 4, subtotal: true }
+  ]);
+  assert.deepEqual(renderer.createColumnHeaderGroups(plan, 1).map(group => group.value), ["Q1", "Q2", "Q1"]);
+});
+
+test("the column count includes subtotal columns", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const values = [{ key: "a" }];
+  const headers = [["2025", "Q1"], ["2025", "Q2"], ["2026", "Q1"]];
+
+  assert.equal(renderer.columnCount(1, headers, values, {}), 1 + 5 + 1);
+  assert.equal(renderer.columnCount(1, headers, values, { columnSubtotals: false }), 1 + 3 + 1);
+});
+
+test("a subtotal cell offers no sort by value", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const items = renderer.createContextMenuItems(
+    { value: 5, rowType: "detail", columnKind: "columnSubtotal", columnHeader: ["2025"], rowHeader: ["Ege"], valueKey: "a" },
+    undefined,
+    { onSortRequested: () => {} });
+
+  assert.equal(items.find(item => item.action === "sort").disabled, true);
+});

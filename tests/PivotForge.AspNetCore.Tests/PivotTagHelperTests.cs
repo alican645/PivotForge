@@ -564,6 +564,7 @@ public class PivotTagHelperTests
             {
                 Id = "pivotGrid",
                 Subtotals = false,
+                ColumnSubtotals = false,
                 ShowGrandTotal = false,
                 ContextMenu = false,
                 RepeatRowLabels = true,
@@ -576,6 +577,7 @@ public class PivotTagHelperTests
 
         var renderer = config.GetProperty("rendererOptions");
         Assert.False(renderer.GetProperty("subtotals").GetBoolean());
+        Assert.False(renderer.GetProperty("columnSubtotals").GetBoolean());
         Assert.False(renderer.GetProperty("showGrandTotal").GetBoolean());
         Assert.False(renderer.GetProperty("contextMenu").GetBoolean());
         Assert.True(renderer.GetProperty("repeatRowLabels").GetBoolean());
@@ -594,6 +596,7 @@ public class PivotTagHelperTests
 
         var renderer = config.GetProperty("rendererOptions");
         Assert.False(renderer.TryGetProperty("showGrandTotal", out _));
+        Assert.False(renderer.TryGetProperty("columnSubtotals", out _));
         Assert.False(renderer.TryGetProperty("showColumnGrandTotals", out _));
         Assert.False(renderer.TryGetProperty("layoutMode", out _));
     }
@@ -648,6 +651,7 @@ public class PivotTagHelperTests
                 SelectionMode = PivotSelectionMode.None,
                 LayoutMode = PivotGridLayoutMode.Compact,
                 Subtotals = false,
+                ColumnSubtotals = false,
                 MinColumnWidth = 90
             },
             ["selection-mode", "layout-mode"],
@@ -658,6 +662,7 @@ public class PivotTagHelperTests
             .SelectionMode(PivotSelectionMode.None)
             .LayoutMode(PivotGridLayoutMode.Compact)
             .Subtotals(false)
+            .ColumnSubtotals(false)
             .MinColumnWidth(90)
             .Fields(fields => fields.Add()
                 .DataField("Amount").Area(PivotArea.Data).Caption("Tutar")
@@ -822,17 +827,21 @@ public class PivotTagHelperTests
     }
 
     [Fact]
-    public void RefusesExpandedAndShowTotalsOutsideTheRowArea()
+    public void RefusesExpandedAndShowTotalsWhereTheyMeanNothing()
     {
-        // Subtotals and collapsible groups are drawn on the row axis only.
+        // Collapsible groups are drawn on the row axis only, subtotals on both header axes.
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Year").Area(PivotArea.Column).Expanded(false).Build());
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Category").Area(PivotArea.Filter).ShowTotals(false).Build());
 
-        // The row area accepts both.
+        // The row area accepts both, the column area ShowTotals.
         new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
             .Expanded(false).ShowTotals(false).Build();
+        new PivotFieldBuilder().DataField("Year").Area(PivotArea.Column)
+            .ShowTotals(false).Build();
     }
 
     [Fact]

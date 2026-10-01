@@ -1890,6 +1890,20 @@ select {
   color: #134e4a;
 }
 
+/* The column axis' subtotals, in the subtotal rows' colours so a reader sees
+   one kind of total wherever it is drawn. */
+.pivot-table__column-subtotal-header,
+.pivot-table__column-subtotal-value-header {
+  background: #eefbf8 !important;
+  color: #134e4a !important;
+}
+
+.pivot-table__column-subtotal {
+  background: #f4fcfa !important;
+  color: #134e4a;
+  font-weight: 800;
+}
+
 .pivot-table__group-row th,
 .pivot-table__group-row td {
   background: #fbfdff !important;

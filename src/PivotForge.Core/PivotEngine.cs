@@ -491,8 +491,11 @@ public sealed class PivotEngine
             .ToArray();
         var rawGrandTotals = grandTotalBucket.Finalize();
         var rawSubtotals = subtotalBuckets.Values
-            .Select(subtotal => subtotal.Finalize(columnIndex.Headers, columnLookup))
+            .Select(subtotal => subtotal.Finalize(columnIndex.Headers, columnLookup, scan.ColumnSubtotals.Values))
             .ToArray();
+        var rawColumnSubtotals = OrderColumnSubtotals(
+            scan.ColumnSubtotals.Values.Select(subtotal => subtotal.Finalize()),
+            columnHeaders);
         var transformed = TransformValues(
             rowIndex.Headers.Count,
             columnHeaders.Count,
@@ -501,6 +504,7 @@ public sealed class PivotEngine
             rawRowTotals,
             rawColumnTotals,
             rawSubtotals,
+            rawColumnSubtotals,
             rawGrandTotals);
         // Before sorting, so the sort orders what survives rather than ordering
         // rows that are about to disappear.
@@ -514,6 +518,7 @@ public sealed class PivotEngine
             populated.Values.Cells,
             populated.Values.RowTotals,
             populated.Values.Subtotals,
+            populated.Values.ColumnSubtotals,
             request,
             culture);
         cancellationToken.ThrowIfCancellationRequested();
@@ -526,6 +531,7 @@ public sealed class PivotEngine
             RowTotals = sortedRows.RowTotals,
             ColumnTotals = populated.Values.ColumnTotals,
             Subtotals = populated.Values.Subtotals,
+            ColumnSubtotals = sortedRows.ColumnSubtotals,
             GrandTotals = populated.Values.GrandTotals,
             Metadata = new PivotMetadata
             {
@@ -555,6 +561,7 @@ public sealed class PivotEngine
         var rowTotalBuckets = new Dictionary<int, AggregateBucket>();
         var columnTotalBuckets = new Dictionary<int, AggregateBucket>();
         var subtotalBuckets = new Dictionary<HeaderKey, SubtotalBuckets>();
+        var columnSubtotalBuckets = new Dictionary<HeaderKey, ColumnSubtotalBuckets>();
         var grandTotalBucket = new AggregateBucket(plan);
         var filters = CompileFilters(request.Filters);
         var sourceRowCount = 0;
@@ -600,19 +607,37 @@ public sealed class PivotEngine
             var columnTotalBucket = GetOrAddBucket(columnTotalBuckets, column, plan);
             // Read once and handed to every bucket the record lands in.
             var values = plan.Read(record, reader);
+            // Kept for the column subtotals below, which hold one bucket per row group too:
+            // that is where a subtotal row crosses a subtotal column.
+            var rowGroups = new HeaderKey[Math.Max(0, rowValues.Count - 1)];
 
             for (var level = 1; level < rowValues.Count; level++)
             {
                 var path = rowValues.Take(level).ToArray();
                 var subtotalKey = new HeaderKey(path);
+                rowGroups[level - 1] = subtotalKey;
 
                 if (!subtotalBuckets.TryGetValue(subtotalKey, out var subtotal))
                 {
-                    subtotal = new SubtotalBuckets(path, plan);
+                    subtotal = new SubtotalBuckets(subtotalKey, path, plan);
                     subtotalBuckets.Add(subtotalKey, subtotal);
                 }
 
                 subtotal.Add(column, plan, values);
+            }
+
+            for (var level = 1; level < columnValues.Count; level++)
+            {
+                var path = columnValues.Take(level).ToArray();
+                var columnSubtotalKey = new HeaderKey(path);
+
+                if (!columnSubtotalBuckets.TryGetValue(columnSubtotalKey, out var columnSubtotal))
+                {
+                    columnSubtotal = new ColumnSubtotalBuckets(path, plan);
+                    columnSubtotalBuckets.Add(columnSubtotalKey, columnSubtotal);
+                }
+
+                columnSubtotal.Add(row, rowGroups, plan, values);
             }
 
             bucket.Add(values);
@@ -629,6 +654,7 @@ public sealed class PivotEngine
             rowTotalBuckets,
             columnTotalBuckets,
             subtotalBuckets,
+            columnSubtotalBuckets,
             grandTotalBucket,
             sourceRowCount);
     }
@@ -750,6 +776,7 @@ public sealed class PivotEngine
         Dictionary<int, AggregateBucket> RowTotals,
         Dictionary<int, AggregateBucket> ColumnTotals,
         Dictionary<HeaderKey, SubtotalBuckets> Subtotals,
+        Dictionary<HeaderKey, ColumnSubtotalBuckets> ColumnSubtotals,
         AggregateBucket GrandTotal,
         int SourceRowCount);
 
@@ -795,6 +822,7 @@ public sealed class PivotEngine
         IReadOnlyList<PivotTotal> rawRowTotals,
         IReadOnlyList<PivotTotal> rawColumnTotals,
         IReadOnlyList<PivotSubtotal> rawSubtotals,
+        IReadOnlyList<PivotColumnSubtotal> rawColumnSubtotals,
         IReadOnlyDictionary<string, decimal?> rawGrandTotals)
     {
         var rowTotalLookup = rawRowTotals.ToDictionary(total => total.Index, total => total.Values);
@@ -820,13 +848,43 @@ public sealed class PivotEngine
             definitions,
             columnTotalLookup,
             rawGrandTotals);
+        var columnSubtotalTotals = rawColumnSubtotals.ToDictionary(
+            subtotal => new HeaderKey(subtotal.ColumnHeader),
+            subtotal => subtotal.Totals);
         var transformedSubtotals = rawSubtotals
             .Select(subtotal => TransformSubtotal(
                 subtotal,
                 columnCount,
                 definitions,
                 columnTotalLookup,
+                columnSubtotalTotals,
                 rawGrandTotals))
+            .ToArray();
+        var transformedColumnSubtotals = rawColumnSubtotals
+            .Select(subtotal => new PivotColumnSubtotal
+            {
+                ColumnHeader = subtotal.ColumnHeader,
+                Cells = subtotal.Cells
+                    .Select(cell => new PivotTotal
+                    {
+                        Index = cell.Index,
+                        Values = TransformColumnSubtotalValues(
+                            cell.Values,
+                            rowTotalLookup.GetValueOrDefault(cell.Index),
+                            subtotal.Totals,
+                            definitions,
+                            rawGrandTotals)
+                    })
+                    .ToArray(),
+                // The column subtotal's own cell in the grand total row: its row total is the
+                // grand total, and it is its own column total.
+                Totals = TransformColumnSubtotalValues(
+                    subtotal.Totals,
+                    rawGrandTotals,
+                    subtotal.Totals,
+                    definitions,
+                    rawGrandTotals)
+            })
             .ToArray();
         var transformedGrandTotals = definitions.ToDictionary(
             definition => definition.Key,
@@ -838,6 +896,7 @@ public sealed class PivotEngine
             transformedRowTotals,
             transformedColumnTotals,
             transformedSubtotals,
+            transformedColumnSubtotals,
             transformedGrandTotals);
     }
 
@@ -975,6 +1034,7 @@ public sealed class PivotEngine
         int columnCount,
         IReadOnlyList<PivotValueDefinition> definitions,
         IReadOnlyDictionary<int, IReadOnlyDictionary<string, decimal?>> rawColumnTotals,
+        IReadOnlyDictionary<HeaderKey, IReadOnlyDictionary<string, decimal?>> rawColumnSubtotalTotals,
         IReadOnlyDictionary<string, decimal?> rawGrandTotals)
     {
         var subtotalCellLookup = subtotal.Cells.ToDictionary(cell => new CellKey(0, cell.Column), cell => cell.Values);
@@ -992,8 +1052,86 @@ public sealed class PivotEngine
         {
             RowHeader = subtotal.RowHeader,
             Cells = cells,
-            Totals = TransformRowTotalValues(subtotal.Totals, definitions, rawGrandTotals)
+            Totals = TransformRowTotalValues(subtotal.Totals, definitions, rawGrandTotals),
+            ColumnSubtotals = subtotal.ColumnSubtotals
+                .Select(cell => new PivotColumnSubtotalCell
+                {
+                    ColumnHeader = cell.ColumnHeader,
+                    Values = TransformColumnSubtotalValues(
+                        cell.Values,
+                        subtotal.Totals,
+                        rawColumnSubtotalTotals.GetValueOrDefault(new HeaderKey(cell.ColumnHeader)),
+                        definitions,
+                        rawGrandTotals)
+                })
+                .ToArray()
         };
+    }
+
+    private static IReadOnlyDictionary<string, decimal?> TransformColumnSubtotalValues(
+        IReadOnlyDictionary<string, decimal?> rawValues,
+        IReadOnlyDictionary<string, decimal?>? rawRowTotals,
+        IReadOnlyDictionary<string, decimal?>? rawColumnTotals,
+        IReadOnlyList<PivotValueDefinition> definitions,
+        IReadOnlyDictionary<string, decimal?> rawGrandTotals)
+    {
+        return definitions.ToDictionary(
+            definition => definition.Key,
+            definition => TransformColumnSubtotal(
+                GetValue(rawValues, definition.Key),
+                GetValue(rawRowTotals, definition.Key),
+                GetValue(rawColumnTotals, definition.Key),
+                GetValue(rawGrandTotals, definition.Key),
+                definition.ShowAs),
+            StringComparer.Ordinal);
+    }
+
+    // A column subtotal sums a run of columns the way the row total sums all of them, so it
+    // is transformed like one. The percentages divide by its own row, its own column (the
+    // subtotal across every row) and the grand total. A comparison with the previous column
+    // walks single columns, so a total spanning several has nothing to compare with, and a
+    // running total over the group is the group's own sum.
+    private static decimal? TransformColumnSubtotal(
+        decimal? raw,
+        decimal? rowTotal,
+        decimal? columnTotal,
+        decimal? grandTotal,
+        PivotShowAs showAs)
+    {
+        return showAs switch
+        {
+            PivotShowAs.Normal or PivotShowAs.RunningTotal => raw,
+            PivotShowAs.PercentOfRowTotal => Divide(raw, rowTotal),
+            PivotShowAs.PercentOfColumnTotal => Divide(raw, columnTotal),
+            PivotShowAs.PercentOfGrandTotal => Divide(raw, grandTotal),
+            PivotShowAs.DifferenceFromPrevious or PivotShowAs.PercentDifferenceFromPrevious => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(showAs), showAs, "Unsupported show-as calculation.")
+        };
+    }
+
+    /// <summary>Orders column subtotals the way they are drawn: after the last column of their group.</summary>
+    private static IReadOnlyList<PivotColumnSubtotal> OrderColumnSubtotals(
+        IEnumerable<PivotColumnSubtotal> subtotals,
+        IReadOnlyList<IReadOnlyList<string?>> columnHeaders)
+    {
+        int LastColumn(PivotColumnSubtotal subtotal)
+        {
+            for (var column = columnHeaders.Count - 1; column >= 0; column--)
+            {
+                if (StartsWith(columnHeaders[column], subtotal.ColumnHeader))
+                {
+                    return column;
+                }
+            }
+
+            return -1;
+        }
+
+        // An inner group closes before the outer group around it.
+        return subtotals
+            .OrderBy(LastColumn)
+            .ThenByDescending(subtotal => subtotal.ColumnHeader.Count)
+            .ToArray();
     }
 
     private static decimal? TransformCellValue(
@@ -1317,12 +1455,13 @@ public sealed class PivotEngine
         IReadOnlyList<PivotCell> cells,
         IReadOnlyList<PivotTotal> rowTotals,
         IReadOnlyList<PivotSubtotal> subtotals,
+        IReadOnlyList<PivotColumnSubtotal> columnSubtotals,
         PivotRequest request,
         CultureInfo culture)
     {
         if (rowHeaders.Count == 0)
         {
-            return new SortedRows(rowHeaders, cells, rowTotals);
+            return new SortedRows(rowHeaders, cells, rowTotals, columnSubtotals);
         }
 
         var rowOrder = Enumerable.Range(0, rowHeaders.Count).ToArray();
@@ -1362,8 +1501,11 @@ public sealed class PivotEngine
                     : new Dictionary<string, decimal?>()
             })
             .ToArray();
+        var sortedColumnSubtotals = columnSubtotals
+            .Select(subtotal => WithCells(subtotal, RemapTotals(subtotal.Cells, rowMap)))
+            .ToArray();
 
-        return new SortedRows(sortedHeaders, sortedCells, sortedRowTotals);
+        return new SortedRows(sortedHeaders, sortedCells, sortedRowTotals, sortedColumnSubtotals);
     }
 
     /// <summary>Orders rows level by level, each level by its label or by a declared value.</summary>
@@ -1694,7 +1836,8 @@ public sealed class PivotEngine
     private sealed record SortedRows(
         IReadOnlyList<IReadOnlyList<string?>> Headers,
         IReadOnlyList<PivotCell> Cells,
-        IReadOnlyList<PivotTotal> RowTotals);
+        IReadOnlyList<PivotTotal> RowTotals,
+        IReadOnlyList<PivotColumnSubtotal> ColumnSubtotals);
 
     /// <summary>Removes the rows and columns that hold no values at all, and renumbers the rest.</summary>
     /// <remarks>
@@ -1742,10 +1885,13 @@ public sealed class PivotEngine
             .ToArray();
 
         var survivingRows = rowMap.Keys.Order().Select(row => rowHeaders[row]).ToArray();
+        var survivingColumns = columnMap.Keys.Order().Select(column => columnHeaders[column]).ToArray();
+        bool ColumnGroupSurvives(IReadOnlyList<string?> prefix) =>
+            survivingColumns.Any(header => StartsWith(header, prefix));
 
         return new PopulatedResult(
             survivingRows,
-            columnMap.Keys.Order().Select(column => columnHeaders[column]).ToArray(),
+            survivingColumns,
             values with
             {
                 Cells = Remap(values.Cells),
@@ -1759,8 +1905,16 @@ public sealed class PivotEngine
                     {
                         RowHeader = subtotal.RowHeader,
                         Cells = Remap(subtotal.Cells),
-                        Totals = subtotal.Totals
+                        Totals = subtotal.Totals,
+                        ColumnSubtotals = subtotal.ColumnSubtotals
+                            .Where(cell => ColumnGroupSurvives(cell.ColumnHeader))
+                            .ToArray()
                     })
+                    .ToArray(),
+                // The same on the column axis: a subtotal column whose whole group went goes too.
+                ColumnSubtotals = values.ColumnSubtotals
+                    .Where(subtotal => ColumnGroupSurvives(subtotal.ColumnHeader))
+                    .Select(subtotal => WithCells(subtotal, RemapTotals(subtotal.Cells, rowMap)))
                     .ToArray()
             });
     }
@@ -1789,6 +1943,13 @@ public sealed class PivotEngine
         .OrderBy(total => total.Index)
         .ToArray();
 
+    private static PivotColumnSubtotal WithCells(PivotColumnSubtotal subtotal, IReadOnlyList<PivotTotal> cells) => new()
+    {
+        ColumnHeader = subtotal.ColumnHeader,
+        Cells = cells,
+        Totals = subtotal.Totals
+    };
+
     private static bool StartsWith(IReadOnlyList<string?> header, IReadOnlyList<string?> prefix) =>
         header.Count >= prefix.Count &&
         prefix.Select((value, level) => string.Equals(header[level], value, StringComparison.Ordinal)).All(match => match);
@@ -1803,6 +1964,7 @@ public sealed class PivotEngine
         IReadOnlyList<PivotTotal> RowTotals,
         IReadOnlyList<PivotTotal> ColumnTotals,
         IReadOnlyList<PivotSubtotal> Subtotals,
+        IReadOnlyList<PivotColumnSubtotal> ColumnSubtotals,
         IReadOnlyDictionary<string, decimal?> GrandTotals);
 
     private readonly record struct CellKey(int Row, int Column);
@@ -1812,8 +1974,11 @@ public sealed class PivotEngine
         private readonly AggregateBucket _total;
         private readonly Dictionary<int, AggregateBucket> _cells = [];
 
-        public SubtotalBuckets(IReadOnlyList<string?> rowHeader, MeasurePlan plan)
+        private readonly HeaderKey _key;
+
+        public SubtotalBuckets(HeaderKey key, IReadOnlyList<string?> rowHeader, MeasurePlan plan)
         {
+            _key = key;
             RowHeader = rowHeader;
             _total = new AggregateBucket(plan);
         }
@@ -1831,7 +1996,8 @@ public sealed class PivotEngine
 
         public PivotSubtotal Finalize(
             IReadOnlyList<IReadOnlyList<string?>> observedColumnHeaders,
-            IReadOnlyDictionary<HeaderKey, int> columnLookup)
+            IReadOnlyDictionary<HeaderKey, int> columnLookup,
+            IEnumerable<ColumnSubtotalBuckets> columnSubtotals)
         {
             return new PivotSubtotal
             {
@@ -1844,9 +2010,62 @@ public sealed class PivotEngine
                     })
                     .OrderBy(cell => cell.Column)
                     .ToArray(),
-                Totals = _total.Finalize()
+                Totals = _total.Finalize(),
+                ColumnSubtotals = columnSubtotals
+                    .Select(columnSubtotal => columnSubtotal.FinalizeRowGroup(_key))
+                    .OfType<PivotColumnSubtotalCell>()
+                    .ToArray()
             };
         }
+    }
+
+    private sealed class ColumnSubtotalBuckets
+    {
+        private readonly AggregateBucket _total;
+        private readonly Dictionary<int, AggregateBucket> _rows = [];
+        private readonly Dictionary<HeaderKey, AggregateBucket> _rowGroups = [];
+
+        public ColumnSubtotalBuckets(IReadOnlyList<string?> columnHeader, MeasurePlan plan)
+        {
+            ColumnHeader = columnHeader;
+            _total = new AggregateBucket(plan);
+        }
+
+        public IReadOnlyList<string?> ColumnHeader { get; }
+
+        public void Add(int row, IReadOnlyList<HeaderKey> rowGroups, MeasurePlan plan, object?[] values)
+        {
+            GetOrAddBucket(_rows, row, plan).Add(values);
+
+            foreach (var rowGroup in rowGroups)
+            {
+                if (!_rowGroups.TryGetValue(rowGroup, out var bucket))
+                {
+                    bucket = new AggregateBucket(plan);
+                    _rowGroups.Add(rowGroup, bucket);
+                }
+
+                bucket.Add(values);
+            }
+
+            _total.Add(values);
+        }
+
+        public PivotColumnSubtotal Finalize() => new()
+        {
+            ColumnHeader = ColumnHeader,
+            Cells = _rows
+                .OrderBy(pair => pair.Key)
+                .Select(pair => new PivotTotal { Index = pair.Key, Values = pair.Value.Finalize() })
+                .ToArray(),
+            Totals = _total.Finalize()
+        };
+
+        /// <summary>The cell where a row group's subtotal row crosses this column, if it has records here.</summary>
+        public PivotColumnSubtotalCell? FinalizeRowGroup(HeaderKey rowGroup) =>
+            _rowGroups.TryGetValue(rowGroup, out var bucket)
+                ? new PivotColumnSubtotalCell { ColumnHeader = ColumnHeader, Values = bucket.Finalize() }
+                : null;
     }
 
     private sealed class HeaderIndex

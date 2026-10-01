@@ -31,7 +31,7 @@ function createState() {
       values: [{ field: "Amount", aggregation: "sum", showAs: "percentOfGrandTotal", format: { type: "currency", decimals: 0, currency: "TRY" } }],
       filters: [{ field: "Category", values: ["Beton"] }]
     },
-    viewSettings: { layoutMode: "compact", repeatRowLabels: true, subtotals: false, largeData: true },
+    viewSettings: { layoutMode: "compact", repeatRowLabels: true, subtotals: false, columnSubtotals: false, largeData: true },
     sort: { mode: "RowLabel", direction: "Ascending", field: "Region" },
     fieldAliases: { Region: "Bölge", Unknown: "Bilinmeyen" },
     conditionalRules: [
@@ -55,7 +55,7 @@ test("last state is normalized and restored", () => {
       values: [{ field: "Amount", aggregation: "sum", showAs: "percentOfGrandTotal", format: { type: "currency", decimals: 0, useGrouping: true, currency: "TRY" } }],
       filters: [{ field: "Category", values: ["Beton"] }]
     },
-    viewSettings: { layoutMode: "compact", repeatRowLabels: true, subtotals: false, largeData: true },
+    viewSettings: { layoutMode: "compact", repeatRowLabels: true, subtotals: false, columnSubtotals: false, largeData: true },
     sort: { mode: "RowLabel", direction: "Ascending", field: "Region" },
     fieldAliases: { Region: "Bölge" },
     conditionalRules: [

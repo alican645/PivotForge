@@ -73,6 +73,19 @@ public static class PivotResultPaginator
         var subtotals = source.Subtotals
             .Where(subtotal => pagePaths.Any(path => StartsWith(path, subtotal.RowHeader)))
             .ToArray();
+        // Every row a column subtotal holds is addressed by index, so it is sliced and
+        // renumbered with the rows themselves.
+        var columnSubtotals = source.ColumnSubtotals
+            .Select(subtotal => new PivotColumnSubtotal
+            {
+                ColumnHeader = subtotal.ColumnHeader,
+                Cells = subtotal.Cells
+                    .Where(cell => cell.Index >= safeOffset && cell.Index < safeOffset + rowCount)
+                    .Select(cell => new PivotTotal { Index = cell.Index - safeOffset, Values = cell.Values })
+                    .ToArray(),
+                Totals = subtotal.Totals
+            })
+            .ToArray();
 
         return new PivotResultPage
         {
@@ -87,6 +100,7 @@ public static class PivotResultPaginator
                 RowTotals = rowTotals,
                 ColumnTotals = source.ColumnTotals,
                 Subtotals = subtotals,
+                ColumnSubtotals = columnSubtotals,
                 GrandTotals = source.GrandTotals,
                 Metadata = new PivotMetadata
                 {

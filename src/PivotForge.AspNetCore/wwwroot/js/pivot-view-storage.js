@@ -126,6 +126,7 @@
           layoutMode: state.viewSettings?.layoutMode === "compact" ? "compact" : "tabular",
           repeatRowLabels: state.viewSettings?.repeatRowLabels === true,
           subtotals: state.viewSettings?.subtotals !== false,
+          columnSubtotals: state.viewSettings?.columnSubtotals !== false,
           largeData: state.viewSettings?.largeData === true
         },
         sort: this.normalizeSort(state.sort),

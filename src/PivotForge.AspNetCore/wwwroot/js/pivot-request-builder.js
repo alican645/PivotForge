@@ -330,17 +330,21 @@
       );
     }
 
-    // Both describe how the row axis is drawn, and the grid draws subtotals and
-    // collapsible groups on the row axis only -- so declaring either elsewhere
-    // is a mistake worth reporting rather than a setting that does nothing.
+    // Both describe how a header axis is drawn. Collapsible groups exist on
+    // the row axis only, subtotals on both -- so declaring either anywhere
+    // else is a mistake worth reporting rather than a setting that does nothing.
     const isRow = area === "row";
-    ["expanded", "showTotals"].forEach(member => {
-      if (!isRow && field[member] !== undefined) {
-        throw new Error(
-          `"${member}" is only valid on a "row" field, but was set on "${dataField}" in area "${area}".`
-        );
-      }
-    });
+    const isColumn = area === "column";
+    if (!isRow && field.expanded !== undefined) {
+      throw new Error(
+        `"expanded" is only valid on a "row" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+    if (!isRow && !isColumn && field.showTotals !== undefined) {
+      throw new Error(
+        `"showTotals" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
 
     // A grand total belongs to a measure: it is that value summed over the whole
     // row or column axis. A dimension has no such total to switch off. A measure
@@ -423,7 +427,7 @@
       // Default true, so an undeclared field behaves exactly as it did before
       // these existed.
       expanded: isRow ? field.expanded !== false : null,
-      showTotals: isRow ? field.showTotals !== false : null,
+      showTotals: isRow || isColumn ? field.showTotals !== false : null,
       showGrandTotals: holdsGrandTotals ? field.showGrandTotals !== false : null,
       visible: field.visible !== false
     };

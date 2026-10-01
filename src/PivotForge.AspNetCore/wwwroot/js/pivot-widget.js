@@ -510,6 +510,7 @@
         // funnel: its headers show values, never the field they belong to.
         columnFields: columnFields.map(field => field.key),
         columnFieldLabels: columnFields.map(field => field.caption),
+        columnFieldSubtotals: columnFields.map(field => field.showTotals),
         // Read at construction only: a column sort changes the fields, and a
         // field change builds a new renderer.
         columnFieldSorts: columnFields.map(field => field.sortOrder ?? null),

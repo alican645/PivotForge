@@ -174,14 +174,15 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
-    /// <summary>Sets whether this row field's groups carry a total row.</summary>
+    /// <summary>Sets whether this field's groups carry a total row, or a total column on the column axis.</summary>
     /// <remarks>
     /// False leaves the group header in place without its sums, which is the same shape the grid
     /// uses when subtotals are switched off entirely — so a deep hierarchy can show totals at the
-    /// levels worth totalling and nowhere else. Valid on <see cref="PivotArea.Row"/> fields only,
-    /// and only when the grid's own <c>subtotals</c> option is on.
+    /// levels worth totalling and nowhere else. Valid on <see cref="PivotArea.Row"/> fields, when
+    /// the grid's own <c>subtotals</c> option is on, and on <see cref="PivotArea.Column"/> fields,
+    /// when its <c>columnSubtotals</c> option is on.
     /// </remarks>
-    /// <param name="showTotals">False to suppress this level's subtotal rows.</param>
+    /// <param name="showTotals">False to suppress this level's subtotal rows or columns.</param>
     /// <returns>The same builder.</returns>
     public PivotFieldBuilder ShowTotals(bool showTotals)
     {
@@ -346,13 +347,20 @@ public sealed class PivotFieldBuilder
                 "Aggregation and ShowAs are only valid on fields whose Area is Data.");
         }
 
-        // Subtotals and collapsible groups are drawn on the row axis only, so
-        // declaring either elsewhere is a mistake rather than a no-op.
-        if (_area != PivotArea.Row && (_expanded is not null || _showTotals is not null))
+        // Collapsible groups are drawn on the row axis only, and subtotals on the
+        // two header axes, so declaring either elsewhere is a mistake rather than a no-op.
+        if (_area != PivotArea.Row && _expanded is not null)
         {
             throw new InvalidOperationException(
-                $"Field \"{_dataField}\" sets Expanded or ShowTotals, but its Area is \"{_area}\". " +
-                "Expanded and ShowTotals are only valid on fields whose Area is Row.");
+                $"Field \"{_dataField}\" sets Expanded, but its Area is \"{_area}\". " +
+                "Expanded is only valid on fields whose Area is Row.");
+        }
+
+        if (_area is not (PivotArea.Row or PivotArea.Column) && _showTotals is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets ShowTotals, but its Area is \"{_area}\". " +
+                "ShowTotals is only valid on fields whose Area is Row or Column.");
         }
 
         // A grand total is a measure summed over a whole axis, so a dimension has

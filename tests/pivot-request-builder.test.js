@@ -267,25 +267,44 @@ test("expanded and showTotals are carried through as declared", () => {
   assert.equal(field.showTotals, false);
 });
 
-test("expanded and showTotals are refused outside the row area", () => {
-  // Subtotals and collapsible groups are drawn on the row axis only, so
-  // declaring either elsewhere would silently do nothing.
+test("expanded is refused outside the row area", () => {
+  // Collapsible groups are drawn on the row axis only, so declaring them
+  // elsewhere would silently do nothing.
   ["column", "filter", "data"].forEach(area => {
-    ["expanded", "showTotals"].forEach(member => {
-      assert.throws(
-        () => PivotForge.PivotRequestBuilder.normalizeFields([
-          { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension",
-            [member]: false }
-        ]),
-        new RegExp(`"${member}" is only valid on a "row" field`),
-        `${member} on ${area}`);
-    });
+    assert.throws(
+      () => PivotForge.PivotRequestBuilder.normalizeFields([
+        { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension", expanded: false }
+      ]),
+      /"expanded" is only valid on a "row" field/,
+      `expanded on ${area}`);
   });
 });
 
-test("a non-row field that declares neither is untouched", () => {
+test("showTotals is refused outside the row and column areas", () => {
+  ["filter", "data"].forEach(area => {
+    assert.throws(
+      () => PivotForge.PivotRequestBuilder.normalizeFields([
+        { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension", showTotals: false }
+      ]),
+      /"showTotals" is only valid on a "row" or "column" field/,
+      `showTotals on ${area}`);
+  });
+});
+
+test("a column field carries showTotals, defaulting to true", () => {
+  const [plain, declared] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Year", area: "column" },
+    { dataField: "Quarter", area: "column", showTotals: false }
+  ]);
+
+  assert.equal(plain.expanded, null);
+  assert.equal(plain.showTotals, true);
+  assert.equal(declared.showTotals, false);
+});
+
+test("a filter field that declares neither is untouched", () => {
   const [field] = PivotForge.PivotRequestBuilder.normalizeFields([
-    { dataField: "Year", area: "column" }
+    { dataField: "Year", area: "filter" }
   ]);
 
   assert.equal(field.expanded, null);

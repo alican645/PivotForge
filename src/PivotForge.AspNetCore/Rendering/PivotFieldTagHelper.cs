@@ -77,8 +77,11 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("expanded")]
     public bool? Expanded { get; set; }
 
-    /// <summary>Gets or sets whether this row field's groups carry a total row.</summary>
-    /// <remarks>Valid on <c>Row</c> fields, and only when the grid's subtotals are on.</remarks>
+    /// <summary>Gets or sets whether this field's groups carry a total row, or a total column.</summary>
+    /// <remarks>
+    /// Valid on <c>Row</c> fields when the grid's <c>subtotals</c> are on, and on <c>Column</c>
+    /// fields when its <c>column-subtotals</c> are on.
+    /// </remarks>
     [HtmlAttributeName("show-totals")]
     public bool? ShowTotals { get; set; }
 
