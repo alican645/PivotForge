@@ -793,6 +793,7 @@
         columnFieldAllowSorting: columnFields.map(field => field.allowSorting),
         columnFieldAllowFiltering: columnFields.map(field => field.allowFiltering),
         columnFieldWordWrap: columnFields.map(field => field.wordWrap),
+        columnFieldExpanded: columnFields.map(field => field.expanded),
         // Read at construction only: a column sort changes the fields, and a
         // field change builds a new renderer.
         columnFieldSorts: columnFields.map(fieldSortDirection),

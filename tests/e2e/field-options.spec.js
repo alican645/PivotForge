@@ -100,7 +100,7 @@ test("expanded is applied once, so a later render does not re-collapse", async (
   await expect.poll(() => page.locator("#scratchPivot tbody tr").count()).toBe(opened);
 });
 
-test("declaring expanded on a column field is refused, not ignored", async ({ page }) => {
+test("declaring expanded on a data field is refused, not ignored", async ({ page }) => {
   const refused = await page.evaluate(fields => {
     try {
       PivotForge.PivotRequestBuilder.normalizeFields(
@@ -111,7 +111,7 @@ test("declaring expanded on a column field is refused, not ignored", async ({ pa
     }
   }, FIELDS);
 
-  expect(refused).toContain('"expanded" is only valid on a "row" field');
+  expect(refused).toContain('"expanded" is only valid on a "row" or "column" field');
 });
 
 // A single row level keeps every row-header cell a plain detail label, so the

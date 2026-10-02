@@ -66,7 +66,12 @@ test("the year level groups the months under it", async ({ page }) => {
 });
 
 test("the same column also carries the column axis", async ({ page }) => {
-  const quarters = await page.locator(".pivot-table thead th").allTextContents();
+  // Read without the fold toggle an outer column header carries.
+  const quarters = await page.locator(".pivot-table thead th").evaluateAll(cells => cells.map(cell => {
+    const clone = cell.cloneNode(true);
+    clone.querySelectorAll(".pivot-table__toggle").forEach(toggle => toggle.remove());
+    return clone.textContent;
+  }));
   const found = quarters.map(text => text.trim()).filter(text => /^Q[1-4]$/.test(text));
 
   expect(found).toEqual([...found].sort());

@@ -915,17 +915,19 @@ test("a declared sortOrder survives a layout mutation", () => {
   assert.deepEqual(request.fieldSorts, [{ field: "Year", direction: "Descending" }]);
 });
 
-test("a row-only declaration is dropped when the field moves to another area", () => {
+test("expanded follows a field onto the column axis and is dropped in the filter area", () => {
   const state = new PivotForge.PivotLayoutState(
     catalog.map(field =>
       field.dataField === "Category" ? { ...field, expanded: false } : field));
 
-  // expanded means nothing on the column axis and normalizeField refuses it
-  // there, so carrying it along would turn a legal drag into an exception.
+  // Both header axes fold their groups, so the declaration travels with the
+  // field; the filter area has nothing to fold and normalizeField refuses it.
   state.move("Category", "column", 0);
-  const emitted = state.toFields().find(field => field.dataField === "Category");
+  assert.equal(state.toFields().find(field => field.dataField === "Category").expanded, false);
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
 
-  assert.equal(emitted.expanded, undefined);
+  state.move("Category", "filter", 0);
+  assert.equal(state.toFields().find(field => field.dataField === "Category").expanded, undefined);
   assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
 });
 
