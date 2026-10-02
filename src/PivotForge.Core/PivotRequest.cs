@@ -38,7 +38,6 @@ public sealed class PivotRequest
     /// <summary>Gets the per-field ordering of individual row and column header levels.</summary>
     /// <remarks><see cref="RowSort"/> orders the row axis as a whole and takes precedence over these
     /// on that axis; the column axis is governed by these alone. A sort carrying a value key orders
-    /// a row level by that value; on the column axis the key is ignored and only the direction
-    /// applies.</remarks>
+    /// its level by that value's summary, on either axis.</remarks>
     public IReadOnlyList<PivotFieldSort> FieldSorts { get; init; } = [];
 }

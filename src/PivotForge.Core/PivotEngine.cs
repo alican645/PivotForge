@@ -512,13 +512,17 @@ public sealed class PivotEngine
             ? DropEmpty(rowIndex.Headers, columnHeaders, transformed)
             : new PopulatedResult(rowIndex.Headers, columnHeaders, transformed);
 
+        // Columns first and rows second: each only renumbers its own axis, and both read
+        // their summaries by header path, so neither disturbs what the other compares.
+        populated = SortColumns(populated, request, culture);
+        var lookup = new Lazy<SummaryLookup>(() => new SummaryLookup(
+            populated.RowHeaders, populated.ColumnHeaders, populated.Values));
         var sortedRows = SortRows(
             populated.RowHeaders,
-            populated.ColumnHeaders,
             populated.Values.Cells,
             populated.Values.RowTotals,
-            populated.Values.Subtotals,
             populated.Values.ColumnSubtotals,
+            lookup,
             request,
             culture);
         cancellationToken.ThrowIfCancellationRequested();
@@ -1451,11 +1455,10 @@ public sealed class PivotEngine
 
     private static SortedRows SortRows(
         IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
-        IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
         IReadOnlyList<PivotCell> cells,
         IReadOnlyList<PivotTotal> rowTotals,
-        IReadOnlyList<PivotSubtotal> subtotals,
         IReadOnlyList<PivotColumnSubtotal> columnSubtotals,
+        Lazy<SummaryLookup> lookup,
         PivotRequest request,
         CultureInfo culture)
     {
@@ -1468,12 +1471,23 @@ public sealed class PivotEngine
         var sort = request.RowSort;
 
         rowOrder = sort is null
-            ? SortRowsByLevel(rowOrder, rowHeaders, rowTotals, subtotals, request, culture)
+            ? SortRowsByLevel(rowOrder, rowHeaders, ResolveLevelSorts(request.Rows, request.FieldSorts), lookup, request, culture)
             : sort.Mode switch
         {
             PivotSortMode.RowLabel => SortRowsByLabel(rowOrder, rowHeaders, request.Rows, sort, culture),
-            PivotSortMode.RowTotalValue =>
-                SortRowsByTotal(rowOrder, rowHeaders, columnHeaders, cells, rowTotals, sort, culture),
+            // Every level by the same value, each inside its parent: sorting the rows as one
+            // flat list would pull a group's rows apart and leave its subtotal nowhere to go.
+            PivotSortMode.RowTotalValue when !string.IsNullOrWhiteSpace(sort.ValueKey) =>
+                SortRowsByLevel(
+                    rowOrder,
+                    rowHeaders,
+                    request.Rows
+                        .Select(field => (PivotFieldSort?)new PivotFieldSort(
+                            field.Key, sort.Direction, sort.ValueKey, sort.ColumnPath))
+                        .ToArray(),
+                    lookup,
+                    request,
+                    culture),
             _ => rowOrder
         };
 
@@ -1512,14 +1526,13 @@ public sealed class PivotEngine
     private static int[] SortRowsByLevel(
         int[] rowOrder,
         IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
-        IReadOnlyList<PivotTotal> rowTotals,
-        IReadOnlyList<PivotSubtotal> subtotals,
+        IReadOnlyList<PivotFieldSort?> levelSorts,
+        Lazy<SummaryLookup> lookup,
         PivotRequest request,
         CultureInfo culture)
     {
-        var levelSorts = ResolveLevelSorts(request.Rows, request.FieldSorts);
         // Resolved once rather than inside the comparer, which runs n log n times.
-        var groupValues = ResolveGroupValues(rowHeaders, rowTotals, subtotals, request, levelSorts);
+        var groupValues = ResolveGroupValues(rowHeaders, levelSorts, lookup, request, axisIsRows: true);
 
         return rowOrder
             .OrderBy(
@@ -1598,30 +1611,21 @@ public sealed class PivotEngine
         return direction == PivotSortDirection.Descending ? -comparison : comparison;
     }
 
-    /// <summary>The summary value of every row's group at each value-ordered level.</summary>
-    /// <remarks>Indexed by level, then by row. A level ordered by label, or by a key the request
+    /// <summary>The summary value of every header's group at each value-ordered level.</summary>
+    /// <remarks>Indexed by level, then by header. A level ordered by label, or by a key the request
     /// does not carry, has no entry: a measure the reader removed leaves label order behind rather
-    /// than an error. An inner group reads its subtotal and the deepest one its row total, both as
-    /// shown after show-as, which is what the reader is looking at.</remarks>
+    /// than an error. A group reads its summary where it crosses the declared path on the other
+    /// axis, as shown after show-as, which is what the reader is looking at.</remarks>
     private static IReadOnlyList<decimal?[]?> ResolveGroupValues(
-        IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
-        IReadOnlyList<PivotTotal> rowTotals,
-        IReadOnlyList<PivotSubtotal> subtotals,
+        IReadOnlyList<IReadOnlyList<string?>> headers,
+        IReadOnlyList<PivotFieldSort?> levelSorts,
+        Lazy<SummaryLookup> lookup,
         PivotRequest request,
-        IReadOnlyList<PivotFieldSort?> levelSorts)
+        bool axisIsRows)
     {
         if (levelSorts.All(sort => sort?.ValueKey is null))
         {
             return [];
-        }
-
-        var deepest = request.Rows.Count - 1;
-        var rowTotalLookup = rowTotals.ToDictionary(total => total.Index, total => total.Values);
-        var subtotalLookup = new Dictionary<HeaderKey, IReadOnlyDictionary<string, decimal?>>();
-
-        foreach (var subtotal in subtotals)
-        {
-            subtotalLookup.TryAdd(new HeaderKey(subtotal.RowHeader), subtotal.Totals);
         }
 
         decimal?[]? Resolve(PivotFieldSort? sort, int level)
@@ -1632,29 +1636,266 @@ public sealed class PivotEngine
                 return null;
             }
 
-            var values = new decimal?[rowHeaders.Count];
+            var path = sort.SummaryPath ?? [];
+            var values = new decimal?[headers.Count];
+            // Siblings share a group, so each group is looked up once.
+            var seen = new Dictionary<HeaderKey, decimal?>();
 
-            for (var row = 0; row < rowHeaders.Count; row++)
+            for (var index = 0; index < headers.Count; index++)
             {
-                IReadOnlyDictionary<string, decimal?>? totals;
+                var group = headers[index].Take(level + 1).ToArray();
+                var key = new HeaderKey(group);
 
-                if (level == deepest)
+                if (!seen.TryGetValue(key, out var value))
                 {
-                    totals = rowTotalLookup.GetValueOrDefault(row);
-                }
-                else
-                {
-                    subtotalLookup.TryGetValue(
-                        new HeaderKey(rowHeaders[row].Take(level + 1).ToArray()), out totals);
+                    value = axisIsRows
+                        ? lookup.Value.Get(group, path, valueKey)
+                        : lookup.Value.Get(path, group, valueKey);
+                    seen.Add(key, value);
                 }
 
-                values[row] = totals is not null && totals.TryGetValue(valueKey, out var value) ? value : null;
+                values[index] = value;
             }
 
             return values;
         }
 
         return levelSorts.Select(Resolve).ToArray();
+    }
+
+    /// <summary>Orders column groups by a declared value, leaving label-ordered levels as they are.</summary>
+    /// <remarks>The columns arrive already in label order, level by level, so a level without a
+    /// value sort keeps the order its groups already have, and a tie between two values does the
+    /// same. Every index into the column axis is renumbered together with the headers.</remarks>
+    private static PopulatedResult SortColumns(PopulatedResult populated, PivotRequest request, CultureInfo culture)
+    {
+        var columnHeaders = populated.ColumnHeaders;
+        var levelSorts = ResolveLevelSorts(request.Columns, request.FieldSorts);
+
+        if (columnHeaders.Count < 2 ||
+            !levelSorts.Any(sort => sort?.ValueKey is { } key && request.Values.Any(value => value.Key == key)))
+        {
+            return populated;
+        }
+
+        var lookup = new Lazy<SummaryLookup>(() => new SummaryLookup(
+            populated.RowHeaders, columnHeaders, populated.Values));
+        var groupValues = ResolveGroupValues(columnHeaders, levelSorts, lookup, request, axisIsRows: false);
+
+        int Compare(int left, int right)
+        {
+            var leftHeader = columnHeaders[left];
+            var rightHeader = columnHeaders[right];
+
+            for (var level = 0; level < leftHeader.Count; level++)
+            {
+                if (string.Equals(leftHeader[level], rightHeader[level], StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // Groups are contiguous, so two columns' positions say which of their groups
+                // comes first at the level where they part.
+                var positional = left.CompareTo(right);
+
+                if (levelSorts.ElementAtOrDefault(level) is { } sort &&
+                    groupValues.ElementAtOrDefault(level) is { } values)
+                {
+                    var valueComparison = CompareGroupValues(values[left], values[right], sort.Direction);
+                    return valueComparison != 0 ? valueComparison : positional;
+                }
+
+                return positional;
+            }
+
+            return left.CompareTo(right);
+        }
+
+        var order = Enumerable.Range(0, columnHeaders.Count)
+            .OrderBy(column => column, Comparer<int>.Create(Compare))
+            .ToArray();
+
+        if (order.Select((column, position) => column == position).All(same => same))
+        {
+            return populated;
+        }
+
+        var columnMap = order
+            .Select((oldColumn, newColumn) => (oldColumn, newColumn))
+            .ToDictionary(item => item.oldColumn, item => item.newColumn);
+        var sortedHeaders = order.Select(column => columnHeaders[column]).ToArray();
+        var values = populated.Values;
+
+        IReadOnlyList<PivotCell> Remap(IEnumerable<PivotCell> cells) => cells
+            .Select(cell => new PivotCell { Row = cell.Row, Column = columnMap[cell.Column], Values = cell.Values })
+            .OrderBy(cell => cell.Row)
+            .ThenBy(cell => cell.Column)
+            .ToArray();
+
+        return new PopulatedResult(
+            populated.RowHeaders,
+            sortedHeaders,
+            values with
+            {
+                Cells = Remap(values.Cells),
+                ColumnTotals = RemapTotals(values.ColumnTotals, columnMap),
+                Subtotals = values.Subtotals
+                    .Select(subtotal => new PivotSubtotal
+                    {
+                        RowHeader = subtotal.RowHeader,
+                        Cells = Remap(subtotal.Cells),
+                        Totals = subtotal.Totals,
+                        ColumnSubtotals = subtotal.ColumnSubtotals
+                    })
+                    .ToArray(),
+                // Drawn after the last column of their group, which has moved.
+                ColumnSubtotals = OrderColumnSubtotals(values.ColumnSubtotals, sortedHeaders)
+            });
+    }
+
+    /// <summary>Finds the summary where a row path crosses a column path.</summary>
+    /// <remarks>A path as long as its axis names one row or column, a shorter one names a group's
+    /// subtotal and an empty one the grand total, so every intersection the result holds -- cell,
+    /// subtotal, column subtotal, their crossing, the totals -- answers to one call.</remarks>
+    private sealed class SummaryLookup
+    {
+        private readonly int _rowDepth;
+        private readonly int _columnDepth;
+        private readonly Dictionary<HeaderKey, int> _rows;
+        private readonly Dictionary<HeaderKey, int> _columns;
+        private readonly Dictionary<CellKey, IReadOnlyDictionary<string, decimal?>> _cells;
+        private readonly Dictionary<int, IReadOnlyDictionary<string, decimal?>> _rowTotals;
+        private readonly Dictionary<int, IReadOnlyDictionary<string, decimal?>> _columnTotals;
+        private readonly Dictionary<HeaderKey, PivotSubtotal> _subtotals = [];
+        private readonly Dictionary<HeaderKey, PivotColumnSubtotal> _columnSubtotals = [];
+        private readonly IReadOnlyDictionary<string, decimal?> _grandTotals;
+        // Indexed on first use: a sort reads one subtotal once per row or column, and
+        // scanning its cells each time would be quadratic.
+        private readonly Dictionary<HeaderKey, Dictionary<int, IReadOnlyDictionary<string, decimal?>>> _subtotalCells = [];
+        private readonly Dictionary<HeaderKey, Dictionary<int, IReadOnlyDictionary<string, decimal?>>> _columnSubtotalCells = [];
+        private readonly Dictionary<HeaderKey, Dictionary<HeaderKey, IReadOnlyDictionary<string, decimal?>>> _crossings = [];
+
+        public SummaryLookup(
+            IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
+            IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
+            TransformedResult values)
+        {
+            _rowDepth = rowHeaders.Count > 0 ? rowHeaders[0].Count : 0;
+            _columnDepth = columnHeaders.Count > 0 ? columnHeaders[0].Count : 0;
+            _rows = Index(rowHeaders);
+            _columns = Index(columnHeaders);
+            _cells = values.Cells.ToDictionary(cell => new CellKey(cell.Row, cell.Column), cell => cell.Values);
+            _rowTotals = values.RowTotals.ToDictionary(total => total.Index, total => total.Values);
+            _columnTotals = values.ColumnTotals.ToDictionary(total => total.Index, total => total.Values);
+            _grandTotals = values.GrandTotals;
+
+            foreach (var subtotal in values.Subtotals)
+            {
+                _subtotals.TryAdd(new HeaderKey(subtotal.RowHeader), subtotal);
+            }
+
+            foreach (var subtotal in values.ColumnSubtotals)
+            {
+                _columnSubtotals.TryAdd(new HeaderKey(subtotal.ColumnHeader), subtotal);
+            }
+        }
+
+        public decimal? Get(IReadOnlyList<string?> rowPath, IReadOnlyList<string?> columnPath, string key)
+        {
+            var row = Classify(rowPath, _rowDepth);
+            var column = Classify(columnPath, _columnDepth);
+
+            if (row is Part.Unknown || column is Part.Unknown)
+            {
+                return null;
+            }
+
+            int? rowIndex = row is Part.Leaf ? (_rows.TryGetValue(new HeaderKey(rowPath), out var r) ? r : null) : null;
+            int? columnIndex = column is Part.Leaf
+                ? (_columns.TryGetValue(new HeaderKey(columnPath), out var c) ? c : null)
+                : null;
+
+            if ((row is Part.Leaf && rowIndex is null) || (column is Part.Leaf && columnIndex is null))
+            {
+                return null;
+            }
+
+            PivotSubtotal? subtotal = null;
+            PivotColumnSubtotal? columnSubtotal = null;
+
+            if ((row is Part.Group && !_subtotals.TryGetValue(new HeaderKey(rowPath), out subtotal)) ||
+                (column is Part.Group && !_columnSubtotals.TryGetValue(new HeaderKey(columnPath), out columnSubtotal)))
+            {
+                return null;
+            }
+
+            var values = (row, column) switch
+            {
+                (Part.Leaf, Part.Leaf) => _cells.GetValueOrDefault(new CellKey(rowIndex!.Value, columnIndex!.Value)),
+                (Part.Leaf, Part.Group) => Cached(_columnSubtotalCells, columnPath, () =>
+                        columnSubtotal!.Cells.ToDictionary(cell => cell.Index, cell => cell.Values))
+                    .GetValueOrDefault(rowIndex!.Value),
+                (Part.Leaf, Part.Total) => _rowTotals.GetValueOrDefault(rowIndex!.Value),
+                (Part.Group, Part.Leaf) => Cached(_subtotalCells, rowPath, () =>
+                        subtotal!.Cells.ToDictionary(cell => cell.Column, cell => cell.Values))
+                    .GetValueOrDefault(columnIndex!.Value),
+                (Part.Group, Part.Group) => Cached(_crossings, rowPath, () =>
+                        subtotal!.ColumnSubtotals
+                            .GroupBy(cell => new HeaderKey(cell.ColumnHeader))
+                            .ToDictionary(group => group.Key, group => group.First().Values))
+                    .GetValueOrDefault(new HeaderKey(columnPath)),
+                (Part.Group, Part.Total) => subtotal!.Totals,
+                (Part.Total, Part.Leaf) => _columnTotals.GetValueOrDefault(columnIndex!.Value),
+                (Part.Total, Part.Group) => columnSubtotal!.Totals,
+                _ => _grandTotals
+            };
+
+            return GetValue(values, key);
+        }
+
+        private static Dictionary<TKey, TValue> Cached<TKey, TValue>(
+            Dictionary<HeaderKey, Dictionary<TKey, TValue>> cache,
+            IReadOnlyList<string?> path,
+            Func<Dictionary<TKey, TValue>> create)
+            where TKey : notnull
+        {
+            var key = new HeaderKey(path);
+
+            if (!cache.TryGetValue(key, out var index))
+            {
+                index = create();
+                cache.Add(key, index);
+            }
+
+            return index;
+        }
+
+        // An axis with no fields has one header of no values: its only path is the total.
+        private static Part Classify(IReadOnlyList<string?> path, int depth) =>
+            path.Count == 0 ? Part.Total
+            : path.Count == depth ? Part.Leaf
+            : path.Count < depth ? Part.Group
+            : Part.Unknown;
+
+        private static Dictionary<HeaderKey, int> Index(IReadOnlyList<IReadOnlyList<string?>> headers)
+        {
+            var index = new Dictionary<HeaderKey, int>();
+
+            for (var position = 0; position < headers.Count; position++)
+            {
+                index.TryAdd(new HeaderKey(headers[position]), position);
+            }
+
+            return index;
+        }
+
+        private enum Part
+        {
+            Total,
+            Group,
+            Leaf,
+            Unknown
+        }
     }
 
     /// <summary>Maps the declared per-field sorts onto header levels, by position in the axis.</summary>
@@ -1712,91 +1953,6 @@ public sealed class PivotEngine
         var interval = fields.ElementAtOrDefault(level)?.Interval ?? PivotGroupInterval.None;
 
         return PivotGroupLabels.Order(interval, culture) ?? StringComparer.Create(culture, ignoreCase: true);
-    }
-
-    private static int[] SortRowsByTotal(
-        int[] rowOrder,
-        IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
-        IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
-        IReadOnlyList<PivotCell> cells,
-        IReadOnlyList<PivotTotal> rowTotals,
-        PivotSort sort,
-        CultureInfo culture)
-    {
-        if (string.IsNullOrWhiteSpace(sort.ValueKey))
-        {
-            return rowOrder;
-        }
-
-        Dictionary<int, decimal?> values;
-
-        if (sort.ColumnPath is null || sort.ColumnPath.Count == 0)
-        {
-            values = rowTotals.ToDictionary(
-                total => total.Index,
-                total => GetValue(total.Values, sort.ValueKey));
-        }
-        else
-        {
-            var sortableCells = FilterCellsByColumnPath(cells, columnHeaders, sort.ColumnPath);
-            values = sortableCells
-                .GroupBy(cell => cell.Row)
-                .ToDictionary(
-                    group => group.Key,
-                    group => group
-                        .Select(cell => GetValue(cell.Values, sort.ValueKey))
-                        .FirstOrDefault(value => value is not null));
-        }
-
-        var labelComparer = StringComparer.Create(culture, ignoreCase: true);
-        var ordered = sort.Direction == PivotSortDirection.Descending
-            ? rowOrder
-                .OrderBy(row => values.GetValueOrDefault(row) is null ? 1 : 0)
-                .ThenByDescending(row => values.GetValueOrDefault(row))
-                .ThenBy(row => string.Join("\u001f", rowHeaders[row]), labelComparer)
-            : rowOrder
-                .OrderBy(row => values.GetValueOrDefault(row) is null ? 1 : 0)
-                .ThenBy(row => values.GetValueOrDefault(row))
-                .ThenBy(row => string.Join("\u001f", rowHeaders[row]), labelComparer);
-
-        return ordered.ToArray();
-    }
-
-    private static IEnumerable<PivotCell> FilterCellsByColumnPath(
-        IReadOnlyList<PivotCell> cells,
-        IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
-        IReadOnlyList<string?>? columnPath)
-    {
-        if (columnPath is null || columnPath.Count == 0)
-        {
-            return cells;
-        }
-
-        var sortableColumns = columnHeaders
-            .Select((header, index) => new { header, index })
-            .Where(item => HeaderMatches(item.header, columnPath))
-            .Select(item => item.index)
-            .ToHashSet();
-
-        return cells.Where(cell => sortableColumns.Contains(cell.Column));
-    }
-
-    private static bool HeaderMatches(IReadOnlyList<string?> header, IReadOnlyList<string?> expected)
-    {
-        if (header.Count != expected.Count)
-        {
-            return false;
-        }
-
-        for (var index = 0; index < header.Count; index++)
-        {
-            if (!string.Equals(header[index], expected[index], StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private static int ResolveRowFieldLevel(IReadOnlyList<PivotFieldRef> rowFields, string? field)

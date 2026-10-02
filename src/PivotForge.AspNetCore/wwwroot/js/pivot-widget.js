@@ -183,6 +183,9 @@
       this.requestToken = 0;
       this.filters = [...(this.options.filters ?? [])];
       this.rowSort = this.options.rowSort ?? null;
+      // The column axis' value sort, { valueKey, rowPath, direction }: "sort
+      // columns by this row". Null leaves each column field's own order.
+      this.columnSort = this.options.columnSort ?? null;
       // Seeded from the declared rules and owned from here on, so a rule added
       // at runtime and one written in Razor live in the same list.
       this.conditionalRules = [...(this.options.rendererOptions?.conditionalRules ?? [])];
@@ -205,6 +208,10 @@
 
       if (restored?.rowSort !== undefined) {
         this.rowSort = restored.rowSort;
+      }
+
+      if (restored?.columnSort !== undefined) {
+        this.columnSort = restored.columnSort;
       }
 
       // Replaces the declared rules rather than adding to them, because that is
@@ -361,6 +368,7 @@
             }))
           : null,
         rowSort: payload.rowSort ?? null,
+        columnSort: payload.columnSort ?? null,
         // A rule the renderer could not act on is dropped rather than thrown
         // on, the same bargain the filters above make: a view stored by an
         // older or a tampered-with client should still open. A rule naming a
@@ -404,6 +412,7 @@
           ? layout.filters.filter(PivotForge.PivotRequestBuilder.restricts)
           : this.filters,
         rowSort: this.rowSort,
+        columnSort: this.columnSort,
         conditionalRules: this.conditionalRules
       };
 
@@ -528,6 +537,13 @@
               return;
             }
 
+            // "Sort columns by this row" orders every column level by that
+            // row's value, which the engine reads from the column fields.
+            if (request?.mode === "ColumnTotalValue") {
+              this.sortColumnsBy(this.nextColumnSort(request));
+              return;
+            }
+
             this.sortBy(this.nextHeaderSort(request));
           }
           : null,
@@ -540,6 +556,7 @@
         // Declared before the spread so a consumer driving sorting through
         // rendererOptions keeps ownership until this widget actually sorts.
         sortState: this.rowSort,
+        columnSortState: this.columnSort,
         // The renderer outlives every rule change, so this is also passed per
         // draw in render(); declaring it here is what a first draw reads.
         conditionalRules: this.conditionalRules,
@@ -642,6 +659,7 @@
     syncRendererSortState() {
       if (this.renderer) {
         this.renderer.options.sortState = this.rowSort;
+        this.renderer.options.columnSortState = this.columnSort;
       }
     }
 
@@ -838,6 +856,7 @@
         loading: this.loading,
         filters: [...this.filters],
         rowSort: this.rowSort,
+        columnSort: this.columnSort,
         conditionalRules: [...this.conditionalRules],
         sessionId: this.sessionId,
         totalRowCount: this.totalRowCount
@@ -848,6 +867,7 @@
       return PivotForge.PivotRequestBuilder.buildRequest(this.options.fields, {
         filters: this.filters,
         rowSort: this.rowSort,
+        columnSort: this.columnSort,
         hideEmptySummaryCells: this.options.hideEmptySummaryCells,
         topN: this.options.topN
       });
@@ -1020,7 +1040,7 @@
       this.container.appendChild(node);
     }
 
-    async update({ fields, filters, rowSort } = {}) {
+    async update({ fields, filters, rowSort, columnSort } = {}) {
       // One call, one refresh: a designer changes several pieces per interaction
       // and must not produce a request per piece.
       if (fields !== undefined) {
@@ -1046,6 +1066,11 @@
 
       if (rowSort !== undefined) {
         this.rowSort = rowSort;
+        this.syncRendererSortState();
+      }
+
+      if (columnSort !== undefined) {
+        this.columnSort = columnSort;
         this.syncRendererSortState();
       }
 
@@ -1261,6 +1286,39 @@
       return { ...request, direction };
     }
 
+    // The column half of nextHeaderSort: the same row flips, any other starts
+    // largest first.
+    nextColumnSort(request) {
+      const sort = {
+        valueKey: request?.valueKey ?? null,
+        rowPath: Array.isArray(request?.rowPath) && request.rowPath.length > 0 ? [...request.rowPath] : null
+      };
+
+      if (request?.direction) {
+        return { ...sort, direction: request.direction };
+      }
+
+      const current = this.columnSort;
+      const sameTarget = Boolean(current) && current.valueKey === sort.valueKey &&
+        sameSortColumnPath(current.rowPath ?? null, sort.rowPath);
+      const direction = sameTarget && current.direction === "Descending" ? "Ascending" : "Descending";
+
+      return { ...sort, direction };
+    }
+
+    // Orders the columns by one row's value -- null for the columns' own
+    // totals -- or, given null, hands them back to their fields' own order.
+    async sortColumnsBy(sort) {
+      if (!this.options.allowSorting) {
+        throw new Error("Cannot sort because allowSorting is disabled.");
+      }
+
+      this.columnSort = sort ?? null;
+      this.syncRendererSortState();
+      this.saveState();
+      await this.refresh();
+    }
+
     async sortBy(sort) {
       if (!this.options.allowSorting) {
         throw new Error("Cannot sort because allowSorting is disabled.");
@@ -1283,6 +1341,12 @@
 
       const current = this.fields.find(entry => entry.key === field)?.sortOrder ?? null;
       const next = direction ?? (current === "Ascending" ? "Descending" : "Ascending");
+      // A label sort picked on a column field takes the columns back from a
+      // value sort; left in place, the value sort would go on winning.
+      if (this.columnSort) {
+        this.columnSort = null;
+        this.syncRendererSortState();
+      }
 
       if (this.layoutState) {
         this.layoutState.setSortOrder(field, next);

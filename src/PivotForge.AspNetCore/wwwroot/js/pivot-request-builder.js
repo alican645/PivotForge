@@ -398,12 +398,26 @@
       );
     }
 
-    // Ordering a level by a summary value is implemented on the row axis only;
-    // the column axis is the product of its levels and has no such order.
-    if (!isRow && field.sortByValueKey !== undefined) {
+    // Ordering a level by a summary value works on both axes: a row level by
+    // its row totals, a column level by its column totals.
+    if (!isDimensionAxis && field.sortByValueKey !== undefined) {
       throw new Error(
-        `"sortByValueKey" is only valid on a "row" field, but was set on "${dataField}" in area "${area}".`
+        `"sortByValueKey" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
       );
+    }
+
+    // The header path on the other axis whose summary the value sort reads:
+    // a column path for a row field, a row path for a column field.
+    const sortBySummaryPath = isDimensionAxis ? field.sortBySummaryPath ?? null : null;
+    if (sortBySummaryPath !== null) {
+      if (!Array.isArray(sortBySummaryPath)) {
+        throw new Error(`"sortBySummaryPath" on field "${dataField}" must be an array of header values.`);
+      }
+
+      if (!field.sortByValueKey) {
+        throw new Error(
+          `"sortBySummaryPath" on field "${dataField}" requires "sortByValueKey": it only says which summary is compared.`);
+      }
     }
 
     return {
@@ -418,7 +432,10 @@
       role,
       areaIndex: areaIndex ?? null,
       sortOrder,
-      sortByValueKey: isRow && field.sortByValueKey ? String(field.sortByValueKey) : null,
+      sortByValueKey: isDimensionAxis && field.sortByValueKey ? String(field.sortByValueKey) : null,
+      sortBySummaryPath: sortBySummaryPath === null || sortBySummaryPath.length === 0
+        ? null
+        : sortBySummaryPath.map(value => value === null || value === undefined ? null : String(value)),
       caption: field.caption ?? dataField,
       aggregation,
       showAs,
@@ -570,14 +587,53 @@
       // another area. A value sort declared without a direction takes the row
       // axis default; valueKey is sent only when declared, so a page that never
       // uses it sends the request it always did.
-      fieldSorts: normalized
-        .filter(field => field.sortOrder !== null || field.sortByValueKey !== null)
-        .map(field => ({
+      fieldSorts: fieldSorts(normalized, columnSort(extras.columnSort))
+    };
+  }
+
+  // A column value sort picked in the grid (sort columns by this row) orders
+  // every column level by that row's value, the column half of what a row
+  // value sort does. It travels as per-level sorts on the column fields,
+  // standing in for whatever those fields declared.
+  function columnSort(sort) {
+    if (!sort || typeof sort.valueKey !== "string" || sort.valueKey === "") {
+      return null;
+    }
+
+    return {
+      valueKey: sort.valueKey,
+      direction: SORT_ORDERS.includes(sort.direction) ? sort.direction : "Descending",
+      rowPath: Array.isArray(sort.rowPath) && sort.rowPath.length > 0 ? [...sort.rowPath] : null
+    };
+  }
+
+  function fieldSorts(normalized, columnValueSort) {
+    return normalized
+      .filter(field => field.area === "row" || field.area === "column")
+      .map(field => {
+        if (columnValueSort && field.area === "column") {
+          return {
+            field: field.key,
+            direction: columnValueSort.direction,
+            valueKey: columnValueSort.valueKey,
+            ...(columnValueSort.rowPath ? { summaryPath: columnValueSort.rowPath } : {})
+          };
+        }
+
+        if (field.sortOrder === null && field.sortByValueKey === null) {
+          return null;
+        }
+
+        return {
           field: field.key,
           direction: field.sortOrder ?? "Ascending",
-          ...(field.sortByValueKey !== null ? { valueKey: field.sortByValueKey } : {})
-        }))
-    };
+          ...(field.sortByValueKey !== null ? { valueKey: field.sortByValueKey } : {}),
+          ...(field.sortByValueKey !== null && field.sortBySummaryPath !== null
+            ? { summaryPath: field.sortBySummaryPath }
+            : {})
+        };
+      })
+      .filter(sort => sort !== null);
   }
 
   // A ranking is validated here rather than on the server so a typo shows up where

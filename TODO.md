@@ -2,8 +2,8 @@
 
 DevExpress / DevExtreme PivotGrid'in belgelenmiş özellik kümesi ile PivotForge
 karşılaştırıldı. İlk karşılaştırma `0.4.0-preview.8` üzerinde yapıldı; işaretler
-o günden beri güncel tutuluyor ve `0.6.0-preview.5` sürümündeki durumu, artı
-yayınlanmamış hesaplanan alanları gösteriyor. Kaynaklar dosyanın sonunda.
+o günden beri güncel tutuluyor ve `0.6.0-preview.6` sürümündeki durumu gösteriyor.
+Kaynaklar dosyanın sonunda.
 
 **Kapsam dışı (talep üzerine):** OLAP / SSAS, sunucu tarafı toplama (server mode),
 uzaktan gruplama, milyon satır ölçeğinde sanal kaydırma.
@@ -86,8 +86,8 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `format` / `precision` | ✅ | ✅ | `0.4.0-preview.1`'de eklendi |
 | `areaIndex` | ✅ | ✅ | `area-index` niteliği ve `AreaIndex()` metodu |
 | `sortOrder` | ✅ | ✅ | `sort-order` niteliği; satır ve sütun ekseninde seviye başına yön |
-| `sortBy` | ✅ | ✅ | `sort-by-value-key` niteliği ve `SortByValueKey()` metodu; yalnızca satır ekseni |
-| `sortBySummaryField` / `Path` | ⚠️ | ⚠️ | `RowTotalValue` var ama sütun yoluna göre değil |
+| `sortBy` | ✅ | ✅ | `sort-by-value-key` niteliği ve `SortByValueKey()` metodu; satır ve sütun ekseni |
+| `sortBySummaryField` / `Path` | ✅ | ✅ | `sort-by-value-key` + `sort-by-summary-path` / `SortBySummaryPath()`; iki eksende, ara toplam yolu dahil. Arayüzde değer başlığı, "Genel Toplam" satırı ve sağ tık menüsü |
 | `expanded` | ✅ | ✅ | Alan başına başlangıç durumu; yalnızca ilk çizimde |
 | `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
 | `showGrandTotals` (alan başına) | ✅ | ✅ | `show-grand-totals` niteliği ve `ShowGrandTotals()` metodu; grid düzeyinde `show-row-grand-totals` / `show-column-grand-totals` |
@@ -117,8 +117,19 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
       özet değere göre, **üst grubunun içinde** sıralıyor; yön `sort-order`'dan
       geliyor. Ara seviye alt toplamına, en derin seviye satır toplamına göre,
       ikisi de `show-as` uygulanmış hâliyle — okuyucunun gördüğü sayıya göre.
-      Boş grup iki yönde de sonda, eşitlik etikete göre artan. Sütun ekseni ve
-      tasarımcı UI'ı kapsam dışı
+      Boş grup iki yönde de sonda, eşitlik etikete göre artan. Tasarımcı UI'ı
+      kapsam dışı
+- [x] Değere göre sıralama iki eksende (`sortBySummaryField` / `sortBySummaryPath`)
+      — `sort-by-value-key` artık `Column` alanında da geçerli: sütun grupları
+      kendi toplamlarına göre, üst gruplarının içinde sıralanıyor.
+      `sort-by-summary-path="2025"` karşı eksendeki hangi özetin okunacağını
+      seçiyor (satır alanı için sütun yolu, sütun alanı için satır yolu; kısa yol
+      ara toplamı, boş yol genel toplamı okur). Satır değer sıralaması
+      (`RowSort` / değer başlığına tıklama) artık her satır seviyesini kendi
+      üst grubunda sıralıyor; grupları bölmüyor. Arayüz: ara toplam sütununun
+      başlığı da sıralanabilir, "Genel Toplam" satırının oku sütunları
+      toplamlarına göre dizer, sağ tık menüsünde "Satırları bu sütuna göre
+      sırala" / "Sütunları bu satıra göre sırala"
 - [x] `expanded` başlangıç durumu — `Row` alanında `expanded="false"` o seviyenin
       gruplarını **ilk** çizimde kapatıyor; sonrası kullanıcıya ait ve geri
       yüklenen `state-storing` görünümü ona üstün geliyor

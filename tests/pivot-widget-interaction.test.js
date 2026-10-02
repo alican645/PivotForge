@@ -360,6 +360,60 @@ test("clicking a column field header orders its values and flips on the next cli
   PivotForge.PivotTableRenderer = previous;
 });
 
+// "Sort columns by this row" orders every column level by that row's value.
+// It is a widget-level sort like the row sort, flips on a second click of the
+// same row, and gives way to a label sort picked on a column field.
+test("sorting columns by a row flips on the same row and yields to a column label sort", async () => {
+  const captured = {};
+  class FakeRenderer {
+    constructor(container, options) { this.options = options; Object.assign(captured, options); }
+    render() {}
+  }
+  const previous = PivotForge.PivotTableRenderer;
+  PivotForge.PivotTableRenderer = FakeRenderer;
+
+  const calls = [];
+  const widget = PivotForge.create(createContainer(), {
+    fields: [...fields, { caption: "Yıl", dataField: "yil", area: "column" }],
+    autoLoad: false,
+    fetchImpl: async (url, init) => {
+      calls.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ cells: [], grandTotals: {} }) };
+    }
+  });
+  await widget.refresh();
+
+  const send = async request => {
+    captured.onSortRequested(request);
+    await new Promise(resolve => setImmediate(resolve));
+    return calls.at(-1);
+  };
+
+  const byRow = { mode: "ColumnTotalValue", valueKey: "tutar_sum", rowPath: ["Beton"] };
+  let request = await send(byRow);
+  assert.deepEqual(request.fieldSorts, [
+    { field: "yil", direction: "Descending", valueKey: "tutar_sum", summaryPath: ["Beton"] }
+  ]);
+  assert.equal(request.rowSort, null);
+  assert.deepEqual(widget.getState().columnSort, {
+    valueKey: "tutar_sum", rowPath: ["Beton"], direction: "Descending"
+  });
+
+  request = await send(byRow);
+  assert.equal(request.fieldSorts[0].direction, "Ascending");
+
+  // The grand total row is another target, so it starts over, largest first.
+  request = await send({ mode: "ColumnTotalValue", valueKey: "tutar_sum", rowPath: null });
+  assert.deepEqual(request.fieldSorts, [{ field: "yil", direction: "Descending", valueKey: "tutar_sum" }]);
+
+  request = await send({ mode: "ColumnLabel", field: "yil" });
+  assert.deepEqual(request.fieldSorts, [{ field: "yil", direction: "Ascending" }]);
+  assert.equal(widget.getState().columnSort, null);
+
+  widget.dispose();
+  PivotForge.PivotTableRenderer = previous;
+});
+
 // --- Conditional formatting ---------------------------------------------------
 
 // The panel the widget builds on first use, recorded rather than rendered.

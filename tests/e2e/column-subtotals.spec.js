@@ -62,8 +62,10 @@ async function expectAlignedRows(page) {
   expect(new Set(widths).size).toBe(1);
 }
 
+// The label alone: with a single value the header also carries a sort arrow.
 const subtotalHeaders = async page =>
-  page.locator(scratch(".pivot-table__column-subtotal-header")).allTextContents();
+  page.locator(scratch(".pivot-table__column-subtotal-header")).evaluateAll(cells =>
+    cells.map(cell => (cell.querySelector(".pivot-table__sort-label") ?? cell).textContent));
 
 const years = async page =>
   page.evaluate(() => [...new Set(window.scratchWidget.result.columnHeaders.map(header => header[0]))]);

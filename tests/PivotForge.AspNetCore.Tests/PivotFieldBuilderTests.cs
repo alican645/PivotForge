@@ -339,17 +339,41 @@ public class PivotFieldBuilderTests
     }
 
     [Theory]
-    [InlineData(PivotArea.Column)]
     [InlineData(PivotArea.Data)]
     [InlineData(PivotArea.Filter)]
-    public void SortByValueKeyOutsideTheRowAreaThrows(PivotArea area)
+    public void SortByValueKeyOutsideTheRowAndColumnAreasThrows(PivotArea area)
     {
         var builder = new PivotFieldBuilder()
             .DataField("Category").Area(area).SortByValueKey("Amount_sum");
 
         var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
-        Assert.Contains("SortByValueKey is only valid on fields whose Area is Row", exception.Message);
+        Assert.Contains("SortByValueKey is only valid on fields whose Area is Row or Column", exception.Message);
+    }
+
+    [Fact]
+    public void AColumnFieldCanSortByValueAlongARowPath()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("Year").Area(PivotArea.Column)
+            .SortOrder(PivotSortDirection.Descending)
+            .SortByValueKey("Amount_sum")
+            .SortBySummaryPath("East")
+            .Build();
+
+        Assert.Equal("Amount_sum", field["sortByValueKey"]);
+        Assert.Equal(new string?[] { "East" }, field["sortBySummaryPath"]);
+    }
+
+    [Fact]
+    public void ASummaryPathWithoutAValueKeyThrows()
+    {
+        var builder = new PivotFieldBuilder()
+            .DataField("Category").Area(PivotArea.Row).SortBySummaryPath("2025");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("SortBySummaryPath without SortByValueKey", exception.Message);
     }
 
     [Fact]
