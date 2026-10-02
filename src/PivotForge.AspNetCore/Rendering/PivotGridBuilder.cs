@@ -104,6 +104,17 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder AllowCalculatedFields(bool allow) =>
         Set("allowCalculatedFields", allow);
 
+    /// <summary>Shows or hides the "Loading..." panel drawn over the grid while data is requested.</summary>
+    /// <remarks>
+    /// On by default. The panel covers the first load and every reload a sort, filter or
+    /// layout change starts, with the previous table dimmed beneath it, and appears only once
+    /// a request has taken longer than 300 milliseconds, so a fast answer does not flash it.
+    /// Its text is the <c>loading</c> renderer text, "Yükleniyor..." in the <c>tr</c> locale.
+    /// </remarks>
+    /// <param name="enabled">True to show the panel while data loads.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder LoadPanel(bool enabled) => Set("loadPanel", enabled);
+
     /// <summary>Enables or disables the initial load performed when the grid is created.</summary>
     /// <param name="autoLoad">True to load data as soon as the grid is created.</param>
     /// <returns>The same builder.</returns>

@@ -17,6 +17,11 @@
     // The designer's calculated field editor. Only a page with a designer shows
     // it; a formula declared in the markup works whatever this says.
     allowCalculatedFields: true,
+    // The "Loading..." panel over the grid while a refresh is in flight, with
+    // the previous table dimmed beneath it. It appears only once a request has
+    // run for loadPanelDelay milliseconds, so a fast answer does not flash it.
+    loadPanel: true,
+    loadPanelDelay: 300,
     largeData: false,
     pageSize: 40,
     sourceRowCount: 100000,
@@ -879,6 +884,7 @@
       this.error = null;
       this.request = this.buildRequest();
       this.emit("dataLoading", { request: this.request });
+      this.scheduleLoadPanel();
 
       try {
         const result = this.options.largeData
@@ -889,6 +895,7 @@
         }
 
         this.loading = false;
+        this.hideLoadPanel();
         this.result = result;
         this.render(result);
         this.emit("dataLoaded", { result });
@@ -898,6 +905,7 @@
         }
 
         this.loading = false;
+        this.hideLoadPanel();
         this.error = error;
         this.showError(error);
         this.emit("error", error);
@@ -919,6 +927,81 @@
         filteredFields: this.filteredFields(),
         conditionalRules: this.conditionalRules
       });
+
+      // A redraw while a request is still out (a conditional rule added
+      // mid-load) replaces the container's children, the panel among them.
+      if (this.loadPanelShown) {
+        this.showLoadPanel();
+      }
+    }
+
+    // Waits before showing, and a newer refresh restarts the wait without
+    // hiding a panel already on screen, so a run of quick re-sorts reads as one
+    // load rather than a flicker.
+    scheduleLoadPanel() {
+      if (this.options.loadPanel === false || !root.document) {
+        return;
+      }
+
+      root.clearTimeout(this.loadPanelTimer);
+      const delay = Math.max(0, Number(this.options.loadPanelDelay) || 0);
+      this.loadPanelTimer = root.setTimeout(() => {
+        this.loadPanelTimer = null;
+        this.showLoadPanel();
+      }, delay);
+    }
+
+    // Sits inside the grid's own scroll box, as its first child, so it stays in
+    // view however far the table is scrolled; the stylesheet makes it sticky.
+    showLoadPanel() {
+      const document = root.document;
+
+      if (!this.loadPanelNode) {
+        const node = document.createElement("div");
+        node.className = "pivot-load-panel";
+        node.setAttribute("role", "status");
+        const pane = document.createElement("div");
+        pane.className = "pivot-load-panel__pane";
+        const spinner = document.createElement("span");
+        spinner.className = "pivot-load-panel__spinner";
+        spinner.setAttribute("aria-hidden", "true");
+        const text = document.createElement("span");
+        text.className = "pivot-load-panel__text";
+        text.textContent = this.loadPanelText();
+        pane.append(spinner, text);
+        node.appendChild(pane);
+        this.loadPanelNode = node;
+      }
+
+      this.loadPanelShown = true;
+      this.container.classList.add("pivot-is-loading");
+      this.container.setAttribute("aria-busy", "true");
+
+      if (this.loadPanelNode.parentNode !== this.container) {
+        this.container.prepend(this.loadPanelNode);
+      }
+    }
+
+    hideLoadPanel() {
+      root.clearTimeout?.(this.loadPanelTimer);
+      this.loadPanelTimer = null;
+
+      if (!this.loadPanelShown) {
+        return;
+      }
+
+      this.loadPanelShown = false;
+      this.loadPanelNode?.remove();
+      this.container.classList.remove("pivot-is-loading");
+      this.container.removeAttribute("aria-busy");
+    }
+
+    // A renderer string in spirit, so it is looked up where the others are: the
+    // page's rendererOptions.texts first, then the locale's table texts.
+    loadPanelText() {
+      return this.options.rendererOptions?.texts?.loading ??
+        this.locale.table?.texts?.loading ??
+        "Loading...";
     }
 
     showError(error) {
@@ -1149,6 +1232,7 @@
       this.controller?.abort();
       this.controller = null;
       this.loading = false;
+      this.hideLoadPanel();
     }
 
     // A header click (or the context menu's "sort by value") carries only what
@@ -1264,6 +1348,8 @@
       this.requestToken++;
       this.controller?.abort();
       this.controller = null;
+      this.hideLoadPanel();
+      this.loadPanelNode = null;
       this.handlers.clear();
       this.errorNode = null;
       this.designer?.dispose();

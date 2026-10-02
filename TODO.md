@@ -275,11 +275,11 @@ Açık kalanlar:
 | Genişlet / daralt | ✅ motorda, ⚠️ bildirimi yok |
 | `wordWrapEnabled` | ❌ |
 | `rtlEnabled` | ❌ |
-| Yükleme göstergesi (`loadPanel`) | ⚠️ `dataLoading` olayı var, hazır gösterge yok |
+| Yükleme göstergesi (`loadPanel`) | ✅ `load-panel`, varsayılan açık |
 
 - [ ] Ağaç düzeni satır başlıkları
 - [ ] `show-totals-prior`
-- [ ] Paketlenmiş yükleme göstergesi
+- [x] Paketlenmiş yükleme göstergesi
 - [ ] RTL desteği
 - [ ] `word-wrap`
 

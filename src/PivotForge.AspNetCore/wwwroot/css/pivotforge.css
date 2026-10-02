@@ -1347,6 +1347,62 @@ select {
   max-height: min(calc(100vh - 150px), 620px);
 }
 
+/* PivotWidget's load panel. The grid's container is its own scroll box, so the
+   panel is a zero-height sticky first child: it stays in view however far the
+   table is scrolled, and takes no room from the table beneath it. */
+.pivot-is-loading {
+  position: relative;
+  min-height: 120px;
+}
+
+.pivot-is-loading > :not(.pivot-load-panel) {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.pivot-load-panel {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 40;
+  height: 0;
+  overflow: visible;
+}
+
+.pivot-load-panel__pane {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: 1px solid var(--pt-border);
+  border-radius: 6px;
+  background: var(--pt-panel);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: var(--pt-text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pivot-load-panel__spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid var(--pt-border);
+  border-top-color: var(--pt-accent);
+  border-radius: 50%;
+  animation: pivot-load-spin 0.8s linear infinite;
+}
+
+@keyframes pivot-load-spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes pivot-loading-pulse {
   from { opacity: 0.45; }
   to { opacity: 1; }
@@ -1355,6 +1411,10 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .pivot-large-loading__lines i {
     animation: none;
+  }
+
+  .pivot-load-panel__spinner {
+    animation-duration: 2.4s;
   }
 }
 
