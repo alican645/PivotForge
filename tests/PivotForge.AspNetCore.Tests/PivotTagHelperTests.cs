@@ -838,19 +838,20 @@ public class PivotTagHelperTests
     [Fact]
     public void RefusesExpandedAndShowTotalsWhereTheyMeanNothing()
     {
-        // Collapsible groups are drawn on the row axis only, subtotals on both header axes.
+        // Collapsible groups and subtotals are drawn on both header axes only.
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
-            .DataField("Year").Area(PivotArea.Column).Expanded(false).Build());
+            .DataField("Category").Area(PivotArea.Filter).Expanded(false).Build());
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build());
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Category").Area(PivotArea.Filter).ShowTotals(false).Build());
 
-        // The row area accepts both, the column area ShowTotals.
+        // The row and column areas accept both.
         new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
             .Expanded(false).ShowTotals(false).Build();
-        new PivotFieldBuilder().DataField("Year").Area(PivotArea.Column)
-            .ShowTotals(false).Build();
+        var column = new PivotFieldBuilder().DataField("Year").Area(PivotArea.Column)
+            .Expanded(false).ShowTotals(false).Build();
+        Assert.Equal(false, column["expanded"]);
     }
 
     [Fact]

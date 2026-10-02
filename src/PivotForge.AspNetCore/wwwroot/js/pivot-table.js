@@ -174,6 +174,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // columnFields; a false entry means that level produces no total).
       columnSubtotals: true,
       columnFieldSubtotals: null,
+      // Parallel to columnFields, as rowFieldExpanded is to rowFields: a false
+      // entry means that column field's groups start collapsed, each to the one
+      // column holding its total.
+      columnFieldExpanded: null,
       valueKey: null,
       values: null,
       aggregation: "sum",
@@ -248,6 +252,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       return;
     }
 
+    this.collapsedColumns ??= new Set();
+    this.applyInitialColumnCollapse(columnHeaders, settings);
     const columnDepth = Math.max(1, ...columnHeaders.map(header => header.length));
     const measureDepth = values.length > 1 ? 1 : 0;
     const headerDepth = columnDepth + measureDepth;
@@ -329,26 +335,87 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       .forEach(row => this.collapsedRows.add(row.key));
   }
 
-  expandAll() {
-    this.collapsedRows?.clear();
+  // The column axis' half of applyInitialCollapse, under the same rule: once
+  // per renderer, after which the collapse set belongs to the user.
+  applyInitialColumnCollapse(columnHeaders, settings) {
+    if (this.initialColumnCollapseApplied) {
+      return;
+    }
+
+    this.initialColumnCollapseApplied = true;
+
+    const declared = settings.columnFieldExpanded;
+    if (!Array.isArray(declared)) {
+      return;
+    }
+
+    const levels = declared
+      .map((expanded, level) => (expanded === false ? level : -1))
+      .filter(level => level >= 0);
+
+    this.columnGroupKeys(columnHeaders, levels)
+      .forEach(key => this.collapsedColumns.add(key));
+  }
+
+  // Every column group at the given levels, by the key its toggle carries. The
+  // innermost level has no groups: its columns are the leaves.
+  columnGroupKeys(columnHeaders, levels) {
+    const depth = Math.max(0, ...(columnHeaders ?? []).map(header => header.length));
+    const keys = new Set();
+
+    for (const header of columnHeaders ?? []) {
+      for (const level of levels) {
+        if (level < depth - 1 && level < header.length) {
+          keys.add(this.createSubtotalKey(header.slice(0, level + 1)));
+        }
+      }
+    }
+
+    return [...keys];
+  }
+
+  // Rows only by default, which is what these did before columns could
+  // collapse; { axis: "column" } or { axis: "all" } reaches the column groups.
+  expandAll(options = {}) {
+    const axis = options.axis ?? "row";
+
+    if (axis !== "column") {
+      this.collapsedRows?.clear();
+    }
+
+    if (axis !== "row") {
+      this.collapsedColumns?.clear();
+    }
+
     this.rerenderLast();
     this.notifyViewStateChanged();
   }
 
-  collapseAll() {
+  collapseAll(options = {}) {
     const result = this.lastResult;
     const settings = this.lastSettings;
+    const axis = options.axis ?? "row";
 
     if (!result || !settings) {
       return;
     }
 
-    const rowHeaders = result.rowHeaders ?? [];
-    const rowDepth = Math.max(1, ...rowHeaders.map(header => header.length));
-    const plan = this.createRowPlan(rowHeaders, rowDepth, settings);
-    this.collapsedRows = new Set(plan
-      .filter(row => row.type === "subtotal" || row.type === "group")
-      .map(row => row.key));
+    if (axis !== "column") {
+      const rowHeaders = result.rowHeaders ?? [];
+      const rowDepth = Math.max(1, ...rowHeaders.map(header => header.length));
+      const plan = this.createRowPlan(rowHeaders, rowDepth, settings);
+      this.collapsedRows = new Set(plan
+        .filter(row => row.type === "subtotal" || row.type === "group")
+        .map(row => row.key));
+    }
+
+    if (axis !== "row") {
+      const columnHeaders = result.columnHeaders ?? [];
+      const depth = Math.max(0, ...columnHeaders.map(header => header.length));
+      this.collapsedColumns = new Set(this.columnGroupKeys(
+        columnHeaders, Array.from({ length: Math.max(0, depth - 1) }, (_, level) => level)));
+    }
+
     this.rerenderLast();
     this.notifyViewStateChanged();
   }
@@ -362,7 +429,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   getViewState() {
     return {
       columnWidths: [...this.columnWidths.entries()].map(([columnIndex, width]) => [columnIndex, width]),
-      collapsedGroups: [...(this.collapsedRows ?? new Set())]
+      collapsedGroups: [...(this.collapsedRows ?? new Set())],
+      collapsedColumnGroups: [...(this.collapsedColumns ?? new Set())]
     };
   }
 
@@ -473,14 +541,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const { rerender = true, notify = true } = options;
     const widths = Array.isArray(state?.columnWidths) ? state.columnWidths : [];
     const collapsedGroups = Array.isArray(state?.collapsedGroups) ? state.collapsedGroups : [];
+    const collapsedColumnGroups = Array.isArray(state?.collapsedColumnGroups) ? state.collapsedColumnGroups : [];
 
     this.columnWidths = new Map(widths
       .filter(entry => Array.isArray(entry) && Number.isInteger(entry[0]) && Number.isFinite(entry[1]))
       .map(([columnIndex, width]) => [columnIndex, width]));
     this.collapsedRows = new Set(collapsedGroups.filter(key => typeof key === "string"));
+    this.collapsedColumns = new Set(collapsedColumnGroups.filter(key => typeof key === "string"));
     // A restored view state is a decision the user already made, so the declared
     // initial state must not overwrite it on the render that follows.
     this.initialCollapseApplied = true;
+    this.initialColumnCollapseApplied = true;
 
     if (rerender) {
       this.rerenderLast();
@@ -572,7 +643,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   // value: the engine's columns, with a subtotal column closing each group
   // whose level carries totals. The column axis' counterpart of
   // createRowPlan, except a total follows its group rather than heading it,
-  // as in DevExtreme and Excel.
+  // as in DevExtreme and Excel. A collapsed group is its total alone: one
+  // subtotal column marked collapsed, drawn whether or not its level carries
+  // totals, since otherwise the group would leave nothing on screen.
   createColumnPlan(columnHeaders, settings) {
     const items = (columnHeaders ?? []).map((columnHeader, columnIndex) => ({ columnHeader, columnIndex }));
     const depth = Math.max(0, ...items.map(item => item.columnHeader.length));
@@ -595,13 +668,26 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     // Runs of neighbours rather than every match: the head draws a group as
     // one spanning cell, so only adjacent columns can share it.
     for (const run of this.columnRuns(items, level)) {
+      const columnHeader = run[0].columnHeader.slice(0, level + 1);
+
+      if (this.collapsedColumns?.has(this.createSubtotalKey(columnHeader))) {
+        plan.push({
+          type: "subtotal",
+          collapsed: true,
+          level,
+          columnHeader,
+          columnIndexes: run.map(item => item.columnIndex)
+        });
+        continue;
+      }
+
       this.appendColumnGroups(plan, run, level + 1, depth, settings);
 
       if (withTotals) {
         plan.push({
           type: "subtotal",
           level,
-          columnHeader: run[0].columnHeader.slice(0, level + 1),
+          columnHeader,
           columnIndexes: run.map(item => item.columnIndex)
         });
       }
@@ -710,8 +796,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       for (const group of groups) {
         if (group.subtotal) {
           // Its own label down to the value headers: the levels below
-          // belong to the columns it totals, not to it.
-          const label = `${this.displayValue(group.value, settings)} ${settings.totalText}`;
+          // belong to the columns it totals, not to it. A collapsed group
+          // keeps its plain name, as a collapsed row group does: the column
+          // is the group, folded, rather than a total beside it.
+          const label = group.collapsed
+            ? this.displayValue(group.value, settings)
+            : `${this.displayValue(group.value, settings)} ${settings.totalText}`;
           const header = this.createCell(
             "th", label, "pivot-table__column-header pivot-table__column-subtotal-header");
           header.colSpan = valueSpan;
@@ -724,6 +814,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
               valueKey: values[0].key,
               columnPath: columnPlan[group.start]?.columnHeader ?? []
             }, settings);
+          }
+          if (group.collapsed) {
+            header.classList.add("is-collapsed");
+            header.prepend(this.createSubtotalToggle(
+              this.createSubtotalKey(columnPlan[group.start].columnHeader), label, "column"));
           }
           row.appendChild(header);
           continue;
@@ -748,6 +843,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
             valueKey: values[0].key,
             columnPath: columnPlan[group.start]?.columnHeader ?? []
           }, settings);
+        }
+
+        // Every level but the innermost is a group of columns, and folds.
+        if (level < columnDepth - 1 && columnHeaders.length > 0) {
+          header.prepend(this.createSubtotalToggle(
+            this.createSubtotalKey(columnPlan[group.start].columnHeader.slice(0, level + 1)),
+            this.displayValue(group.value, settings),
+            "column"));
         }
 
         row.appendChild(header);
@@ -855,7 +958,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       }
 
       if (entry.type === "subtotal" && entry.level === level) {
-        groups.push({ value: entry.columnHeader[level] ?? null, span: 1, start: position, subtotal: true });
+        groups.push({
+          value: entry.columnHeader[level] ?? null,
+          span: 1,
+          start: position,
+          subtotal: true,
+          ...(entry.collapsed ? { collapsed: true } : {})
+        });
         current = null;
         return;
       }
@@ -1344,13 +1453,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
   wireSubtotalToggles(table, result, options) {
     table.querySelectorAll(".pivot-table__toggle").forEach(button => {
-      button.addEventListener("click", () => {
-        const key = button.dataset.subtotalKey;
+      button.addEventListener("click", event => {
+        // A column toggle sits inside a header that may also sort or select.
+        event.stopPropagation();
+        const isColumn = button.dataset.columnGroupKey !== undefined;
+        const key = isColumn ? button.dataset.columnGroupKey : button.dataset.subtotalKey;
+        const collapsed = isColumn ? this.collapsedColumns : this.collapsedRows;
 
-        if (this.collapsedRows.has(key)) {
-          this.collapsedRows.delete(key);
+        if (collapsed.has(key)) {
+          collapsed.delete(key);
         } else {
-          this.collapsedRows.add(key);
+          collapsed.add(key);
         }
 
         this.render(result, options);
@@ -2318,12 +2431,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   // The glyph is the whole button, so without a name a screen reader announces
   // nothing but "button", and without aria-expanded there is no way to tell a
   // collapsed group from an expanded one.
-  createSubtotalToggle(key, label) {
+  createSubtotalToggle(key, label, axis = "row") {
     const toggle = document.createElement("button");
-    const collapsed = this.collapsedRows.has(key);
+    const isColumn = axis === "column";
+    const collapsed = (isColumn ? this.collapsedColumns : this.collapsedRows).has(key);
     toggle.className = "pivot-table__toggle";
     toggle.type = "button";
-    toggle.dataset.subtotalKey = key;
+    if (isColumn) {
+      toggle.dataset.columnGroupKey = key;
+      toggle.classList.add("is-column");
+    } else {
+      toggle.dataset.subtotalKey = key;
+    }
     toggle.textContent = collapsed ? "▸" : "▾";
     toggle.setAttribute("aria-expanded", String(!collapsed));
     toggle.setAttribute("aria-label", label);

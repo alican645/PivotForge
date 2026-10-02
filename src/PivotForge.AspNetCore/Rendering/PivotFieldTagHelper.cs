@@ -72,8 +72,8 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("visible")]
     public bool? Visible { get; set; }
 
-    /// <summary>Gets or sets whether this row field's groups start expanded.</summary>
-    /// <remarks>Applied at the first render only; valid on <c>Row</c> fields.</remarks>
+    /// <summary>Gets or sets whether this field's groups start expanded.</summary>
+    /// <remarks>Applied at the first render only; valid on <c>Row</c> and <c>Column</c> fields.</remarks>
     [HtmlAttributeName("expanded")]
     public bool? Expanded { get; set; }
 

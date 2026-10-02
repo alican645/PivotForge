@@ -91,17 +91,69 @@ test("renderer view state restores widths and collapsed groups defensively", () 
 
   renderer.applyViewState({
     columnWidths: [[0, 144], [3, 220], ["bad", 100]],
-    collapsedGroups: ["Marmara", "Ege", 42]
+    collapsedGroups: ["Marmara", "Ege", 42],
+    collapsedColumnGroups: ["2025", null]
   }, { rerender: false, notify: false });
 
   const snapshot = renderer.getViewState();
   snapshot.columnWidths[0][1] = 999;
   snapshot.collapsedGroups.push("Akdeniz");
+  snapshot.collapsedColumnGroups.push("2026");
 
   assert.deepEqual(renderer.getViewState(), {
     columnWidths: [[0, 144], [3, 220]],
-    collapsedGroups: ["Marmara", "Ege"]
+    collapsedGroups: ["Marmara", "Ege"],
+    collapsedColumnGroups: ["2025"]
   });
+});
+
+test("a collapsed column group is one total column in place of its columns", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const columnHeaders = [["2025", "Q1"], ["2025", "Q2"], ["2026", "Q1"], ["2026", "Q2"]];
+  renderer.collapsedColumns = new Set([renderer.createSubtotalKey(["2025"])]);
+
+  const plan = renderer.createColumnPlan(columnHeaders, { columnSubtotals: true });
+
+  assert.deepEqual(plan.map(entry => [entry.type, entry.columnHeader.join("/"), entry.collapsed === true]), [
+    ["subtotal", "2025", true],
+    ["detail", "2026/Q1", false],
+    ["detail", "2026/Q2", false],
+    ["subtotal", "2026", false]
+  ]);
+  assert.deepEqual(plan[0].columnIndexes, [0, 1]);
+
+  const head = renderer.createColumnHeaderGroups(plan, 0);
+  assert.deepEqual(head[0], { value: "2025", span: 1, start: 0, subtotal: true, collapsed: true });
+});
+
+test("a collapsed column group keeps its total column with column subtotals off", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const columnHeaders = [["2025", "Q1"], ["2025", "Q2"], ["2026", "Q1"]];
+  renderer.collapsedColumns = new Set([renderer.createSubtotalKey(["2026"])]);
+
+  const plan = renderer.createColumnPlan(columnHeaders, { columnSubtotals: false });
+
+  assert.deepEqual(plan.map(entry => entry.type), ["detail", "detail", "subtotal"]);
+  assert.equal(plan[2].collapsed, true);
+});
+
+test("expanded: false on a column field collapses that level's groups once", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  renderer.collapsedColumns = new Set();
+  const columnHeaders = [["2025", "Ankara", "Q1"], ["2025", "İzmir", "Q1"], ["2026", "Ankara", "Q1"]];
+
+  renderer.applyInitialColumnCollapse(columnHeaders, { columnFieldExpanded: [true, false, false] });
+
+  // The innermost level has no groups to fold.
+  assert.deepEqual([...renderer.collapsedColumns], [
+    renderer.createSubtotalKey(["2025", "Ankara"]),
+    renderer.createSubtotalKey(["2025", "İzmir"]),
+    renderer.createSubtotalKey(["2026", "Ankara"])
+  ]);
+
+  renderer.collapsedColumns.clear();
+  renderer.applyInitialColumnCollapse(columnHeaders, { columnFieldExpanded: [false, false, false] });
+  assert.equal(renderer.collapsedColumns.size, 0);
 });
 
 test("cell activation selects before firing the drill-down callback", () => {

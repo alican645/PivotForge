@@ -1075,7 +1075,8 @@
                 sort: activeRowSort ? { ...activeRowSort } : null,
                 conditionalRules: widget.conditionalRules.map(rule => ({ ...rule })),
                 columnWidths: rendererState.columnWidths,
-                collapsedGroups: rendererState.collapsedGroups
+                collapsedGroups: rendererState.collapsedGroups,
+                collapsedColumnGroups: rendererState.collapsedColumnGroups
             });
         }
 

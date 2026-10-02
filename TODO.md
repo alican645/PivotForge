@@ -133,6 +133,11 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 - [x] `expanded` başlangıç durumu — `Row` alanında `expanded="false"` o seviyenin
       gruplarını **ilk** çizimde kapatıyor; sonrası kullanıcıya ait ve geri
       yüklenen `state-storing` görünümü ona üstün geliyor
+- [x] Sütun gruplarını daraltıp açma — iç seviye dışındaki her sütun başlığında
+      ▾ düğmesi; daraltılan grup tek sütuna iniyor ve grubun toplamını
+      gösteriyor (sütun ara toplamları kapalıyken de). `expanded="false"`
+      artık `Column` alanında da geçerli; durum görünüm durumunda
+      (`collapsedColumnGroups`) ve kayıtlı görünümlerde saklanıyor
 - [x] Alan başına `show-totals` — `false` grup başlığını yerinde bırakıp
       toplamlarını kaldırıyor; bu, ara toplamlar tümüyle kapalıyken zaten
       kullanılan satır şeklinin aynısı, yani derin bir hiyerarşi yalnızca
@@ -283,7 +288,7 @@ Açık kalanlar:
 | `showTotalsPrior` — toplamları önde göster | ❌ |
 | `showBorders` | ❌ |
 | Sütun genişliği sürükleme | ✅ |
-| Genişlet / daralt | ✅ motorda, ⚠️ bildirimi yok |
+| Genişlet / daralt | ✅ satır ve sütun ekseninde, ⚠️ bildirimi yok |
 | `wordWrapEnabled` | ❌ |
 | `rtlEnabled` | ❌ |
 | Yükleme göstergesi (`loadPanel`) | ✅ `load-panel`, varsayılan açık |

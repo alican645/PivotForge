@@ -267,15 +267,15 @@ test("expanded and showTotals are carried through as declared", () => {
   assert.equal(field.showTotals, false);
 });
 
-test("expanded is refused outside the row area", () => {
-  // Collapsible groups are drawn on the row axis only, so declaring them
-  // elsewhere would silently do nothing.
-  ["column", "filter", "data"].forEach(area => {
+test("expanded is refused outside the row and column areas", () => {
+  // Collapsible groups are drawn on the two header axes only, so declaring
+  // them elsewhere would silently do nothing.
+  ["filter", "data"].forEach(area => {
     assert.throws(
       () => PivotForge.PivotRequestBuilder.normalizeFields([
         { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension", expanded: false }
       ]),
-      /"expanded" is only valid on a "row" field/,
+      /"expanded" is only valid on a "row" or "column" field/,
       `expanded on ${area}`);
   });
 });
@@ -291,15 +291,16 @@ test("showTotals is refused outside the row and column areas", () => {
   });
 });
 
-test("a column field carries showTotals, defaulting to true", () => {
+test("a column field carries showTotals and expanded, defaulting to true", () => {
   const [plain, declared] = PivotForge.PivotRequestBuilder.normalizeFields([
     { dataField: "Year", area: "column" },
-    { dataField: "Quarter", area: "column", showTotals: false }
+    { dataField: "Quarter", area: "column", showTotals: false, expanded: false }
   ]);
 
-  assert.equal(plain.expanded, null);
+  assert.equal(plain.expanded, true);
   assert.equal(plain.showTotals, true);
   assert.equal(declared.showTotals, false);
+  assert.equal(declared.expanded, false);
 });
 
 test("a filter field that declares neither is untouched", () => {

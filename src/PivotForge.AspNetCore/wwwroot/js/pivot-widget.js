@@ -525,6 +525,7 @@
         columnFields: columnFields.map(field => field.key),
         columnFieldLabels: columnFields.map(field => field.caption),
         columnFieldSubtotals: columnFields.map(field => field.showTotals),
+        columnFieldExpanded: columnFields.map(field => field.expanded),
         // Read at construction only: a column sort changes the fields, and a
         // field change builds a new renderer.
         columnFieldSorts: columnFields.map(field => field.sortOrder ?? null),
