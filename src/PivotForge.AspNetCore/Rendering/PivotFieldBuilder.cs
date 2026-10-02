@@ -22,6 +22,7 @@ public sealed class PivotFieldBuilder
     private int? _areaIndex;
     private PivotSortDirection? _sortOrder;
     private string? _sortByValueKey;
+    private IReadOnlyList<string?>? _sortBySummaryPath;
     private PivotGroupInterval? _groupInterval;
     private string? _expression;
 
@@ -243,12 +244,14 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
-    /// <summary>Orders this row field's level by a summary value instead of its labels.</summary>
+    /// <summary>Orders this field's level by a summary value instead of its labels.</summary>
     /// <remarks>
-    /// Groups are ordered inside their parent group, so every region's categories run by amount
-    /// within that region. The direction comes from <see cref="SortOrder"/>, ascending when it is
-    /// not set. A sort the user applies from the cell menu still wins over this. Valid on
-    /// <see cref="PivotArea.Row"/> fields only.
+    /// The DevExpress <c>sortBySummaryField</c>. Groups are ordered inside their parent group, so
+    /// every region's categories run by amount within that region. On a column field the columns
+    /// are ordered the same way, by their totals. The direction comes from <see cref="SortOrder"/>,
+    /// ascending when it is not set. A sort the user applies from a header or the cell menu still
+    /// wins over this. Valid on <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/>
+    /// fields only.
     /// </remarks>
     /// <param name="valueKey">The value key, as <c>Field_aggregation</c>. See <see cref="PivotValueKey"/>.</param>
     /// <returns>The same builder.</returns>
@@ -256,6 +259,22 @@ public sealed class PivotFieldBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(valueKey);
         _sortByValueKey = valueKey;
+        return this;
+    }
+
+    /// <summary>Picks which summary on the other axis <see cref="SortByValueKey"/> compares.</summary>
+    /// <remarks>
+    /// The DevExpress <c>sortBySummaryPath</c>. For a row field, a column header path such as
+    /// <c>"2025"</c> orders the rows by their 2025 column; for a column field, a row header path
+    /// orders the columns by that row. A path shorter than the other axis names a group's subtotal.
+    /// Left unset, the grand total is compared. Requires <see cref="SortByValueKey"/>.
+    /// </remarks>
+    /// <param name="path">The header values on the other axis, outermost first.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder SortBySummaryPath(params string?[] path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        _sortBySummaryPath = path.Length == 0 ? null : path.ToArray();
         return this;
     }
 
@@ -284,7 +303,7 @@ public sealed class PivotFieldBuilder
     /// was set outside <see cref="PivotArea.Row"/>, <see cref="ShowGrandTotals"/> was set on a field that is not a
     /// measure, or <see cref="SortOrder"/> was set outside
     /// <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/>, or <see cref="SortByValueKey"/> was set
-    /// outside <see cref="PivotArea.Row"/>.
+    /// outside them, or <see cref="SortBySummaryPath"/> was set without <see cref="SortByValueKey"/>.
     /// </exception>
     public IDictionary<string, object?> Build()
     {
@@ -383,13 +402,19 @@ public sealed class PivotFieldBuilder
                 "SortOrder is only valid on fields whose Area is Row or Column.");
         }
 
-        // Ordering a level by value is implemented on the row axis only: the
-        // column axis is the product of its levels and has no such order.
-        if (_area != PivotArea.Row && _sortByValueKey is not null)
+        if (_area is not (PivotArea.Row or PivotArea.Column) && _sortByValueKey is not null)
         {
             throw new InvalidOperationException(
                 $"Field \"{_dataField}\" sets SortByValueKey, but its Area is \"{_area}\". " +
-                "SortByValueKey is only valid on fields whose Area is Row.");
+                "SortByValueKey is only valid on fields whose Area is Row or Column.");
+        }
+
+        // A path says where to read the value, so without a value there is nothing to read.
+        if (_sortBySummaryPath is not null && _sortByValueKey is null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets SortBySummaryPath without SortByValueKey. " +
+                "SortBySummaryPath only says which summary the value sort compares.");
         }
 
         // A measure is aggregated, not grouped: collapsing it to a month would
@@ -471,6 +496,11 @@ public sealed class PivotFieldBuilder
         if (_sortByValueKey is { } sortByValueKey)
         {
             field["sortByValueKey"] = sortByValueKey;
+        }
+
+        if (_sortBySummaryPath is { } sortBySummaryPath)
+        {
+            field["sortBySummaryPath"] = sortBySummaryPath.ToArray();
         }
 
         if (HasFormat)

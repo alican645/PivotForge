@@ -258,7 +258,7 @@ test("cell context menu exposes enabled actions for an aggregate cell", () => {
     "Show details",
     "Copy cell",
     "Copy row",
-    "Sort by this value",
+    "Sort rows by this column",
     "Filter by this value",
     "Add conditional formatting"
   ]);
@@ -470,7 +470,7 @@ test("overriding one text keeps every other default", () => {
   // every key the caller did not think to repeat rendering as undefined.
   assert.equal(resolved.noData, "Veri yok");
   assert.equal(resolved.cellActions, "Cell actions");
-  assert.equal(resolved.sortByValue, "Sort by this value");
+  assert.equal(resolved.sortByValue, "Sort rows by this column");
 });
 
 test("a per-render text override layers over the constructor's, not under it", () => {
@@ -805,12 +805,38 @@ test("the column count includes subtotal columns", () => {
   assert.equal(renderer.columnCount(1, headers, values, { columnSubtotals: false }), 1 + 3 + 1);
 });
 
-test("a subtotal cell offers no sort by value", () => {
+test("a subtotal cell sorts rows by its subtotal column", () => {
   const renderer = new window.PivotForge.PivotTableRenderer({});
-  const items = renderer.createContextMenuItems(
-    { value: 5, rowType: "detail", columnKind: "columnSubtotal", columnHeader: ["2025"], rowHeader: ["Ege"], valueKey: "a" },
-    undefined,
-    { onSortRequested: () => {} });
+  const selection = {
+    value: 5, rowType: "detail", columnKind: "columnSubtotal", columnHeader: ["2025"], rowHeader: ["Ege"], valueKey: "a"
+  };
+  const items = renderer.createContextMenuItems(selection, undefined, { onSortRequested: () => {} });
 
-  assert.equal(items.find(item => item.action === "sort").disabled, true);
+  assert.equal(items.find(item => item.action === "sort").disabled, false);
+  assert.deepEqual(renderer.createCellSortRequest(selection), {
+    mode: "RowTotalValue", valueKey: "a", columnPath: ["2025"]
+  });
+});
+
+test("sort columns by this row is offered only with column fields", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const selection = { value: 5, rowType: "detail", columnHeader: ["2025"], rowHeader: ["Ege"], valueKey: "a" };
+
+  const without = renderer.createContextMenuItems(selection, undefined, { onSortRequested: () => {} });
+  const withColumns = renderer.createContextMenuItems(
+    selection, undefined, { onSortRequested: () => {}, columnFields: ["Year"] });
+
+  assert.equal(without.some(item => item.action === "sort-columns"), false);
+  assert.equal(withColumns.find(item => item.action === "sort-columns").disabled, false);
+});
+
+test("a column sort request reads the cell's row, and the grand total row as no path", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+
+  assert.deepEqual(
+    renderer.createColumnSortRequest({ rowType: "subtotal", rowHeader: ["Ege"], valueKey: "a" }),
+    { mode: "ColumnTotalValue", valueKey: "a", rowPath: ["Ege"] });
+  assert.deepEqual(
+    renderer.createColumnSortRequest({ rowType: "grandTotal", rowHeader: [], valueKey: "a" }),
+    { mode: "ColumnTotalValue", valueKey: "a", rowPath: null });
 });

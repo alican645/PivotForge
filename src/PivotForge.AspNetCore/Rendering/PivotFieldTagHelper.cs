@@ -108,10 +108,20 @@ public sealed class PivotFieldTagHelper : TagHelper
     /// <remarks>
     /// As <c>Field_aggregation</c>, e.g. <c>Amount_sum</c>. Orders the level's groups by value inside
     /// their parent group, in the direction <c>sort-order</c> gives (ascending when absent). Valid on
-    /// <c>Row</c> fields only.
+    /// <c>Row</c> and <c>Column</c> fields.
     /// </remarks>
     [HtmlAttributeName("sort-by-value-key")]
     public string? SortByValueKey { get; set; }
+
+    /// <summary>Gets or sets the header path on the other axis whose summary the value sort compares.</summary>
+    /// <remarks>
+    /// Comma-separated, outermost first: <c>sort-by-summary-path="2025"</c> on a row field orders
+    /// the rows by their 2025 column; <c>"2025,Q1"</c> by one quarter. A path shorter than the
+    /// other axis names a group's subtotal. Left out, the grand total is compared. Requires
+    /// <c>sort-by-value-key</c>.
+    /// </remarks>
+    [HtmlAttributeName("sort-by-summary-path")]
+    public string? SortBySummaryPath { get; set; }
 
     /// <summary>Gets or sets the date interval this field's values are grouped into.</summary>
     /// <remarks>
@@ -259,6 +269,12 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (!string.IsNullOrWhiteSpace(SortByValueKey))
         {
             builder.SortByValueKey(SortByValueKey);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SortBySummaryPath))
+        {
+            builder.SortBySummaryPath(SortBySummaryPath
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         }
     }
 }

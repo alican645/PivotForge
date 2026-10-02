@@ -480,16 +480,63 @@ test("a sortByValueKey without a sortOrder sorts ascending", () => {
   ]);
 });
 
-test("sortByValueKey is refused outside the row area", () => {
-  ["column", "filter", "data"].forEach(area => {
+test("sortByValueKey is refused outside the row and column areas", () => {
+  ["filter", "data"].forEach(area => {
     assert.throws(
       () => PivotRequestBuilder.normalizeFields([
         { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension",
           sortByValueKey: "Amount_sum" }
       ]),
-      /"sortByValueKey" is only valid on a "row" field/,
+      /"sortByValueKey" is only valid on a "row" or "column" field/,
       area);
   });
+});
+
+test("a column field sorts by value along a row path", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "Region", area: "row" },
+    { dataField: "Year", area: "column", sortOrder: "Descending", sortByValueKey: "Amount_sum",
+      sortBySummaryPath: ["Ege"] },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "Year", direction: "Descending", valueKey: "Amount_sum", summaryPath: ["Ege"] }
+  ]);
+});
+
+test("a summary path needs a value key", () => {
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([
+      { dataField: "Region", area: "row", sortBySummaryPath: ["2025"] }
+    ]),
+    /requires "sortByValueKey"/);
+});
+
+test("a column value sort stands in for every column field's own sort", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "Region", area: "row", sortOrder: "Descending" },
+    { dataField: "Year", area: "column", sortOrder: "Ascending" },
+    { dataField: "Quarter", area: "column" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ], { columnSort: { valueKey: "Amount_sum", rowPath: ["Ege"], direction: "Descending" } });
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "Region", direction: "Descending" },
+    { field: "Year", direction: "Descending", valueKey: "Amount_sum", summaryPath: ["Ege"] },
+    { field: "Quarter", direction: "Descending", valueKey: "Amount_sum", summaryPath: ["Ege"] }
+  ]);
+});
+
+test("a column value sort on the grand total row sends no path", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "Year", area: "column" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ], { columnSort: { valueKey: "Amount_sum", rowPath: null, direction: "Ascending" } });
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "Year", direction: "Ascending", valueKey: "Amount_sum" }
+  ]);
 });
 
 test("a filter with no declared mode is sent as including", () => {

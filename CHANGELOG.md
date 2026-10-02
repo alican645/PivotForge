@@ -14,6 +14,11 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.6.0-preview.6] — 2026-10-02
+
+Subtotal columns, sorting by a summary value on both axes, and a loading
+panel.
+
 ### Added
 
 - Subtotal columns on the column axis. Each group of an outer column field
@@ -29,6 +34,24 @@ change will require a new major version.
   the columns. Show-as percentages divide by the subtotal's own row, column
   and grand total; previous-value comparisons leave it empty. (Core,
   AspNetCore)
+- Sorting by a summary value on both axes, the DevExpress
+  `sortBySummaryField` / `sortBySummaryPath`. `sort-by-value-key` /
+  `SortByValueKey()` / `sortByValueKey` is now valid on `Column` fields too:
+  the columns are ordered by their totals, each level inside its parent
+  group. The new `sort-by-summary-path` / `SortBySummaryPath(...)` /
+  `sortBySummaryPath` picks which summary on the other axis is compared: a
+  column path for a row field (`"2025"` orders the rows by their 2025
+  column), a row path for a column field. A shorter path reads that group's
+  subtotal, so rows can be ordered by a subtotal column and columns by a
+  subtotal row. In the engine this is `PivotFieldSort.SummaryPath`. (Core,
+  AspNetCore)
+- Grid: the grand total row's label carries an arrow that orders the columns
+  by their totals, a subtotal column's header now sorts the rows like any
+  other column, and the cell menu gains "Sort columns by this row" next to
+  the renamed "Sort rows by this column" (`sortColumnsByValue` /
+  `sortByValue` texts). The widget keeps the column sort as `columnSort`
+  (`{ valueKey, rowPath, direction }`), in `getState()`, `update()` and the
+  stored state; a label sort picked on a column field clears it.
 - A loading panel. While the grid waits for data (the first load, and every
   reload after a sort, filter or layout change) a spinner with
   "Loading..." ("Yükleniyor..." in the `tr` locale) sits over it and the
@@ -37,6 +60,19 @@ change will require a new major version.
   sized grid. On by default; switched off with `load-panel="false"` /
   `LoadPanel(false)` / `loadPanel: false`, delay set with `loadPanelDelay`,
   text with `rendererOptions.texts.loading`. (AspNetCore)
+
+### Changed
+
+- A row value sort (`PivotSort.RowTotal` / `RowColumnValue`, or clicking a
+  value header) now orders every row level by that value inside its parent
+  group, the way DevExpress does: the largest region first and, inside it,
+  the largest category first. It used to order the rows as one flat list,
+  which pulled a group's rows apart under several row fields. With a single
+  row field nothing changes. (Core)
+- **Breaking** — `PivotFieldSort` gained a fourth positional parameter,
+  `SummaryPath`. Source written against it compiles unchanged; code
+  compiled against the earlier constructor or `Deconstruct` must be rebuilt.
+  (Core)
 
 ## [0.6.0-preview.5] — 2026-09-30
 
@@ -425,7 +461,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.5...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.6...HEAD
+[0.6.0-preview.6]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.5...v0.6.0-preview.6
 [0.6.0-preview.5]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.4...v0.6.0-preview.5
 [0.6.0-preview.4]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.3...v0.6.0-preview.4
 [0.6.0-preview.3]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.2...v0.6.0-preview.3
