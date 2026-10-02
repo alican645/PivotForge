@@ -32,7 +32,8 @@
         sortField: "{0} alanını sırala",
         sortActive: "{0} sıralaması aktif",
         filterField: "{0} alanını filtrele",
-        filterActive: "{0} filtresi etkin"
+        filterActive: "{0} filtresi etkin",
+        loading: "Yükleniyor..."
       }
     },
     designer: {

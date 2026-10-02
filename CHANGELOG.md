@@ -29,6 +29,14 @@ change will require a new major version.
   the columns. Show-as percentages divide by the subtotal's own row, column
   and grand total; previous-value comparisons leave it empty. (Core,
   AspNetCore)
+- A loading panel. While the grid waits for data (the first load, and every
+  reload after a sort, filter or layout change) a spinner with
+  "Loading..." ("Yükleniyor..." in the `tr` locale) sits over it and the
+  previous table stays visible, dimmed. It appears only after 300 ms, so a
+  fast answer does not flash it, and it stays in view on a scrolled or phone
+  sized grid. On by default; switched off with `load-panel="false"` /
+  `LoadPanel(false)` / `loadPanel: false`, delay set with `loadPanelDelay`,
+  text with `rendererOptions.texts.loading`. (AspNetCore)
 
 ## [0.6.0-preview.5] — 2026-09-30
 

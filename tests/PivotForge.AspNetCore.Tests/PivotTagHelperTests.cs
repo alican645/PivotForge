@@ -370,6 +370,7 @@ public class PivotTagHelperTests
                 AllowExcelExport = true,
                 AllowConditionalFormatting = false,
                 AllowCalculatedFields = false,
+                LoadPanel = false,
                 AutoLoad = false,
                 LargeData = true,
                 PageSize = 75,
@@ -386,6 +387,7 @@ public class PivotTagHelperTests
         Assert.True(config.GetProperty("allowExcelExport").GetBoolean());
         Assert.False(config.GetProperty("allowConditionalFormatting").GetBoolean());
         Assert.False(config.GetProperty("allowCalculatedFields").GetBoolean());
+        Assert.False(config.GetProperty("loadPanel").GetBoolean());
         Assert.False(config.GetProperty("autoLoad").GetBoolean());
         Assert.True(config.GetProperty("largeData").GetBoolean());
         Assert.Equal(75, config.GetProperty("pageSize").GetInt32());

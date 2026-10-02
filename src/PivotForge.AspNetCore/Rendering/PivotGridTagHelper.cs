@@ -45,6 +45,10 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("allow-calculated-fields")]
     public bool? AllowCalculatedFields { get; set; }
 
+    /// <summary>Gets or sets whether a "Loading..." panel covers the grid while data is requested.</summary>
+    [HtmlAttributeName("load-panel")]
+    public bool? LoadPanel { get; set; }
+
     /// <summary>Gets or sets whether the grid loads data as soon as it is created.</summary>
     [HtmlAttributeName("auto-load")]
     public bool? AutoLoad { get; set; }
@@ -289,6 +293,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (AllowCalculatedFields is { } allowCalculatedFields)
         {
             builder.AllowCalculatedFields(allowCalculatedFields);
+        }
+
+        if (LoadPanel is { } loadPanel)
+        {
+            builder.LoadPanel(loadPanel);
         }
 
         if (AutoLoad is { } autoLoad)
