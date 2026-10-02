@@ -2000,6 +2000,30 @@ select {
   background: #f0fdfa;
 }
 
+/* A column group's toggle sits before its label in the header. Next to a
+   sort button, the button gives up its full width so the two share the cell
+   instead of the label collapsing to an ellipsis. */
+.pivot-table__toggle.is-column {
+  vertical-align: middle;
+}
+
+.pivot-table__toggle.is-column + .pivot-table__sort-button {
+  width: auto;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* The label sizes the column here rather than the other way round: a
+   collapsed year is one narrow column, and an ellipsis would hide its name. */
+.pivot-table__toggle.is-column + .pivot-table__sort-button .pivot-table__sort-label {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.pivot-table__column-header:has(> .pivot-table__toggle.is-column) {
+  white-space: nowrap;
+}
+
 .pivot-table__empty {
   padding: 28px;
   color: var(--pt-muted);

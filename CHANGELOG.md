@@ -14,6 +14,24 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- Collapsing and expanding column groups, the column axis' half of the row
+  groups' toggle. Every column header above the innermost level carries a
+  ▾ button; pressing it folds the group (a year's quarters, say) into one
+  column headed by the group's name with ▸, holding the group's total in
+  every row, subtotal row and the grand total row. A collapsed group keeps
+  its total column even when column subtotals are switched off, so folding
+  never leaves the group empty. The values are the engine's column
+  subtotals, so averages and counts stay true group values. `expanded` /
+  `Expanded(bool)` / `expanded: false` is now valid on `Column` fields and
+  starts that level collapsed. The collapsed set is part of the renderer's
+  view state (`collapsedColumnGroups`, next to `collapsedGroups`) and of
+  saved views; `expandAll` / `collapseAll` take `{ axis: "column" }` or
+  `{ axis: "all" }` and still reach the rows only by default. The header's
+  sort arrow on a collapsed column orders the rows by that group's total.
+  (AspNetCore)
+
 ## [0.6.0-preview.6] — 2026-10-02
 
 Subtotal columns, sorting by a summary value on both axes, and a loading

@@ -161,11 +161,12 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
-    /// <summary>Sets whether this row field's groups start expanded.</summary>
+    /// <summary>Sets whether this field's groups start expanded.</summary>
     /// <remarks>
     /// Applied at the grid's first render only; after that the expansion state belongs to the
-    /// user. A restored <c>state-storing</c> view also wins, because it is a decision the user
-    /// already made. Valid on <see cref="PivotArea.Row"/> fields only.
+    /// user. A restored view also wins, because it is a decision the user already made. Valid on
+    /// <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/> fields; a collapsed column
+    /// group shows as one column holding its total.
     /// </remarks>
     /// <param name="expanded">False to collapse this level's groups initially.</param>
     /// <returns>The same builder.</returns>
@@ -300,7 +301,7 @@ public sealed class PivotFieldBuilder
     /// a <see cref="Role"/> contradicts its <see cref="Area"/> (e.g., <see cref="PivotFieldRole.Measure"/> outside
     /// <see cref="PivotArea.Data"/>), or <see cref="Aggregation"/>/<see cref="ShowAs"/> was set on a field whose
     /// <see cref="Area"/> is not <see cref="PivotArea.Data"/>, <see cref="Expanded"/>/<see cref="ShowTotals"/>
-    /// was set outside <see cref="PivotArea.Row"/>, <see cref="ShowGrandTotals"/> was set on a field that is not a
+    /// was set outside <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/>, <see cref="ShowGrandTotals"/> was set on a field that is not a
     /// measure, or <see cref="SortOrder"/> was set outside
     /// <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/>, or <see cref="SortByValueKey"/> was set
     /// outside them, or <see cref="SortBySummaryPath"/> was set without <see cref="SortByValueKey"/>.
@@ -366,13 +367,13 @@ public sealed class PivotFieldBuilder
                 "Aggregation and ShowAs are only valid on fields whose Area is Data.");
         }
 
-        // Collapsible groups are drawn on the row axis only, and subtotals on the
-        // two header axes, so declaring either elsewhere is a mistake rather than a no-op.
-        if (_area != PivotArea.Row && _expanded is not null)
+        // Collapsible groups and subtotals are drawn on the two header axes, so
+        // declaring either elsewhere is a mistake rather than a no-op.
+        if (_area is not (PivotArea.Row or PivotArea.Column) && _expanded is not null)
         {
             throw new InvalidOperationException(
                 $"Field \"{_dataField}\" sets Expanded, but its Area is \"{_area}\". " +
-                "Expanded is only valid on fields whose Area is Row.");
+                "Expanded is only valid on fields whose Area is Row or Column.");
         }
 
         if (_area is not (PivotArea.Row or PivotArea.Column) && _showTotals is not null)

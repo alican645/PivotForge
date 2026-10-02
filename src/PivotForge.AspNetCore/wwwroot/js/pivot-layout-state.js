@@ -731,7 +731,7 @@
         const isRow = area === "row";
 
         return {
-          ...(isRow && field.expanded === false ? { expanded: false } : {}),
+          ...((isRow || area === "column") && field.expanded === false ? { expanded: false } : {}),
           ...((isRow || area === "column") && field.showTotals === false ? { showTotals: false } : {}),
           ...((isRow || area === "column") && field.sortByValueKey
             ? {

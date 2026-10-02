@@ -330,14 +330,14 @@
       );
     }
 
-    // Both describe how a header axis is drawn. Collapsible groups exist on
-    // the row axis only, subtotals on both -- so declaring either anywhere
+    // Both describe how a header axis is drawn: collapsible groups and
+    // subtotals exist on the row and column axes, so declaring either anywhere
     // else is a mistake worth reporting rather than a setting that does nothing.
     const isRow = area === "row";
     const isColumn = area === "column";
-    if (!isRow && field.expanded !== undefined) {
+    if (!isRow && !isColumn && field.expanded !== undefined) {
       throw new Error(
-        `"expanded" is only valid on a "row" field, but was set on "${dataField}" in area "${area}".`
+        `"expanded" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
       );
     }
     if (!isRow && !isColumn && field.showTotals !== undefined) {
@@ -443,7 +443,7 @@
       format: field.format ?? null,
       // Default true, so an undeclared field behaves exactly as it did before
       // these existed.
-      expanded: isRow ? field.expanded !== false : null,
+      expanded: isRow || isColumn ? field.expanded !== false : null,
       showTotals: isRow || isColumn ? field.showTotals !== false : null,
       showGrandTotals: holdsGrandTotals ? field.showGrandTotals !== false : null,
       visible: field.visible !== false
