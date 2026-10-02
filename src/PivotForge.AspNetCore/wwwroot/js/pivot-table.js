@@ -16,7 +16,8 @@ const TEXTS = {
   openDetails: "Show details",
   copyCell: "Copy cell",
   copyRow: "Copy row",
-  sortByValue: "Sort by this value",
+  sortByValue: "Sort rows by this column",
+  sortColumnsByValue: "Sort columns by this row",
   filterByValue: "Filter by this value",
   addConditionalFormat: "Add conditional formatting",
   resizeColumn: "Resize column",
@@ -177,6 +178,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       values: null,
       aggregation: "sum",
       sortState: null,
+      // The column axis' value sort ({ valueKey, rowPath, direction }), set
+      // from "sort columns by this row". Only marks the arrow; the ordering is
+      // the server's.
+      columnSortState: null,
       onSortRequested: null,
       // The row header's funnel, wired the same way sorting is: without a
       // handler the control is not drawn at all, so a host that cannot filter
@@ -713,6 +718,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
           header.rowSpan = columnDepth - level;
           header.dataset.stickyRow = String(level);
           header.dataset.columnStart = String(rowDepth + group.start * valueSpan);
+          if (measureDepth === 0 && values.length === 1) {
+            this.decorateSortableHeader(header, label, {
+              mode: "RowTotalValue",
+              valueKey: values[0].key,
+              columnPath: columnPlan[group.start]?.columnHeader ?? []
+            }, settings);
+          }
           row.appendChild(header);
           continue;
         }
@@ -785,15 +797,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
               : "pivot-table__value-header");
           cell.dataset.stickyRow = String(columnDepth);
           cell.dataset.columnIndex = String(rowDepth + position * valueSpan + valueIndex);
-          // The engine orders rows by one whole column, so a subtotal column
-          // -- several of them summed -- has no arrow to offer.
-          if (!isSubtotal) {
-            this.decorateSortableHeader(cell, value.label, {
-              mode: "RowTotalValue",
-              valueKey: value.key,
-              columnPath: entry?.columnHeader ?? []
-            }, settings);
-          }
+          // A subtotal column's path is its group's prefix, which the engine
+          // reads as that group's subtotal.
+          this.decorateSortableHeader(cell, value.label, {
+            mode: "RowTotalValue",
+            valueKey: value.key,
+            columnPath: entry?.columnHeader ?? []
+          }, settings);
           measureRow.appendChild(cell);
         });
       }
@@ -1725,10 +1735,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   createContextMenuItems(selection, texts = TEXTS, settings = this.lastSettings ?? this.options) {
     const isNumeric = typeof selection?.value === "number";
     const hasDimensionPath = (selection?.rowHeader?.length ?? 0) + (selection?.columnHeader?.length ?? 0) > 0;
-    // A subtotal column sums several of the engine's columns, and the engine
-    // orders rows by exactly one.
-    const canSort = isNumeric && selection?.rowType !== "grandTotal" && selection?.rowType !== "group" &&
-      selection?.columnKind !== "columnSubtotal";
+    // Any number on screen sits in one column and one row, and the engine can
+    // read a summary at either -- a subtotal column or row, or the totals.
+    const canSort = isNumeric && Boolean(selection?.valueKey);
+    const hasColumnFields = (settings?.columnFields?.length ?? 0) > 0;
 
     return [
       { action: "details", label: texts.openDetails, disabled: selection?.drillDownEnabled === false },
@@ -1739,6 +1749,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         label: texts.sortByValue,
         disabled: !canSort,
         available: Boolean(settings?.onSortRequested)
+      },
+      {
+        action: "sort-columns",
+        label: texts.sortColumnsByValue,
+        disabled: !canSort,
+        available: Boolean(settings?.onSortRequested) && hasColumnFields
       },
       {
         action: "filter",
@@ -1776,6 +1792,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       case "sort":
         settings?.onSortRequested?.(this.createCellSortRequest(selection));
         break;
+      case "sort-columns":
+        settings?.onSortRequested?.(this.createColumnSortRequest(selection));
+        break;
       case "filter":
         settings?.onCellFilterRequested?.(this.cloneSelection(selection));
         break;
@@ -1790,6 +1809,16 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       mode: "RowTotalValue",
       valueKey: selection?.valueKey ?? null,
       columnPath: selection?.columnKind === "rowTotal" ? null : [...(selection?.columnHeader ?? [])]
+    };
+  }
+
+  // The row a cell sits on, as the column axis reads it: the grand total row
+  // is the columns' own totals, a subtotal row its group's prefix.
+  createColumnSortRequest(selection) {
+    return {
+      mode: "ColumnTotalValue",
+      valueKey: selection?.valueKey ?? null,
+      rowPath: selection?.rowType === "grandTotal" ? null : [...(selection?.rowHeader ?? [])]
     };
   }
 
@@ -2123,6 +2152,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       const header = this.createCell("th", label, "pivot-table__row-total-label", "rowheader");
       header.dataset.stickyColumn = String(rowLevel);
       header.dataset.columnIndex = String(rowLevel);
+      // The grand total row is the columns' own totals: its arrow orders the
+      // columns by them, the way the total column's arrow orders the rows.
+      // With several values the label cannot say which one, so the cell menu
+      // is the way in.
+      if (rowLevel === 0 && values.length === 1 && (settings.columnFields?.length ?? 0) > 0 &&
+        columnHeaders.length > 1) {
+        this.decorateSortableHeader(header, label, {
+          mode: "ColumnTotalValue",
+          valueKey: values[0].key,
+          rowPath: null
+        }, settings);
+      }
       this.registerSelectionTarget(header, rowSelection, "row");
       row.appendChild(header);
     }
@@ -2398,8 +2439,19 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   // it is read from what the host says each column level is sorted by.
   activeSortDirection(request, settings) {
     if (request?.mode === "ColumnLabel") {
+      // A value sort on the columns stands in for their label order.
+      if (settings.columnSortState) {
+        return null;
+      }
+
       const level = (settings.columnFields ?? []).indexOf(request.field);
       return level >= 0 ? settings.columnFieldSorts?.[level] ?? null : null;
+    }
+
+    if (request?.mode === "ColumnTotalValue") {
+      return this.isActiveColumnSort(request, settings.columnSortState)
+        ? settings.columnSortState.direction
+        : null;
     }
 
     return this.isActiveSort(request, settings.sortState)
@@ -2422,6 +2474,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }
 
     return false;
+  }
+
+  isActiveColumnSort(request, sortState) {
+    return Boolean(request && sortState) && request.valueKey === sortState.valueKey &&
+      this.sameColumnPath(request.rowPath ?? null, sortState.rowPath ?? null);
   }
 
   sameColumnPath(left, right) {

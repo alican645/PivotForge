@@ -733,7 +733,12 @@
         return {
           ...(isRow && field.expanded === false ? { expanded: false } : {}),
           ...((isRow || area === "column") && field.showTotals === false ? { showTotals: false } : {}),
-          ...(isRow && field.sortByValueKey ? { sortByValueKey: field.sortByValueKey } : {}),
+          ...((isRow || area === "column") && field.sortByValueKey
+            ? {
+              sortByValueKey: field.sortByValueKey,
+              ...(field.sortBySummaryPath ? { sortBySummaryPath: field.sortBySummaryPath } : {})
+            }
+            : {}),
           ...((isRow || area === "column") && field.sortOrder
             ? { sortOrder: field.sortOrder }
             : {})

@@ -32,7 +32,8 @@ public class PivotTagHelperTests
         PivotSortDirection? SortOrder = null,
         PivotGroupInterval? GroupInterval = null,
         string? SortByValueKey = null,
-        string? Expression = null);
+        string? Expression = null,
+        string? SortBySummaryPath = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -140,6 +141,12 @@ public class PivotTagHelperTests
         {
             helper.SortByValueKey = spec.SortByValueKey;
             attributes.Add(new TagHelperAttribute("sort-by-value-key", spec.SortByValueKey));
+        }
+
+        if (spec.SortBySummaryPath is not null)
+        {
+            helper.SortBySummaryPath = spec.SortBySummaryPath;
+            attributes.Add(new TagHelperAttribute("sort-by-summary-path", spec.SortBySummaryPath));
         }
 
         if (spec.Expression is not null)
@@ -941,6 +948,24 @@ public class PivotTagHelperTests
         Assert.False(fields[0].TryGetProperty("sortByValueKey", out _));
         Assert.Equal("Amount_sum", fields[1].GetProperty("sortByValueKey").GetString());
         Assert.Equal("Descending", fields[1].GetProperty("sortOrder").GetString());
+    }
+
+    [Fact]
+    public async Task WritesAColumnValueSortWithItsSummaryPath()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge"),
+            new FieldSpec("Year", PivotArea.Column, "Yıl",
+                SortOrder: PivotSortDirection.Descending, SortByValueKey: "Amount_sum",
+                SortBySummaryPath: "Marmara, İstanbul"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var year = declared.GetProperty("fields")[1];
+        Assert.Equal("Amount_sum", year.GetProperty("sortByValueKey").GetString());
+        Assert.Equal(
+            ["Marmara", "İstanbul"],
+            year.GetProperty("sortBySummaryPath").EnumerateArray().Select(value => value.GetString()!).ToArray());
     }
 
     [Fact]

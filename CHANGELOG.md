@@ -29,6 +29,37 @@ change will require a new major version.
   the columns. Show-as percentages divide by the subtotal's own row, column
   and grand total; previous-value comparisons leave it empty. (Core,
   AspNetCore)
+- Sorting by a summary value on both axes, the DevExpress
+  `sortBySummaryField` / `sortBySummaryPath`. `sort-by-value-key` /
+  `SortByValueKey()` / `sortByValueKey` is now valid on `Column` fields too:
+  the columns are ordered by their totals, each level inside its parent
+  group. The new `sort-by-summary-path` / `SortBySummaryPath(...)` /
+  `sortBySummaryPath` picks which summary on the other axis is compared: a
+  column path for a row field (`"2025"` orders the rows by their 2025
+  column), a row path for a column field. A shorter path reads that group's
+  subtotal, so rows can be ordered by a subtotal column and columns by a
+  subtotal row. In the engine this is `PivotFieldSort.SummaryPath`. (Core,
+  AspNetCore)
+- Grid: the grand total row's label carries an arrow that orders the columns
+  by their totals, a subtotal column's header now sorts the rows like any
+  other column, and the cell menu gains "Sort columns by this row" next to
+  the renamed "Sort rows by this column" (`sortColumnsByValue` /
+  `sortByValue` texts). The widget keeps the column sort as `columnSort`
+  (`{ valueKey, rowPath, direction }`), in `getState()`, `update()` and the
+  stored state; a label sort picked on a column field clears it.
+
+### Changed
+
+- A row value sort (`PivotSort.RowTotal` / `RowColumnValue`, or clicking a
+  value header) now orders every row level by that value inside its parent
+  group, the way DevExpress does: the largest region first and, inside it,
+  the largest category first. It used to order the rows as one flat list,
+  which pulled a group's rows apart under several row fields. With a single
+  row field nothing changes. (Core)
+- **Breaking** — `PivotFieldSort` gained a fourth positional parameter,
+  `SummaryPath`. Source written against it compiles unchanged; code
+  compiled against the earlier constructor or `Deconstruct` must be rebuilt.
+  (Core)
 
 ## [0.6.0-preview.5] — 2026-09-30
 

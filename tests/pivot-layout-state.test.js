@@ -957,19 +957,34 @@ test("a declared sortByValueKey survives a row-to-row move", () => {
   ]);
 });
 
-test("sortByValueKey is dropped, and sortOrder kept, when the field moves to the column area", () => {
+test("sortByValueKey and sortOrder travel with the field to the column area", () => {
   const state = new PivotForge.PivotLayoutState(
     catalog.map(field =>
       field.dataField === "Category"
         ? { ...field, sortOrder: "Descending", sortByValueKey: "Amount_sum" }
         : field));
 
-  // Carrying the key along would turn a legal drag into a normalizeField exception.
+  // Both axes order a level by value, so the declaration stays legal there.
   state.move("Category", "column", 0);
   const emitted = state.toFields().find(field => field.dataField === "Category");
 
-  assert.equal(emitted.sortByValueKey, undefined);
+  assert.equal(emitted.sortByValueKey, "Amount_sum");
   assert.equal(emitted.sortOrder, "Descending");
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
+});
+
+test("sortByValueKey is dropped when the field moves to the filter area", () => {
+  const state = new PivotForge.PivotLayoutState(
+    catalog.map(field =>
+      field.dataField === "Category"
+        ? { ...field, sortByValueKey: "Amount_sum", sortBySummaryPath: ["2025"] }
+        : field));
+
+  state.move("Category", "filter", 0);
+  const emitted = state.toFields().find(field => field.dataField === "Category");
+
+  assert.equal(emitted.sortByValueKey, undefined);
+  assert.equal(emitted.sortBySummaryPath, undefined);
   assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
 });
 
