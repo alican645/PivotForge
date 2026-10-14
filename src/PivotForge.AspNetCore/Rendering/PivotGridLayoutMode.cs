@@ -7,5 +7,11 @@ public enum PivotGridLayoutMode
     Tabular,
 
     /// <summary>Row fields share a single indented column.</summary>
-    Compact
+    Compact,
+
+    /// <summary>
+    /// The compact column drawn as a tree, as DevExtreme's <c>rowHeaderLayout: "tree"</c>: each group
+    /// row is the parent node, named for its group, with guide lines down to its children.
+    /// </summary>
+    Tree
 }

@@ -125,3 +125,15 @@ test("renaming a view cannot create a duplicate name", () => {
   assert.equal(store.saveView("İkinci", createState(), first.id), null);
   assert.deepEqual(store.listViews().map(view => view.name), ["Birinci", "İkinci"]);
 });
+
+test("a stored view keeps a tree layout and falls back to tabular for one it does not know", () => {
+  const store = createStore();
+  const layoutOf = layoutMode => store.normalizeState({
+    ...createState(),
+    viewSettings: { ...createState().viewSettings, layoutMode }
+  }).viewSettings.layoutMode;
+
+  assert.equal(layoutOf("tree"), "tree");
+  assert.equal(layoutOf("compact"), "compact");
+  assert.equal(layoutOf("outline"), "tabular");
+});

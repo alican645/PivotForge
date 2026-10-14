@@ -123,7 +123,9 @@
         version: this.version,
         layout,
         viewSettings: {
-          layoutMode: state.viewSettings?.layoutMode === "compact" ? "compact" : "tabular",
+          layoutMode: ["compact", "tree"].includes(state.viewSettings?.layoutMode)
+            ? state.viewSettings.layoutMode
+            : "tabular",
           repeatRowLabels: state.viewSettings?.repeatRowLabels === true,
           subtotals: state.viewSettings?.subtotals !== false,
           columnSubtotals: state.viewSettings?.columnSubtotals !== false,

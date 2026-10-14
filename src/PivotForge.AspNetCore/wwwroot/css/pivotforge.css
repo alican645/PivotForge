@@ -1781,6 +1781,19 @@ select {
   padding-left: calc(10px + var(--pivot-indent, 0px)) !important;
 }
 
+/* Tree guides: a thin line for every ancestor, each under its parent's toggle
+   (10px padding, 18px per level, the 22px toggle's centre at +11px). The
+   gradient repeats every level and is only as wide as the row's indent, so a
+   row draws exactly one line per level above it. */
+.pivot-table__table.is-tree .pivot-table__row-header.is-compact,
+.pivot-table__table.is-tree .pivot-table__subtotal-header.is-compact {
+  background-image: repeating-linear-gradient(
+    to right, var(--pt-border) 0 1px, transparent 1px 18px) !important;
+  background-size: var(--pivot-indent, 0px) 100% !important;
+  background-position: 21px 0 !important;
+  background-repeat: no-repeat !important;
+}
+
 .pivot-table__table.is-compact .pivot-table__row-header.is-repeated {
   color: transparent;
 }

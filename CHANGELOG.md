@@ -16,6 +16,13 @@ change will require a new major version.
 
 ### Added
 
+- Tree row header layout: `layout-mode="Tree"` / `LayoutMode(PivotGridLayoutMode.Tree)`
+  / `layoutMode: "tree"`, DevExtreme's `rowHeaderLayout: "tree"`. It is the
+  compact column drawn as a tree: each group row is the parent node, named for
+  its group (`Ege` rather than `Ege Total`) and carrying its totals, the
+  header names the levels (`Bölge / Kategori`), and guide lines run down from
+  each parent's toggle to its children. Collapsing, sorting, export and saved
+  views work as in compact. (AspNetCore)
 - Printing: `widget.print({ title, subtitle })` prints the grid alone, and
   `PivotForge.print(element, options)` does the same for any element. The
   stylesheet's `@media print` lays out the whole table instead of its scroll
