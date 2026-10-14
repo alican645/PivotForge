@@ -564,4 +564,30 @@ public class PivotFieldBuilderTests
         Assert.Throws<ArgumentException>(() => new PivotFieldBuilder().DisplayFolder(""));
         Assert.Throws<ArgumentNullException>(() => new PivotFieldBuilder().FormatZeroText(null!));
     }
+
+    [Fact]
+    public void ARangeGroupingIsEmittedWithItsSize()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("Amount")
+            .Area(PivotArea.Row)
+            .GroupInterval(PivotGroupInterval.Range)
+            .GroupSize(250m)
+            .Build();
+
+        Assert.Equal("range", field["groupInterval"]);
+        Assert.Equal(250m, field["groupSize"]);
+    }
+
+    [Fact]
+    public void ARangeWithoutASizeOrASizeWithoutARangeIsRefused()
+    {
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Row).GroupInterval(PivotGroupInterval.Range).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Row).GroupSize(100m).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("OrderDate").Area(PivotArea.Row).GroupInterval(PivotGroupInterval.Month).GroupSize(100m).Build());
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotFieldBuilder().GroupSize(0m));
+    }
 }

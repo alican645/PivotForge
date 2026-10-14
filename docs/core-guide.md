@@ -71,6 +71,16 @@ var byColumn = PivotSort.RowColumnValue(
 
 Only row order changes. Column headers keep their calculated order.
 
+## Numeric Ranges
+
+A level grouped by `PivotGroupInterval.Range` splits a numeric field into ranges of `BinSize`, labelled `0 – 1.000`, `1.000 – 2.000` and so on (bounds in the engine's culture), ordered by where each starts:
+
+```csharp
+Rows = [new PivotFieldRef("Amount", PivotGroupInterval.Range, 1000m)]
+```
+
+Each range includes its start and excludes its end, and the ranges are aligned to zero. A value that is not a number keeps its own text. The level's key is `Amount:range1000`. A filter on it carries the same `Interval` and `BinSize`, and `DistinctValues(records, "Amount", PivotGroupInterval.Range, 1000m)` lists the ranges. A range without a positive `BinSize`, or a `BinSize` on any other interval, is refused.
+
 ## Value Filters
 
 `ValueFilters` keep the groups of a row level whose summary value meets a condition. They run after aggregation, like `TopN`, and the groups they drop leave the totals too:

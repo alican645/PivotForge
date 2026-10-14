@@ -39,7 +39,8 @@ public class PivotTagHelperTests
         PivotNegativeFormat? FormatNegative = null,
         string? CustomizeText = null,
         bool? AllowCrossGroupCalculation = null,
-        string? DisplayFolder = null);
+        string? DisplayFolder = null,
+        decimal? GroupSize = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -195,6 +196,12 @@ public class PivotTagHelperTests
         {
             helper.DisplayFolder = spec.DisplayFolder;
             attributes.Add(new TagHelperAttribute("display-folder", spec.DisplayFolder));
+        }
+
+        if (spec.GroupSize is { } groupSize)
+        {
+            helper.GroupSize = groupSize;
+            attributes.Add(new TagHelperAttribute("group-size", groupSize));
         }
 
         return (helper, attributes);
@@ -696,6 +703,20 @@ public class PivotTagHelperTests
         Assert.Equal("app.amountText", amount.GetProperty("customizeText").GetString());
         Assert.False(amount.GetProperty("allowCrossGroupCalculation").GetBoolean());
         Assert.Equal("Satış", amount.GetProperty("displayFolder").GetString());
+    }
+
+    [Fact]
+    public async Task GroupSizeIsWrittenBesideARangeGroupInterval()
+    {
+        var html = await RenderAsync(
+            new PivotGridTagHelper { Id = "grid" },
+            new FieldSpec("Amount", PivotArea.Row, GroupInterval: PivotGroupInterval.Range, GroupSize: 1000m),
+            new FieldSpec("Quantity", PivotArea.Data, Aggregation: PivotAggregation.Sum));
+
+        var field = ConfigOf(html).GetProperty("fields")[0];
+
+        Assert.Equal("range", field.GetProperty("groupInterval").GetString());
+        Assert.Equal(1000m, field.GetProperty("groupSize").GetDecimal());
     }
 
     // Minus is the enum's default, so only a written attribute emits it.

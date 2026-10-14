@@ -232,14 +232,17 @@ public sealed class PivotEngine
     /// <returns>The distinct values a filter on this field can accept, in value order.</returns>
     /// <param name="interval">The date interval to collapse the values to, so the list holds the
     /// groups a header shows rather than the raw dates behind them.</param>
+    /// <param name="binSize">The range width when <paramref name="interval"/> is
+    /// <see cref="PivotGroupInterval.Range"/>.</param>
     public IReadOnlyList<string?> DistinctValues<T>(
         IEnumerable<T> records,
         string field,
-        PivotGroupInterval interval = PivotGroupInterval.None)
+        PivotGroupInterval interval = PivotGroupInterval.None,
+        decimal? binSize = null)
     {
         ArgumentNullException.ThrowIfNull(records);
 
-        return DistinctValuesCore(records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture, interval);
+        return DistinctValuesCore(records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture, interval, binSize);
     }
 
     /// <summary>Returns the distinct display values of a data table column.</summary>
@@ -248,10 +251,13 @@ public sealed class PivotEngine
     /// <returns>The distinct values a filter on this column can accept, in value order.</returns>
     /// <param name="interval">The date interval to collapse the values to, so the list holds the
     /// groups a header shows rather than the raw dates behind them.</param>
+    /// <param name="binSize">The range width when <paramref name="interval"/> is
+    /// <see cref="PivotGroupInterval.Range"/>.</param>
     public IReadOnlyList<string?> DistinctValues(
         DataTable table,
         string field,
-        PivotGroupInterval interval = PivotGroupInterval.None)
+        PivotGroupInterval interval = PivotGroupInterval.None,
+        decimal? binSize = null)
     {
         ArgumentNullException.ThrowIfNull(table);
 
@@ -260,7 +266,8 @@ public sealed class PivotEngine
             field,
             new DataTableRecordReader(table),
             Culture,
-            interval);
+            interval,
+            binSize);
     }
 
     /// <summary>Returns the distinct display values of a field in dictionary-backed records.</summary>
@@ -269,10 +276,13 @@ public sealed class PivotEngine
     /// <returns>The distinct values a filter on this field can accept, in value order.</returns>
     /// <param name="interval">The date interval to collapse the values to, so the list holds the
     /// groups a header shows rather than the raw dates behind them.</param>
+    /// <param name="binSize">The range width when <paramref name="interval"/> is
+    /// <see cref="PivotGroupInterval.Range"/>.</param>
     public IReadOnlyList<string?> DistinctValuesRecords(
         IEnumerable<IReadOnlyDictionary<string, object?>> records,
         string field,
-        PivotGroupInterval interval = PivotGroupInterval.None)
+        PivotGroupInterval interval = PivotGroupInterval.None,
+        decimal? binSize = null)
     {
         ArgumentNullException.ThrowIfNull(records);
 
@@ -287,7 +297,8 @@ public sealed class PivotEngine
             field,
             new DictionaryRecordReader(fields),
             Culture,
-            interval);
+            interval,
+            binSize);
     }
 
     private static IReadOnlyList<string?> DistinctValuesCore(
@@ -295,7 +306,8 @@ public sealed class PivotEngine
         string field,
         IRecordReader reader,
         CultureInfo culture,
-        PivotGroupInterval interval = PivotGroupInterval.None)
+        PivotGroupInterval interval = PivotGroupInterval.None,
+        decimal? binSize = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
 
@@ -315,7 +327,7 @@ public sealed class PivotEngine
             var value = reader.GetValue(record, field);
             // The picker lists what the header shows, because that is what the
             // filter will be compared against.
-            var text = PivotGroupLabels.Label(value, interval, culture) ?? "";
+            var text = PivotGroupLabels.Label(value, interval, culture, binSize) ?? "";
 
             // A null source value converts to the empty string here exactly as it
             // does when a filter is matched, so blank is a selectable value — but
@@ -412,7 +424,7 @@ public sealed class PivotEngine
             // The path carries what the header showed, so the record has to be
             // collapsed to that same group before it can be compared.
             var value = PivotGroupLabels.Label(
-                reader.GetValue(record, fields[index].Field), fields[index].Interval, culture);
+                reader.GetValue(record, fields[index].Field), fields[index].Interval, culture, fields[index].BinSize);
 
             if (!string.Equals(value, path[index], StringComparison.Ordinal))
             {
@@ -1300,6 +1312,22 @@ public sealed class PivotEngine
 
         var plan = MeasurePlan.Create(request.Values, customAggregates);
 
+        // A range with no width cannot be drawn, and a width on any other grouping is a
+        // mistake the reader would never see, so both are refused where they are written.
+        foreach (var (interval, binSize) in request.Rows.Concat(request.Columns)
+                     .Select(level => (level.Interval, level.BinSize))
+                     .Concat(request.Filters.Select(filter => (filter.Interval, filter.BinSize))))
+        {
+            if (interval == PivotGroupInterval.Range ? binSize is not > 0m : binSize is not null)
+            {
+                throw new ArgumentException(
+                    interval == PivotGroupInterval.Range
+                        ? "A pivot range grouping needs a bin size greater than zero."
+                        : "A pivot bin size is only meaningful on a range grouping.",
+                    nameof(request));
+            }
+        }
+
         // A calculated value's own name is not a source field, so what has to exist is
         // every field its formula reads -- which the plan's inputs already list.
         foreach (var field in request.Rows.Concat(request.Columns).Select(level => level.Field)
@@ -1384,7 +1412,8 @@ public sealed class PivotEngine
                 filter.Values,
                 filter.Mode == PivotFilterMode.Exclude,
                 filter.Interval,
-                filter.Operator))
+                filter.Operator,
+                filter.BinSize))
             .ToArray();
     }
 
@@ -1404,7 +1433,7 @@ public sealed class PivotEngine
             // Collapsed the same way the header was, or a filter listing month
             // names would be compared against raw timestamps and match nothing.
             var value = PivotGroupLabels.Label(
-                reader.GetValue(record, filter.Field), filter.Interval, culture);
+                reader.GetValue(record, filter.Field), filter.Interval, culture, filter.BinSize);
 
             // Exclude negates whatever the operator decided, which is where "does
             // not contain" and "is not blank" come from without an operator of
@@ -1427,7 +1456,7 @@ public sealed class PivotEngine
     {
         return fields
             .Select(field => PivotGroupLabels.Label(
-                reader.GetValue(record, field.Field), field.Interval, culture))
+                reader.GetValue(record, field.Field), field.Interval, culture, field.BinSize))
             .ToArray();
     }
 
@@ -2082,7 +2111,8 @@ public sealed class PivotEngine
         IReadOnlyList<string?> Values,
         bool Excludes,
         PivotGroupInterval Interval,
-        PivotFilterOperator Operator);
+        PivotFilterOperator Operator,
+        decimal? BinSize);
 
     private sealed record SortedRows(
         IReadOnlyList<IReadOnlyList<string?>> Headers,

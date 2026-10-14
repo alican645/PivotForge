@@ -144,7 +144,7 @@ function createContainer() {
   };
 }
 
-function createWidget() {
+function createWidget(fields = dateHierarchy) {
   const calls = [];
   const captured = {};
   class FakeRenderer {
@@ -155,7 +155,7 @@ function createWidget() {
   PivotForge.PivotTableRenderer = FakeRenderer;
 
   const widget = PivotForge.create(createContainer(), {
-    fields: dateHierarchy,
+    fields,
     autoLoad: false,
     fetchImpl: async (url, init) => {
       calls.push({ url, body: JSON.parse(init.body) });
@@ -193,6 +193,62 @@ test("listing a plain field's values says nothing about intervals", () => {
   return widget.fieldValues("Amount").then(() => {
     assert.equal(calls[0].body.field, "Amount");
     assert.equal("interval" in calls[0].body, false);
+    widget.dispose();
+  });
+});
+
+// --- Numeric ranges -----------------------------------------------------------
+
+const amountRanges = [
+  { dataField: "Amount", caption: "Tutar aralığı", area: "row", groupInterval: "range", groupSize: 1000 },
+  { dataField: "Quantity", caption: "Miktar", area: "data", aggregation: "sum" }
+];
+
+test("a range level is keyed by its field and its width, as the engine keys it", () => {
+  const [range] = normalizeFields(amountRanges);
+
+  assert.equal(range.key, "Amount:range1000");
+  assert.equal(range.groupSize, 1000);
+  assert.equal(normalizeFields([{ dataField: "Amount", area: "row", groupInterval: "range", groupSize: 0.5 }])[0].key,
+    "Amount:range0.5");
+});
+
+test("a range travels with its width, and so does a filter on it", () => {
+  const request = buildRequest(amountRanges, {
+    filters: [{ field: "Amount:range1000", values: ["1.000 – 2.000"] }]
+  });
+
+  assert.deepEqual(request.rows, [{ field: "Amount", interval: "range", binSize: 1000 }]);
+  assert.deepEqual(request.filters[0], {
+    field: "Amount", values: ["1.000 – 2.000"], mode: "Include", interval: "range", binSize: 1000
+  });
+});
+
+test("a range needs a positive width, and a width needs a range", () => {
+  assert.throws(() => normalizeFields([{ dataField: "Amount", area: "row", groupInterval: "range" }]),
+    /requires a "groupSize" greater than zero/);
+  assert.throws(() => normalizeFields([{ dataField: "Amount", area: "row", groupInterval: "range", groupSize: -5 }]),
+    /requires a "groupSize" greater than zero/);
+  assert.throws(() => normalizeFields([{ dataField: "OrderDate", area: "row", groupInterval: "month", groupSize: 10 }]),
+    /only valid with groupInterval "range"/);
+});
+
+test("the layout state keeps a range's width when it hands the fields back", () => {
+  const state = new PivotForge.PivotLayoutState(amountRanges);
+  const [range] = state.toFields();
+
+  assert.equal(range.groupInterval, "range");
+  assert.equal(range.groupSize, 1000);
+  assert.doesNotThrow(() => buildRequest(state.toFields()));
+});
+
+test("listing a range level's values asks for ranges of its width", () => {
+  const { widget, calls } = createWidget(amountRanges);
+
+  return widget.fieldValues("Amount:range1000").then(() => {
+    assert.deepEqual(
+      { field: calls[0].body.field, interval: calls[0].body.interval, binSize: calls[0].body.binSize },
+      { field: "Amount", interval: "range", binSize: 1000 });
     widget.dispose();
   });
 });

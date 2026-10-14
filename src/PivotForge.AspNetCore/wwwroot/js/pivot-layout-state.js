@@ -904,6 +904,7 @@
       return {
         dataField: field?.dataField ?? name,
         ...(field?.groupInterval ? { groupInterval: field.groupInterval } : {}),
+        ...(field?.groupSize ? { groupSize: field.groupSize } : {}),
         ...(field?.expression ? { expression: field.expression } : {})
       };
     }

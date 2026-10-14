@@ -180,6 +180,10 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("group-interval")]
     public PivotGroupInterval GroupInterval { get; set; }
 
+    /// <summary>Gets or sets the width of each range when <c>group-interval="Range"</c>, such as 100.</summary>
+    [HtmlAttributeName("group-size")]
+    public decimal? GroupSize { get; set; }
+
     /// <summary>The attribute names the view author actually wrote on this element.</summary>
     private HashSet<string> _writtenAttributes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -354,6 +358,11 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (_writtenAttributes.Contains("group-interval"))
         {
             builder.GroupInterval(GroupInterval);
+        }
+
+        if (GroupSize is { } groupSize)
+        {
+            builder.GroupSize(groupSize);
         }
 
         // Ascending is the enum's default value, so only the written-attribute set

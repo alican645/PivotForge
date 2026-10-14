@@ -34,6 +34,7 @@ public sealed class PivotFieldBuilder
     private string? _sortByValueKey;
     private IReadOnlyList<string?>? _sortBySummaryPath;
     private PivotGroupInterval? _groupInterval;
+    private decimal? _groupSize;
     private string? _expression;
 
     /// <summary>Sets the source field name.</summary>
@@ -423,7 +424,7 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
-    /// <summary>Collapses a date field's values into year, quarter, month, day or weekday groups.</summary>
+    /// <summary>Collapses a field's values into date groups (year, quarter, month, day, weekday) or numeric ranges.</summary>
     /// <remarks>
     /// Grouping happens where the header is read, so no second source column is needed — and the
     /// same column may be declared more than once at different intervals, which is how a
@@ -435,6 +436,22 @@ public sealed class PivotFieldBuilder
     public PivotFieldBuilder GroupInterval(PivotGroupInterval interval)
     {
         _groupInterval = interval;
+        return this;
+    }
+
+    /// <summary>Sets the width of each range for <see cref="PivotGroupInterval.Range"/>, such as 100.</summary>
+    /// <remarks>
+    /// A numeric field grouped with <c>GroupInterval(PivotGroupInterval.Range).GroupSize(100)</c>
+    /// reads <c>0 – 100</c>, <c>100 – 200</c> and so on: each range includes its start and excludes
+    /// its end, and the ranges are aligned to zero.
+    /// </remarks>
+    /// <param name="size">The range width. Must be greater than zero.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not positive.</exception>
+    public PivotFieldBuilder GroupSize(decimal size)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
+        _groupSize = size;
         return this;
     }
 
@@ -571,6 +588,15 @@ public sealed class PivotFieldBuilder
                 "GroupInterval is only valid on fields whose Area is not Data.");
         }
 
+        // A range has no width of its own to fall back on, and a width on a date interval
+        // would be ignored without a word.
+        if ((_groupInterval == PivotGroupInterval.Range) != _groupSize.HasValue)
+        {
+            throw new InvalidOperationException(_groupSize.HasValue
+                ? $"Field \"{_dataField}\" sets GroupSize without GroupInterval(Range). GroupSize is the width of a range."
+                : $"Field \"{_dataField}\" groups by Range without a GroupSize, the width of each range.");
+        }
+
         // Only a data field produces the numbers the renderer formats. A measure still in
         // the field list may carry one, which is applied when it is dragged into the data
         // area -- the same allowance ShowGrandTotals makes, and the only way a calculated
@@ -620,6 +646,11 @@ public sealed class PivotFieldBuilder
         if (_groupInterval is { } groupInterval and not PivotGroupInterval.None)
         {
             field["groupInterval"] = ToCamelCase(groupInterval.ToString());
+        }
+
+        if (_groupSize is { } groupSize)
+        {
+            field["groupSize"] = groupSize;
         }
 
         if (_expanded is { } expanded)

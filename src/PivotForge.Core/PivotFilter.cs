@@ -13,12 +13,15 @@ namespace PivotForge.Core;
 /// the list of values to keep, which is what a filter was before operators existed; every other
 /// operator reads them as its arguments. A condition with fewer arguments than its operator needs
 /// restricts nothing, exactly as an empty list does.</param>
+/// <param name="BinSize">The range width when <paramref name="Interval"/> is
+/// <see cref="PivotGroupInterval.Range"/>, so a filter set from a range header compares ranges.</param>
 public sealed record PivotFilter(
     string Field,
     IReadOnlyList<string?> Values,
     PivotFilterMode Mode = PivotFilterMode.Include,
     PivotGroupInterval Interval = PivotGroupInterval.None,
-    PivotFilterOperator Operator = PivotFilterOperator.Equals);
+    PivotFilterOperator Operator = PivotFilterOperator.Equals,
+    decimal? BinSize = null);
 
 /// <summary>Specifies how a filter's listed values are applied.</summary>
 /// <remarks>
