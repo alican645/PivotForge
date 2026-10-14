@@ -120,6 +120,11 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("heatmap")]
     public PivotHeatmapMode Heatmap { get; set; }
 
+    /// <summary>Gets or sets whether a group's subtotal row is drawn above or below its rows.</summary>
+    /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
+    [HtmlAttributeName("totals-position")]
+    public PivotTotalsPosition TotalsPosition { get; set; }
+
     /// <summary>Gets or sets whether the cell context menu is available.</summary>
     [HtmlAttributeName("context-menu")]
     public bool? ContextMenu { get; set; }
@@ -362,6 +367,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (written.Contains("heatmap"))
         {
             builder.Heatmap(Heatmap);
+        }
+
+        if (written.Contains("totals-position"))
+        {
+            builder.TotalsPosition(TotalsPosition);
         }
 
         if (ContextMenu is { } contextMenu)

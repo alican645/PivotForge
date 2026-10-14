@@ -16,6 +16,17 @@ change will require a new major version.
 
 ### Added
 
+- Subtotal position: `totals-position="Before|After"` /
+  `TotalsPosition(PivotTotalsPosition)` / `totalsPosition: "before" | "after"`.
+  `Before`, the default and the layout so far, draws a group's subtotal row
+  above its rows as the group's header. `After` draws it below them, as Excel
+  lays a report out: a heading row carrying the toggle opens the group, with
+  its cells left blank, and the total row closes it. A collapsed group is its
+  total row alone either way. Works in the tabular, compact and tree layouts.
+  (AspNetCore)
+
+### Added
+
 - Toolbar: `toolbar="true"` / `Toolbar(true)` / `toolbar: true` puts a strip
   of buttons above the grid — Excel (when export is allowed), CSV, Print,
   Expand all and Collapse all. `toolbar-items="Excel,Print"` /

@@ -1015,3 +1015,44 @@ test("print adds no header without a title and refuses an element that cannot pr
 
   assert.throws(() => window.PivotForge.print(null), /requires an element/);
 });
+
+test("totals after the rows: a heading opens each group and its total closes it, unless collapsed", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  renderer.collapsedRows = new Set();
+  const rowHeaders = [["Ege", "İzmir"], ["Ege", "Manisa"], ["Marmara", "Bursa"]];
+  const shape = plan => plan.map(row =>
+    `${row.type}${row.trailing ? "↓" : ""}${row.opensTotal ? "↑" : ""}:${row.rowHeader.join("/")}`);
+  const settings = { subtotals: true, totalsPosition: "after" };
+
+  assert.deepEqual(shape(renderer.createRowPlan(rowHeaders, 2, settings)), [
+    "group↑:Ege", "detail:Ege/İzmir", "detail:Ege/Manisa", "subtotal↓:Ege",
+    "group↑:Marmara", "detail:Marmara/Bursa", "subtotal↓:Marmara"
+  ]);
+
+  // Heading and total share the group's key: the toggle and the sums both find it.
+  const plan = renderer.createRowPlan(rowHeaders, 2, settings);
+  assert.equal(plan[0].key, plan[3].key);
+
+  // A collapsed group is its total row alone, the toggle on it.
+  renderer.collapsedRows.add(plan[0].key);
+  assert.deepEqual(shape(renderer.createRowPlan(rowHeaders, 2, settings)).slice(0, 2), [
+    "subtotal:Ege", "detail:Ege/İzmir"
+  ]);
+
+  // Before is unchanged, and so is a grid without totals.
+  renderer.collapsedRows.clear();
+  assert.deepEqual(shape(renderer.createRowPlan(rowHeaders, 2, { subtotals: true })).slice(0, 2), [
+    "subtotal:Ege", "detail:Ege/İzmir"
+  ]);
+  assert.deepEqual(shape(renderer.createRowPlan(rowHeaders, 2, { subtotals: false, totalsPosition: "after" })).slice(0, 4), [
+    "group:Ege", "detail:Ege/İzmir", "detail:Ege/Manisa", "group:Marmara"
+  ]);
+});
+
+test("a trailing total is selected apart from the heading of its group", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const heading = renderer.createRowSelection({ type: "group", rowHeader: ["Ege"], rowIndexes: [0, 1] });
+  const total = renderer.createRowSelection({ type: "subtotal", trailing: true, rowHeader: ["Ege"], rowIndexes: [0, 1] });
+
+  assert.notEqual(heading.rowKey, total.rowKey);
+});
