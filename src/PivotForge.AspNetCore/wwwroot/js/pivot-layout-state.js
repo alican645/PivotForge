@@ -750,6 +750,7 @@
       return [
         ...state.rows.map(name => ({
           ...this.sourceOf(name),
+          ...this.presentationOf(name),
           caption: captionOf(name),
           area: "row",
           format: formatOf(name),
@@ -758,6 +759,7 @@
         })),
         ...state.columns.map(name => ({
           ...this.sourceOf(name),
+          ...this.presentationOf(name),
           caption: captionOf(name),
           area: "column",
           format: formatOf(name),
@@ -766,6 +768,7 @@
         })),
         ...state.values.map(value => ({
           ...this.sourceOf(value.field),
+          ...this.presentationOf(value.field),
           caption: captionOf(value.field),
           area: "data",
           aggregation: value.aggregation,
@@ -781,12 +784,27 @@
         // filter-area field would place the same field twice.
         ...state.filters.filter(filter => this.areaOf(filter.field) === "filter").map(filter => ({
           ...this.sourceOf(filter.field),
+          ...this.presentationOf(filter.field),
           caption: captionOf(filter.field),
           area: "filter",
           format: formatOf(filter.field),
           visible: visibleOf(filter.field)
         }))
       ];
+    }
+
+    // How the field is shown, which belongs to the field rather than to where
+    // it sits: carried into every area, and only what was declared, so a field
+    // that declared none of it emits exactly what it did before.
+    presentationOf(name) {
+      const field = this.catalog.get(name);
+
+      return {
+        ...(field?.allowSorting === false ? { allowSorting: false } : {}),
+        ...(field?.allowFiltering === false ? { allowFiltering: false } : {}),
+        ...(field?.width ? { width: field.width } : {}),
+        ...(typeof field?.wordWrap === "boolean" ? { wordWrap: field.wordWrap } : {})
+      };
     }
 
     // The layout names levels; a field declaration names a source column and the

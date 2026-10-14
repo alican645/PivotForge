@@ -19,6 +19,10 @@ public sealed class PivotFieldBuilder
     private bool? _expanded;
     private bool? _showTotals;
     private bool? _showGrandTotals;
+    private bool? _allowSorting;
+    private bool? _allowFiltering;
+    private int? _width;
+    private bool? _wordWrap;
     private int? _areaIndex;
     private PivotSortDirection? _sortOrder;
     private string? _sortByValueKey;
@@ -226,6 +230,60 @@ public sealed class PivotFieldBuilder
         }
 
         _areaIndex = areaIndex;
+        return this;
+    }
+
+    /// <summary>Sets whether the reader may sort by this field.</summary>
+    /// <remarks>
+    /// False takes away a row or column field's own sort arrow, and a data field's value-header
+    /// sort. The grid-wide <c>AllowSorting</c> still decides first: a field can only take its own
+    /// controls away. Valid in every area, so the field keeps it wherever it is dragged.
+    /// </remarks>
+    /// <param name="allow">False to take this field's sorting away.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder AllowSorting(bool allow)
+    {
+        _allowSorting = allow;
+        return this;
+    }
+
+    /// <summary>Sets whether the reader may filter this field.</summary>
+    /// <remarks>
+    /// False takes away the field's header funnel and the designer's filter control on its chip.
+    /// A filter declared in the markup still applies. Valid in every area.
+    /// </remarks>
+    /// <param name="allow">False to take this field's filtering away.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder AllowFiltering(bool allow)
+    {
+        _allowFiltering = allow;
+        return this;
+    }
+
+    /// <summary>Sets this field's column width, in pixels.</summary>
+    /// <remarks>
+    /// A row field sizes its header column; a data field sizes every column of its values, totals
+    /// included. A column the reader resizes keeps the reader's width.
+    /// </remarks>
+    /// <param name="pixels">The width. Must be greater than zero.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not greater than zero.</exception>
+    public PivotFieldBuilder Width(int pixels)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(pixels, 0);
+        _width = pixels;
+        return this;
+    }
+
+    /// <summary>Sets whether this field's labels wrap onto more lines instead of ending in an ellipsis.</summary>
+    /// <remarks>
+    /// A row field's headers, a column field's headers, a data field's value headers.
+    /// </remarks>
+    /// <param name="wrap">True to let the labels wrap.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder WordWrap(bool wrap)
+    {
+        _wordWrap = wrap;
         return this;
     }
 
@@ -481,6 +539,26 @@ public sealed class PivotFieldBuilder
         if (_showGrandTotals is { } showGrandTotals)
         {
             field["showGrandTotals"] = showGrandTotals;
+        }
+
+        if (_allowSorting is { } allowSorting)
+        {
+            field["allowSorting"] = allowSorting;
+        }
+
+        if (_allowFiltering is { } allowFiltering)
+        {
+            field["allowFiltering"] = allowFiltering;
+        }
+
+        if (_width is { } width)
+        {
+            field["width"] = width;
+        }
+
+        if (_wordWrap is { } wordWrap)
+        {
+            field["wordWrap"] = wordWrap;
         }
 
         if (_areaIndex is { } areaIndex)

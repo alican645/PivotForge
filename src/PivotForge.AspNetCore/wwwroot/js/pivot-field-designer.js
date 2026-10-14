@@ -399,7 +399,7 @@
       // Only a filter field has values to pick, and the picker needs the widget
       // to fetch them — a designer wired to a widget without fieldValues() is
       // an older host, so the control is left off rather than offered broken.
-      if (area === "filter" && this.canPickFilterValues()) {
+      if (area === "filter" && this.canPickFilterValues() && this.state.field(name).allowFiltering !== false) {
         const funnel = document.createElement("button");
         funnel.className = "pivot-chip__filter";
         funnel.dataset.action = "filter";
@@ -1105,7 +1105,7 @@
       // --- Filter values --------------------------------------------------
       // The chip's ▼ is out of the tab sequence, so this is the keyboard's way
       // in to the picker. Offered only where there are values to pick.
-      if (area === "filter" && this.canPickFilterValues()) {
+      if (area === "filter" && this.canPickFilterValues() && this.state.field(name).allowFiltering !== false) {
         const filtering = this.settingsSection(this.labels.filterValues);
         const open = document.createElement("button");
         open.className = "pivot-value-settings__choice";

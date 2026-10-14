@@ -323,6 +323,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // means that row field starts collapsed, or produces no total.
       rowFieldExpanded: null,
       rowFieldSubtotals: null,
+      // Per field, parallel to rowFields; a false entry takes that field's own
+      // sort arrow or funnel away, a width sizes its column, a true wordWrap
+      // lets its labels wrap instead of ending in an ellipsis.
+      rowFieldAllowSorting: null,
+      rowFieldAllowFiltering: null,
+      rowFieldWidths: null,
+      rowFieldWordWrap: null,
       subtotals: true,
       // Where a group's subtotal row goes: "before" its rows, as the group's
       // own header (the default), or "after" them, as Excel lays a report out
@@ -334,6 +341,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // columnFields; a false entry means that level produces no total).
       columnSubtotals: true,
       columnFieldSubtotals: null,
+      columnFieldAllowSorting: null,
+      columnFieldAllowFiltering: null,
+      columnFieldWordWrap: null,
       valueKey: null,
       values: null,
       aggregation: "sum",
@@ -462,6 +472,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.applySelectionState(table);
     this.applyHeatmap(table, settings);
     this.applyConditionalFormatting(table, settings);
+    this.applyDeclaredWidths(
+      table, settings, rowDepth, Math.max(1, this.createColumnPlan(columnHeaders, settings).length), values);
+    this.applyWordWrap(table, settings, values);
     this.applyColumnWidths(table);
     this.wireColumnResize(table, settings);
     this.applyStickyOffsets(table, headerDepth, rowDepth);
@@ -713,7 +726,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         aggregation: value.aggregation ?? settings.aggregation,
         format: value.format ?? null,
         showAs: value.showAs ?? "normal",
-        showGrandTotals: value.showGrandTotals !== false
+        showGrandTotals: value.showGrandTotals !== false,
+        allowSorting: value.allowSorting !== false,
+        width: value.width ?? null,
+        wordWrap: value.wordWrap === true
       }));
     }
 
@@ -996,6 +1012,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
               : "pivot-table__value-header");
           cell.dataset.stickyRow = String(columnDepth);
           cell.dataset.columnIndex = String(rowDepth + position * valueSpan + valueIndex);
+          cell.dataset.valueKey = value.key;
           // A subtotal column's path is its group's prefix, which the engine
           // reads as that group's subtotal.
           this.decorateSortableHeader(cell, value.label, {
@@ -1011,6 +1028,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         const totalCell = this.createCell("th", value.label, "pivot-table__value-header pivot-table__total-value-header");
         totalCell.dataset.stickyRow = String(columnDepth);
         totalCell.dataset.columnIndex = String(rowDepth + planWidth * valueSpan + valueIndex);
+        totalCell.dataset.valueKey = value.key;
         this.decorateSortableHeader(totalCell, value.label, {
           mode: "RowTotalValue",
           valueKey: value.key
@@ -1377,6 +1395,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       const header = this.createCell("th", "", isGroupLikeRow ? "pivot-table__subtotal-header" : "pivot-table__row-header", "rowheader");
       header.dataset.stickyColumn = String(rowLevel);
       header.dataset.columnIndex = String(rowLevel);
+      header.dataset.rowLevel = String(rowLevel);
       this.registerSelectionTarget(header, rowSelection, "row");
       const isRepeatedLabel = settings.repeatRowLabels === false &&
         previousRowHeader !== null &&
@@ -1419,6 +1438,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const header = this.createCell("th", "", rowInfo.type === "subtotal" || rowInfo.type === "group" ? "pivot-table__subtotal-header" : "pivot-table__row-header", "rowheader");
     header.dataset.stickyColumn = "0";
     header.dataset.columnIndex = "0";
+    header.dataset.rowLevel = String(rowLevel);
     this.registerSelectionTarget(header, rowSelection, "row");
     header.style.setProperty("--pivot-indent", `${rowLevel * 18}px`);
     header.classList.add("is-compact");
@@ -2617,8 +2637,107 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     });
   }
 
+  // A row or column field's per-field option, looked up by the field's key:
+  // rowFieldAllowFiltering for a row field, columnFieldAllowFiltering for a
+  // column one. Undefined for a field on neither axis.
+  fieldOption(settings, field, option) {
+    const rowIndex = (settings.rowFields ?? []).indexOf(field);
+    if (rowIndex >= 0) {
+      return settings[`rowField${option}`]?.[rowIndex];
+    }
+
+    const columnIndex = (settings.columnFields ?? []).indexOf(field);
+    return columnIndex >= 0 ? settings[`columnField${option}`]?.[columnIndex] : undefined;
+  }
+
+  // A label sort asks the field it orders; a value sort asks the data field
+  // whose numbers it orders by, so a measure can be left out of sorting.
+  fieldAllowsSorting(request, settings) {
+    if (request?.mode === "RowLabel" || request?.mode === "ColumnLabel") {
+      return this.fieldOption(settings, request.field, "AllowSorting") !== false;
+    }
+
+    const value = request?.valueKey
+      ? (settings.values ?? []).find(entry => entry.key === request.valueKey)
+      : null;
+    return value?.allowSorting !== false;
+  }
+
+  // Declared widths, by column index: a row field's on its header column, a
+  // data field's on every column of its values, totals included. A width the
+  // reader dragged wins, so these only fill the columns nobody has resized.
+  // In a one-column layout every row field shares the column; the widest
+  // declaration sizes it.
+  applyDeclaredWidths(table, settings, rowDepth, planWidth, values) {
+    const widths = new Map();
+    const rowWidths = (settings.rowFieldWidths ?? []).filter(width => width > 0);
+
+    if (isOneColumnLayout(settings)) {
+      if (rowWidths.length > 0) {
+        widths.set(0, Math.max(...rowWidths));
+      }
+    } else {
+      (settings.rowFieldWidths ?? []).forEach((width, level) => {
+        if (width > 0 && level < rowDepth) {
+          widths.set(level, width);
+        }
+      });
+    }
+
+    const valueSpan = values.length;
+    for (let position = 0; position < planWidth; position++) {
+      values.forEach((value, valueIndex) => {
+        if (value.width > 0) {
+          widths.set(rowDepth + position * valueSpan + valueIndex, value.width);
+        }
+      });
+    }
+
+    this.totalColumnValues(values, settings).forEach((value, valueIndex) => {
+      if (value.width > 0) {
+        widths.set(rowDepth + planWidth * valueSpan + valueIndex, value.width);
+      }
+    });
+
+    for (const [columnIndex, width] of widths) {
+      if (this.columnWidths.has(columnIndex)) {
+        continue;
+      }
+
+      table.querySelectorAll(`[data-column-index="${columnIndex}"]`).forEach(cell => {
+        this.setCellWidth(cell, width);
+      });
+    }
+  }
+
+  // Which labels may wrap: a row field's headers at its level, a column
+  // field's headers on its row, a data field's value headers.
+  applyWordWrap(table, settings, values) {
+    (settings.rowFieldWordWrap ?? []).forEach((wrap, level) => {
+      if (wrap === true) {
+        table.querySelectorAll(`tbody th[data-row-level="${level}"]`)
+          .forEach(cell => cell.classList.add("is-wrapping"));
+      }
+    });
+
+    (settings.columnFieldWordWrap ?? []).forEach((wrap, level) => {
+      if (wrap === true) {
+        table.querySelectorAll(`thead .pivot-table__column-header[data-sticky-row="${level}"]`)
+          .forEach(cell => cell.classList.add("is-wrapping"));
+      }
+    });
+
+    values.filter(value => value.wordWrap).forEach(value => {
+      table.querySelectorAll(".pivot-table__value-header").forEach(cell => {
+        if (cell.dataset.valueKey === value.key) {
+          cell.classList.add("is-wrapping");
+        }
+      });
+    });
+  }
+
   decorateSortableHeader(cell, label, request, settings) {
-    if (typeof settings.onSortRequested !== "function") {
+    if (typeof settings.onSortRequested !== "function" || !this.fieldAllowsSorting(request, settings)) {
       return;
     }
 
@@ -2669,7 +2788,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   // In compact mode the row fields share one header cell, so only the first of
   // them is reachable from here -- the rest stay a designer-chip job.
   decorateFilterableHeader(cell, label, field, settings) {
-    if (typeof settings.onFilterRequested !== "function" || !field) {
+    if (typeof settings.onFilterRequested !== "function" || !field ||
+      this.fieldOption(settings, field, "AllowFiltering") === false) {
       return;
     }
 

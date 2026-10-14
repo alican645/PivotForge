@@ -90,6 +90,24 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("show-grand-totals")]
     public bool? ShowGrandTotals { get; set; }
 
+    /// <summary>Gets or sets whether the reader may sort by this field.</summary>
+    /// <remarks>False takes away this field's own sort arrow, or a data field's value-header sort.</remarks>
+    [HtmlAttributeName("allow-sorting")]
+    public bool? AllowSorting { get; set; }
+
+    /// <summary>Gets or sets whether the reader may filter this field.</summary>
+    /// <remarks>False takes away this field's header funnel and its designer filter control.</remarks>
+    [HtmlAttributeName("allow-filtering")]
+    public bool? AllowFiltering { get; set; }
+
+    /// <summary>Gets or sets this field's column width, in pixels.</summary>
+    [HtmlAttributeName("width")]
+    public int? Width { get; set; }
+
+    /// <summary>Gets or sets whether this field's labels wrap instead of ending in an ellipsis.</summary>
+    [HtmlAttributeName("word-wrap")]
+    public bool? WordWrap { get; set; }
+
     /// <summary>Gets or sets this field's position among the fields sharing its area.</summary>
     /// <remarks>The opening order only; after that the layout owns the order.</remarks>
     [HtmlAttributeName("area-index")]
@@ -244,6 +262,26 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (ShowGrandTotals is { } showGrandTotals)
         {
             builder.ShowGrandTotals(showGrandTotals);
+        }
+
+        if (AllowSorting is { } allowSorting)
+        {
+            builder.AllowSorting(allowSorting);
+        }
+
+        if (AllowFiltering is { } allowFiltering)
+        {
+            builder.AllowFiltering(allowFiltering);
+        }
+
+        if (Width is { } width)
+        {
+            builder.Width(width);
+        }
+
+        if (WordWrap is { } wordWrap)
+        {
+            builder.WordWrap(wordWrap);
         }
 
         if (AreaIndex is { } areaIndex)

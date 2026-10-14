@@ -706,3 +706,20 @@ test("the comparison operators are the ones that put a value in order", () => {
     assert.ok(!PivotRequestBuilder.COMPARISON_OPERATORS.includes(operator));
   }
 });
+
+test("presentation options default to the grid's behaviour and are checked when declared", () => {
+  const [plain, declared] = PivotRequestBuilder.normalizeFields([
+    { dataField: "a", area: "row" },
+    { dataField: "b", area: "data", allowSorting: false, allowFiltering: false, width: 140, wordWrap: true }
+  ]);
+
+  assert.deepEqual(
+    [plain.allowSorting, plain.allowFiltering, plain.width, plain.wordWrap], [true, true, null, null]);
+  assert.deepEqual(
+    [declared.allowSorting, declared.allowFiltering, declared.width, declared.wordWrap], [false, false, 140, true]);
+
+  assert.throws(() => PivotRequestBuilder.normalizeFields([{ dataField: "a", area: "row", width: 0 }]),
+    /"width" on field "a"/);
+  assert.throws(() => PivotRequestBuilder.normalizeFields([{ dataField: "a", area: "row", wordWrap: "yes" }]),
+    /"wordWrap" on field "a" must be true or false/);
+});
