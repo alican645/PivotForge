@@ -222,7 +222,7 @@ The same grid can be declared as markup. Register the tag helpers once, in
 
 `<pivot-grid>` attributes mirror the builder methods in kebab-case: `id`,
 `endpoint-prefix`, `allow-sorting`, `allow-filtering`, `allow-drill-down`,
-`allow-excel-export`, `load-panel`, `auto-load`, `large-data`, `page-size`,
+`allow-excel-export`, `load-panel`, `toolbar`, `toolbar-items`, `auto-load`, `large-data`, `page-size`,
 `source-row-count`, `css-class`, `field-designer`, `state-storing`, and
 `state-key`. An attribute you do not
 write is omitted from the configuration, so the browser default applies —
@@ -466,6 +466,7 @@ emit identical markup.
 | `conditionalPanelOptions` | `null` | Passed to the `PivotConditionalPanel` constructor: `labels`, `host`. |
 | `loadPanel` | `true` | Draws a "Loading..." panel with a spinner over the grid while a request is out: the first load and every reload a sort, filter or layout change starts. The previous table stays on screen, dimmed, and the container carries `aria-busy="true"` meanwhile. Set to `false` (`load-panel="false"`, `LoadPanel(false)`) to draw your own from the `dataLoading` and `dataLoaded` events. The text is the renderer text `loading` (`rendererOptions.texts.loading`), "Yükleniyor..." in the `tr` locale. |
 | `loadPanelDelay` | `300` | Milliseconds a request must run before the panel appears, so a fast answer does not flash it. |
+| `toolbar` | `false` | A strip of buttons just above the grid, outside its scroll box. `true` (`toolbar="true"`, `Toolbar(true)`) shows every button the grid can offer: `excel` (only with `allowExcelExport`), `csv`, `print`, `expandAll`, `collapseAll`. A list (`toolbar-items="Excel,Print"`, `Toolbar(PivotToolbarItem.Excel, PivotToolbarItem.Print)`, `["excel", "print"]`) picks the buttons and their order; an unknown name is an error, and `toolbar="false"` beside `toolbar-items` is a contradiction. Excel and Print title the file and the page with the grid's `aria-label`. A failure is raised as the `error` event. The texts are the renderer texts `toolbar` (the strip's accessible name), `toolbarExcel`, `toolbarCsv`, `toolbarPrint`, `toolbarExpandAll` and `toolbarCollapseAll`, translated in the `tr` locale. Printing hides the strip. |
 | `stateStoring` | `null` | `"local"`, `"session"`, or `null`. See [State persistence](#state-persistence). Any other value throws. |
 | `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
 

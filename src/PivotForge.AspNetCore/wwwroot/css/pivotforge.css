@@ -1348,6 +1348,45 @@ select {
   max-height: min(calc(100vh - 150px), 620px);
 }
 
+/* PivotWidget's toolbar: a strip of buttons just above the grid's scroll box,
+   outside it, so it stays put while the table scrolls. Wraps on a narrow
+   screen rather than pushing the page sideways. */
+.pivot-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.pivot-toolbar__button {
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--pt-border);
+  border-radius: 6px;
+  background: var(--pt-panel);
+  color: var(--pt-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pivot-toolbar__button:hover:not(:disabled) {
+  border-color: var(--pt-accent);
+  color: var(--pt-accent-strong);
+}
+
+.pivot-toolbar__button:focus-visible {
+  outline: 2px solid var(--pt-selection-ring);
+  outline-offset: 1px;
+}
+
+.pivot-toolbar__button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
 /* PivotWidget's load panel. The grid's container is its own scroll box, so the
    panel is a zero-height sticky first child: it stays in view however far the
    table is scrolled, and takes no room from the table beneath it. */
@@ -3269,6 +3308,7 @@ select {
   .pivot-table__toggle,
   .pivot-table__virtual-spacer,
   .pivot-load-panel,
+  .pivot-toolbar,
   .pivot-cell-menu {
     display: none !important;
   }

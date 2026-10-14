@@ -115,6 +115,29 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder LoadPanel(bool enabled) => Set("loadPanel", enabled);
 
+    /// <summary>Shows or hides a toolbar above the grid with every button it can offer.</summary>
+    /// <remarks>
+    /// The buttons are Excel (only when <see cref="AllowExcelExport"/> is on), CSV, Print, Expand all
+    /// and Collapse all. Excel and Print title the file and the page with the grid's
+    /// <see cref="AriaLabel"/>. A failure is raised as the grid's <c>error</c> event.
+    /// </remarks>
+    /// <param name="enabled">True to show the toolbar.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder Toolbar(bool enabled) => Set("toolbar", enabled);
+
+    /// <summary>Shows a toolbar above the grid with these buttons, in this order.</summary>
+    /// <param name="items">The buttons. An empty list shows no toolbar.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> is null.</exception>
+    public PivotGridBuilder Toolbar(params PivotToolbarItem[] items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        return items.Length == 0
+            ? Set("toolbar", false)
+            : Set("toolbar", items.Distinct().Select(item => CamelCase(item.ToString())).ToArray());
+    }
+
     /// <summary>Enables or disables the initial load performed when the grid is created.</summary>
     /// <param name="autoLoad">True to load data as soon as the grid is created.</param>
     /// <returns>The same builder.</returns>

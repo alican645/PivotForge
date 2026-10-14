@@ -450,6 +450,57 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task ToolbarTrueAsksForEveryButton()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", Toolbar = true },
+            new FieldSpec("Amount", PivotArea.Data)));
+
+        Assert.True(config.GetProperty("toolbar").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ToolbarItemsAreWrittenInOrderAndWithoutRegardToCase()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ToolbarItems = "print, EXCEL,expandall,print" },
+            new FieldSpec("Amount", PivotArea.Data)));
+
+        Assert.Equal(
+            ["print", "excel", "expandAll"],
+            config.GetProperty("toolbar").EnumerateArray().Select(item => item.GetString()));
+    }
+
+    [Fact]
+    public async Task AGridWithoutAToolbarDeclaresNone()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data)));
+
+        Assert.False(config.TryGetProperty("toolbar", out _));
+    }
+
+    [Fact]
+    public async Task AnUnknownToolbarItemIsReportedWithTheChoices()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ToolbarItems = "Excel,Pdf" },
+            new FieldSpec("Amount", PivotArea.Data)));
+
+        Assert.Contains("'Pdf'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("CollapseAll", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ToolbarFalseBesideToolbarItemsIsAContradiction()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", Toolbar = false, ToolbarItems = "Print" },
+            new FieldSpec("Amount", PivotArea.Data)));
+    }
+
+    [Fact]
     public async Task AGridWithoutAnIdThrows()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(

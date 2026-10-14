@@ -22,6 +22,10 @@
     // run for loadPanelDelay milliseconds, so a fast answer does not flash it.
     loadPanel: true,
     loadPanelDelay: 300,
+    // A strip of buttons above the grid: true for every item the grid can
+    // offer, or a list naming which and in what order. Off unless asked for, so
+    // a page that draws its own buttons keeps drawing them alone.
+    toolbar: false,
     largeData: false,
     pageSize: 40,
     sourceRowCount: 100000,
@@ -168,6 +172,16 @@
     return plainName ?? null;
   }
 
+  // What a toolbar button does, and the English text it shows until a locale or
+  // the page names it otherwise.
+  const TOOLBAR_ITEMS = {
+    excel: { text: "toolbarExcel", label: "Excel" },
+    csv: { text: "toolbarCsv", label: "CSV" },
+    print: { text: "toolbarPrint", label: "Print" },
+    expandAll: { text: "toolbarExpandAll", label: "Expand all" },
+    collapseAll: { text: "toolbarCollapseAll", label: "Collapse all" }
+  };
+
   class PivotWidget {
     constructor(container, options) {
       this.container = container;
@@ -228,6 +242,8 @@
       this.subscribeDeclaredEvents();
 
       this.renderer = this.options.renderImpl ? null : this.createRenderer();
+
+      this.toolbarNode = this.createToolbar();
 
       this.layoutState = null;
       this.designer = null;
@@ -1016,12 +1032,99 @@
       this.container.removeAttribute("aria-busy");
     }
 
-    // A renderer string in spirit, so it is looked up where the others are: the
-    // page's rendererOptions.texts first, then the locale's table texts.
+    // The items the toolbar shows, in order. Excel needs its endpoint and both
+    // expand buttons need the renderer, so an item the grid cannot honour is
+    // left out rather than drawn dead -- the same rule the cell menu follows.
+    toolbarItems() {
+      const declared = this.options.toolbar === true
+        ? Object.keys(TOOLBAR_ITEMS)
+        : Array.isArray(this.options.toolbar) ? this.options.toolbar : [];
+
+      return [...new Set(declared)].filter(item => {
+        if (!TOOLBAR_ITEMS[item]) {
+          throw new Error(
+            `Unknown toolbar item "${item}". Expected one of: ${Object.keys(TOOLBAR_ITEMS).join(", ")}.`);
+        }
+
+        return item === "excel" ? this.options.allowExcelExport === true : Boolean(this.renderer);
+      });
+    }
+
+    // Outside the container rather than in it: the renderer replaces the
+    // container's children on every draw, and the strip has to stay put while
+    // the grid scrolls. PivotForge.print hides it with the rest of the page.
+    createToolbar() {
+      const document = root.document;
+      const items = this.toolbarItems();
+
+      if (items.length === 0 || !document || typeof this.container.before !== "function") {
+        return null;
+      }
+
+      const toolbar = document.createElement("div");
+      toolbar.className = "pivot-toolbar";
+      toolbar.setAttribute("role", "toolbar");
+      toolbar.setAttribute("aria-label", this.tableText("toolbar", "Pivot table tools"));
+
+      for (const item of items) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "pivot-toolbar__button";
+        button.dataset.toolbarItem = item;
+        button.textContent = this.tableText(TOOLBAR_ITEMS[item].text, TOOLBAR_ITEMS[item].label);
+        button.addEventListener("click", () => this.runToolbarItem(item, button));
+        toolbar.appendChild(button);
+      }
+
+      this.container.before(toolbar);
+      return toolbar;
+    }
+
+    // A failure goes out as the widget's "error" event, as a failed load does,
+    // so a page that already shows those shows these too.
+    async runToolbarItem(item, button) {
+      // What the grid is called on screen is what the file and the page are
+      // titled, unless the page named nothing.
+      const title = this.options.rendererOptions?.ariaLabel ?? undefined;
+
+      try {
+        switch (item) {
+          case "excel":
+            button.disabled = true;
+            try {
+              PivotForge.download(await this.exportToExcel(title ? { title, sheetName: title } : {}));
+            } finally {
+              button.disabled = false;
+            }
+            break;
+          case "csv":
+            PivotForge.download(this.exportToCsv());
+            break;
+          case "print":
+            this.print(title ? { title } : {});
+            break;
+          case "expandAll":
+            this.renderer.expandAll();
+            break;
+          case "collapseAll":
+            this.renderer.collapseAll();
+            break;
+        }
+      } catch (error) {
+        this.emit("error", error);
+      }
+    }
+
+    // A renderer string in spirit: the page's rendererOptions.texts first, then
+    // the locale's table texts, then English.
+    tableText(key, fallback) {
+      return this.options.rendererOptions?.texts?.[key] ??
+        this.locale.table?.texts?.[key] ??
+        fallback;
+    }
+
     loadPanelText() {
-      return this.options.rendererOptions?.texts?.loading ??
-        this.locale.table?.texts?.loading ??
-        "Loading...";
+      return this.tableText("loading", "Loading...");
     }
 
     showError(error) {
@@ -1438,6 +1541,8 @@
       this.headerFilterPicker = null;
       this.drillDownModal?.dispose();
       this.drillDownModal = null;
+      this.toolbarNode?.remove();
+      this.toolbarNode = null;
       this.container.replaceChildren();
       this.container.classList.remove("pivot-table");
     }
