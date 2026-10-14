@@ -51,6 +51,7 @@
       filter: "Filtreler",
       remove: "Kaldır",
       search: "Alan ara...",
+      folderToggle: "{0} klasörü",
       format: "Biçim",
       settings: "Alan ayarları",
       filterValues: "Filtre değerleri",
@@ -95,6 +96,8 @@
         runningTotal: "Kümülatif toplam"
       },
       formatGrouping: "Binlik ayracı",
+      formatCompact: "Kısa sayı (1,2 Mn)",
+      formatParentheses: "Negatifler parantez içinde",
       formatTypes: {
         number: "Sayı",
         currency: "Para birimi",

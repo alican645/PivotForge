@@ -91,6 +91,12 @@ Supported modes:
 
 Percentage modes return ratios. For example, `0.25m` represents 25 percent; formatting belongs to the consuming UI.
 
+`RunningTotal`, `DifferenceFromPrevious` and `PercentDifferenceFromPrevious` walk each row from the first column to the last. With more than one column level, `AllowCrossGroupCalculation = false` keeps them inside each outer column group instead — the running total starts again every year, and a year's first quarter has no previous column. The group is the last column level's parent, so with Year, Quarter and Month it starts again every quarter:
+
+```csharp
+PivotValueDefinition.Sum("Amount").As(PivotShowAs.RunningTotal) with { AllowCrossGroupCalculation = false }
+```
+
 ## Calculated Fields
 
 A calculated value is a formula over other summaries:

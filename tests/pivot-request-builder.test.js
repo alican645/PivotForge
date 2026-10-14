@@ -723,3 +723,47 @@ test("presentation options default to the grid's behaviour and are checked when 
   assert.throws(() => PivotRequestBuilder.normalizeFields([{ dataField: "a", area: "row", wordWrap: "yes" }]),
     /"wordWrap" on field "a" must be true or false/);
 });
+
+test("allowCrossGroupCalculation travels on the value only when switched off", () => {
+  const plain = PivotRequestBuilder.buildRequest(salesFields);
+  assert.equal("allowCrossGroupCalculation" in plain.values[0], false);
+
+  const withinGroups = PivotRequestBuilder.buildRequest([
+    salesFields[0], salesFields[1],
+    { ...salesFields[2], showAs: "runningTotal", allowCrossGroupCalculation: false }
+  ]);
+  assert.equal(withinGroups.values[0].allowCrossGroupCalculation, false);
+
+  const [normalized] = PivotRequestBuilder.normalizeFields([salesFields[2]]);
+  assert.equal(normalized.allowCrossGroupCalculation, true);
+  assert.equal(PivotRequestBuilder.normalizeFields([salesFields[0]])[0].allowCrossGroupCalculation, null);
+});
+
+test("customizeText and allowCrossGroupCalculation belong to measures, displayFolder to any field", () => {
+  const { normalizeFields } = PivotRequestBuilder;
+
+  assert.throws(() => normalizeFields([{ dataField: "urun", area: "row", customizeText: "fmt" }]),
+    /"customizeText" is only valid on a "data" field/);
+  assert.throws(() => normalizeFields([{ dataField: "urun", area: "row", allowCrossGroupCalculation: false }]),
+    /"allowCrossGroupCalculation" is only valid on a "data" field/);
+  assert.throws(() => normalizeFields([{ dataField: "tutar", allowCrossGroupCalculation: "no" }]),
+    /must be true or false/);
+  assert.throws(() => normalizeFields([{ dataField: "tutar", customizeText: 42 }]),
+    /must be a function or the name of one/);
+  assert.throws(() => normalizeFields([{ dataField: "urun", area: "row", displayFolder: " " }]),
+    /"displayFolder" on field "urun" must be a non-empty string/);
+
+  const fn = () => "x";
+  const [measure, dimension, waiting] = normalizeFields([
+    { dataField: "tutar", customizeText: fn, displayFolder: "Satış" },
+    { dataField: "urun", area: "row", displayFolder: " Ürün " },
+    { dataField: "adet", area: "available", role: "measure", customizeText: "app.adet" }
+  ]);
+  assert.equal(measure.customizeText, fn);
+  assert.equal(measure.displayFolder, "Satış");
+  assert.equal(dimension.displayFolder, "Ürün");
+  assert.equal(dimension.customizeText, null);
+  assert.equal(waiting.customizeText, "app.adet");
+  // Null is what normalizing leaves on a field these do not apply to, so it is no declaration.
+  assert.doesNotThrow(() => normalizeFields([{ dataField: "urun", area: "row", customizeText: null }]));
+});

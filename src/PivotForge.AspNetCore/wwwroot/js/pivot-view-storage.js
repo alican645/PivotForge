@@ -183,7 +183,10 @@
             type: this.formatTypes.has(format.type) ? format.type : "number",
             decimals: Number.isInteger(format.decimals) ? Math.max(0, Math.min(6, format.decimals)) : 2,
             useGrouping: format.useGrouping !== false,
-            ...(typeof format.currency === "string" && format.currency ? { currency: format.currency } : {})
+            ...(typeof format.currency === "string" && format.currency ? { currency: format.currency } : {}),
+            ...(typeof format.compact === "boolean" ? { compact: format.compact } : {}),
+            ...(typeof format.zeroText === "string" ? { zeroText: format.zeroText } : {}),
+            ...(format.negative === "minus" || format.negative === "parentheses" ? { negative: format.negative } : {})
           }
         }];
       });

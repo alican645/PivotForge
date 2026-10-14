@@ -43,6 +43,21 @@
       throw new Error(`Format currency for "${name}" must be a non-empty string.`);
     }
 
+    if (format.compact !== undefined && typeof format.compact !== "boolean") {
+      throw new Error(`Format compact for "${name}" must be a boolean.`);
+    }
+
+    if (format.zeroText !== undefined && typeof format.zeroText !== "string") {
+      throw new Error(`Format zeroText for "${name}" must be a string.`);
+    }
+
+    const { NEGATIVE_FORMATS } = PivotForge.PivotRequestBuilder;
+    if (format.negative !== undefined && !NEGATIVE_FORMATS.includes(format.negative)) {
+      throw new Error(
+        `Unknown format negative "${format.negative}" for "${name}". Expected one of: ${NEGATIVE_FORMATS.join(", ")}.`
+      );
+    }
+
     return { ...format };
   }
 
@@ -845,7 +860,11 @@
           visible: visibleOf(value.field),
           // Only a data field may hold it, so it rides along with this area
           // alone: the same measure dragged out to a row drops it.
-          ...(this.field(value.field).showGrandTotals === false ? { showGrandTotals: false } : {})
+          ...(this.field(value.field).showGrandTotals === false ? { showGrandTotals: false } : {}),
+          ...(this.field(value.field).allowCrossGroupCalculation === false
+            ? { allowCrossGroupCalculation: false }
+            : {}),
+          ...(this.field(value.field).customizeText ? { customizeText: this.field(value.field).customizeText } : {})
         })),
         // Only the entries whose field is not seated elsewhere: a row field
         // filtered from its header has an entry too, and emitting that as a
@@ -871,7 +890,8 @@
         ...(field?.allowSorting === false ? { allowSorting: false } : {}),
         ...(field?.allowFiltering === false ? { allowFiltering: false } : {}),
         ...(field?.width ? { width: field.width } : {}),
-        ...(typeof field?.wordWrap === "boolean" ? { wordWrap: field.wordWrap } : {})
+        ...(typeof field?.wordWrap === "boolean" ? { wordWrap: field.wordWrap } : {}),
+        ...(field?.displayFolder ? { displayFolder: field.displayFolder } : {})
       };
     }
 

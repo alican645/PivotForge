@@ -68,6 +68,34 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("format-currency")]
     public string? FormatCurrency { get; set; }
 
+    /// <summary>Gets or sets whether this field's values are shortened to a compact form, such as 1,25 Mn.</summary>
+    [HtmlAttributeName("format-compact")]
+    public bool? FormatCompact { get; set; }
+
+    /// <summary>Gets or sets the text shown in place of a value that is exactly zero, such as "—".</summary>
+    [HtmlAttributeName("format-zero-text")]
+    public string? FormatZeroText { get; set; }
+
+    /// <summary>Gets or sets how this field writes a negative number: with a minus sign, or in parentheses.</summary>
+    [HtmlAttributeName("format-negative")]
+    public PivotNegativeFormat FormatNegative { get; set; }
+
+    /// <summary>Gets or sets the name of a page function that has the last word on each value's text.</summary>
+    /// <remarks>See <see cref="PivotFieldBuilder.CustomizeText(string)"/>.</remarks>
+    [HtmlAttributeName("customize-text")]
+    public string? CustomizeText { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether a running total and the comparisons with the previous column carry on
+    /// across outer column groups (the default) or start afresh in each one.
+    /// </summary>
+    [HtmlAttributeName("allow-cross-group-calculation")]
+    public bool? AllowCrossGroupCalculation { get; set; }
+
+    /// <summary>Gets or sets the folder this field is listed under in the field designer.</summary>
+    [HtmlAttributeName("display-folder")]
+    public string? DisplayFolder { get; set; }
+
     /// <summary>Gets or sets whether the field participates in the rendered layout.</summary>
     [HtmlAttributeName("visible")]
     public bool? Visible { get; set; }
@@ -242,6 +270,38 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (FormatCurrency is not null)
         {
             builder.FormatCurrency(FormatCurrency);
+        }
+
+        if (FormatCompact is { } compact)
+        {
+            builder.FormatCompact(compact);
+        }
+
+        if (FormatZeroText is not null)
+        {
+            builder.FormatZeroText(FormatZeroText);
+        }
+
+        // Minus is the enum's default value, so only the written-attribute set
+        // separates a declared minus from an undeclared attribute.
+        if (_writtenAttributes.Contains("format-negative"))
+        {
+            builder.FormatNegative(FormatNegative);
+        }
+
+        if (CustomizeText is not null)
+        {
+            builder.CustomizeText(CustomizeText);
+        }
+
+        if (AllowCrossGroupCalculation is { } allowCrossGroupCalculation)
+        {
+            builder.AllowCrossGroupCalculation(allowCrossGroupCalculation);
+        }
+
+        if (DisplayFolder is not null)
+        {
+            builder.DisplayFolder(DisplayFolder);
         }
 
         if (Visible is { } visible)

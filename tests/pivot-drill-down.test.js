@@ -90,3 +90,13 @@ test("createFormatter passes non-numeric values through untouched", () => {
   assert.equal(format(null), "");
   assert.equal(format(undefined), "");
 });
+
+test("the detail formatter writes zero text, parentheses and short numbers as the grid does", () => {
+  const format = drillDown.createFormatter({ decimals: 0, zeroText: "—", negative: "parentheses" }, "tr-TR");
+  assert.equal(format(0), "—");
+  assert.equal(format(-1250), "(1.250)");
+  assert.equal(format(1250), "1.250");
+
+  const compact = drillDown.createFormatter({ compact: true }, "tr-TR");
+  assert.equal(compact(1250000).replace(/\s/g, " "), "1,25 Mn");
+});

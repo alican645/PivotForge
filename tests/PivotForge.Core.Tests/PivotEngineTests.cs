@@ -993,6 +993,44 @@ public sealed class PivotEngineTests
     }
 
     [Fact]
+    public void Execute_RunningTotalAndPreviousStartAfreshInEachOuterGroup_WhenCrossGroupIsOff()
+    {
+        var orders = new[]
+        {
+            new PeriodOrder("East", 2024, "Q3", 10m),
+            new PeriodOrder("East", 2024, "Q4", 20m),
+            new PeriodOrder("East", 2025, "Q1", 30m),
+            new PeriodOrder("East", 2025, "Q2", 40m)
+        };
+        PivotResult Run(PivotShowAs showAs, bool crossGroup) => new PivotEngine().Execute(orders, new PivotRequest
+        {
+            Rows = ["Region"],
+            Columns = ["Year", "Quarter"],
+            Values = [PivotValueDefinition.Sum("Amount").As(showAs) with { AllowCrossGroupCalculation = crossGroup }]
+        });
+
+        // The default carries on from one year into the next.
+        var across = Run(PivotShowAs.RunningTotal, crossGroup: true);
+        Assert.Equal(60m, CellValue(across, "East", ["2025", "Q1"], "Amount_sum"));
+        Assert.Equal(100m, CellValue(across, "East", ["2025", "Q2"], "Amount_sum"));
+
+        var within = Run(PivotShowAs.RunningTotal, crossGroup: false);
+        Assert.Equal(10m, CellValue(within, "East", ["2024", "Q3"], "Amount_sum"));
+        Assert.Equal(30m, CellValue(within, "East", ["2024", "Q4"], "Amount_sum"));
+        Assert.Equal(30m, CellValue(within, "East", ["2025", "Q1"], "Amount_sum"));
+        Assert.Equal(70m, CellValue(within, "East", ["2025", "Q2"], "Amount_sum"));
+        // The column totals along the bottom start again with the group too.
+        Assert.Equal(30m, within.ColumnTotals
+            .Single(total => within.ColumnHeaders[total.Index].SequenceEqual(new[] { "2025", "Q1" }))
+            .Values["Amount_sum"]);
+
+        // The first column of a group has nothing before it to compare with.
+        var difference = Run(PivotShowAs.DifferenceFromPrevious, crossGroup: false);
+        Assert.Null(CellValue(difference, "East", ["2025", "Q1"], "Amount_sum"));
+        Assert.Equal(10m, CellValue(difference, "East", ["2025", "Q2"], "Amount_sum"));
+    }
+
+    [Fact]
     public void Execute_ShowAsRunningTotal_CarriesAcrossMissingCells()
     {
         var orders = new[]

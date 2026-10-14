@@ -475,4 +475,89 @@ public class PivotFieldBuilderTests
     {
         Assert.Equal("Profit_calculated", PivotValueKey.For("Profit", PivotAggregation.Calculated));
     }
+    [Fact]
+    public void TextFormatMembersAreEmittedInsideTheFormat()
+    {
+        var field = new PivotFieldBuilder()
+            .DataField("tutar")
+            .FormatCompact(true)
+            .FormatZeroText("—")
+            .FormatNegative(PivotNegativeFormat.Parentheses)
+            .Build();
+
+        var format = Assert.IsAssignableFrom<IDictionary<string, object?>>(field["format"]);
+
+        Assert.Equal(true, format["compact"]);
+        Assert.Equal("—", format["zeroText"]);
+        Assert.Equal("parentheses", format["negative"]);
+        Assert.False(format.ContainsKey("type"));
+    }
+
+    [Fact]
+    public void AZeroTextOutsideTheDataAreaIsRejectedLikeAnyFormat()
+    {
+        var builder = new PivotFieldBuilder().DataField("bolge").Area(PivotArea.Row).FormatZeroText("—");
+
+        var error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("Format", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CustomizeTextAndCrossGroupAreEmittedOnAMeasureOnlyWhenDeclared()
+    {
+        var declared = new PivotFieldBuilder()
+            .DataField("tutar")
+            .ShowAs(PivotShowAs.RunningTotal)
+            .CustomizeText("app.amountText")
+            .AllowCrossGroupCalculation(false)
+            .Build();
+
+        Assert.Equal("app.amountText", declared["customizeText"]);
+        Assert.Equal(false, declared["allowCrossGroupCalculation"]);
+
+        var waiting = new PivotFieldBuilder()
+            .DataField("adet")
+            .Area(PivotArea.Available)
+            .Role(PivotFieldRole.Measure)
+            .CustomizeText("app.countText")
+            .Build();
+
+        Assert.Equal("app.countText", waiting["customizeText"]);
+
+        var plain = new PivotFieldBuilder().DataField("tutar").Build();
+
+        Assert.False(plain.ContainsKey("customizeText"));
+        Assert.False(plain.ContainsKey("allowCrossGroupCalculation"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CustomizeTextOrCrossGroupOnADimensionThrows(bool customizeText)
+    {
+        var builder = new PivotFieldBuilder().DataField("bolge").Area(PivotArea.Row);
+        builder = customizeText ? builder.CustomizeText("app.text") : builder.AllowCrossGroupCalculation(false);
+
+        var error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains(customizeText ? "CustomizeText" : "AllowCrossGroupCalculation", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ADisplayFolderIsEmittedInAnyArea()
+    {
+        var field = new PivotFieldBuilder().DataField("bolge").Area(PivotArea.Row).DisplayFolder("Müşteri").Build();
+
+        Assert.Equal("Müşteri", field["displayFolder"]);
+        Assert.False(new PivotFieldBuilder().DataField("bolge").Build().ContainsKey("displayFolder"));
+    }
+
+    [Fact]
+    public void BlankNamesAreRefusedWhereTheyAreWritten()
+    {
+        Assert.Throws<ArgumentException>(() => new PivotFieldBuilder().CustomizeText(" "));
+        Assert.Throws<ArgumentException>(() => new PivotFieldBuilder().DisplayFolder(""));
+        Assert.Throws<ArgumentNullException>(() => new PivotFieldBuilder().FormatZeroText(null!));
+    }
 }

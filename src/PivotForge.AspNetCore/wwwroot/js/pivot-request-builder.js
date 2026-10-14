@@ -14,6 +14,9 @@
     "CountDistinct", "Median", "Var", "Variance", "StDev", "StdDev"
   ];
   const FORMAT_TYPES = ["number", "currency", "percent"];
+  // How a negative number is written: with its sign, or in parentheses as
+  // accounts write it.
+  const NEGATIVE_FORMATS = ["minus", "parentheses"];
   const SORT_ORDERS = ["Ascending", "Descending"];
   const FILTER_MODES = ["Include", "Exclude"];
   // How many arguments each operator reads out of a filter's values, and with it
@@ -373,6 +376,35 @@
       );
     }
 
+    // Null is what normalizing a field leaves for a setting that does not apply
+    // to it, so a normalized field fed back in is accepted anywhere.
+    const declared = name => field[name] !== undefined && field[name] !== null;
+
+    // A measure's own settings, which a measure still in the field list may carry
+    // the way it carries showGrandTotals.
+    if (!holdsGrandTotals && (declared("allowCrossGroupCalculation") || declared("customizeText"))) {
+      const name = declared("customizeText") ? "customizeText" : "allowCrossGroupCalculation";
+      throw new Error(
+        `"${name}" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+
+    if (declared("allowCrossGroupCalculation") && typeof field.allowCrossGroupCalculation !== "boolean") {
+      throw new Error(`"allowCrossGroupCalculation" on field "${dataField}" must be true or false.`);
+    }
+
+    // A function, or the name of one on the page -- resolved when a cell is drawn,
+    // like an event handler, so a script further down the page can define it.
+    if (declared("customizeText") && typeof field.customizeText !== "function" &&
+      (typeof field.customizeText !== "string" || field.customizeText.trim() === "")) {
+      throw new Error(`"customizeText" on field "${dataField}" must be a function or the name of one.`);
+    }
+
+    if (declared("displayFolder") &&
+      (typeof field.displayFolder !== "string" || field.displayFolder.trim() === "")) {
+      throw new Error(`"displayFolder" on field "${dataField}" must be a non-empty string.`);
+    }
+
     const areaIndex = field.areaIndex;
     if (areaIndex !== undefined &&
       (!Number.isInteger(areaIndex) || areaIndex < 0)) {
@@ -469,6 +501,12 @@
       // Null leaves the grid's own sizing and its no-wrap default alone.
       width: field.width ?? null,
       wordWrap: typeof field.wordWrap === "boolean" ? field.wordWrap : null,
+      // Default true: a running total or a comparison with the previous column
+      // walks the whole row, as it always did.
+      allowCrossGroupCalculation: holdsGrandTotals ? field.allowCrossGroupCalculation !== false : null,
+      customizeText: holdsGrandTotals ? field.customizeText ?? null : null,
+      // The field list's folder, in any area: a field keeps it wherever it goes.
+      displayFolder: declared("displayFolder") ? field.displayFolder.trim() : null,
       visible: field.visible !== false
     };
   }
@@ -582,7 +620,10 @@
         field: field.dataField,
         aggregation: field.aggregation,
         showAs: field.showAs,
-        ...(field.expression !== null ? { expression: field.expression } : {})
+        ...(field.expression !== null ? { expression: field.expression } : {}),
+        // Sent only when switched off, so every request written before it existed
+        // is unchanged.
+        ...(field.allowCrossGroupCalculation === false ? { allowCrossGroupCalculation: false } : {})
       })),
       // A filter names a level, so a grouped one has to be translated back into
       // the source field plus the interval its values are groups of -- the
@@ -701,7 +742,7 @@
   PivotForge.PivotRequestBuilder = {
     normalizeFields, normalizeFilter, buildRequest, valueKey, restricts,
     normalizeRankings, comparisonType, parseExpression,
-    AGGREGATIONS, CALCULATED, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, SORT_ORDERS, FILTER_MODES,
+    AGGREGATIONS, CALCULATED, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
     FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS
   };
 

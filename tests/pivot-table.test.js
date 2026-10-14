@@ -1090,3 +1090,66 @@ test("a field's own allowSorting and allowFiltering decide its header controls",
   // A field on neither axis has no say, so the grid's own setting stands.
   assert.equal(renderer.fieldOption(settings, "Other", "AllowFiltering"), undefined);
 });
+
+test("a format can write zero as text, negatives in parentheses and numbers in short form", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({}, { culture: "tr-TR" });
+  const settings = { ...renderer.options, emptyText: "-" };
+  const value = format => ({ key: "Amount_sum", format });
+
+  assert.equal(renderer.formatValue(0, settings, value({ zeroText: "—" })), "—");
+  // The zero text stands in for zero only; other numbers keep the grid's default.
+  assert.equal(renderer.formatValue(1234.5, settings, value({ zeroText: "—" })),
+    renderer.options.formatter.format(1234.5));
+
+  assert.equal(renderer.formatValue(-1250, settings, value({ decimals: 0, negative: "parentheses" })), "(1.250)");
+  assert.equal(renderer.formatValue(1250, settings, value({ decimals: 0, negative: "parentheses" })), "1.250");
+  assert.equal(renderer.formatValue(-1250, settings, value({ decimals: 0, negative: "minus" })), "-1.250");
+
+  // Intl puts a no-break space before the suffix.
+  const plain = text => text.replace(/\s/g, " ");
+  assert.equal(plain(renderer.formatValue(1250000, settings, value({ compact: true }))), "1,25 Mn");
+  assert.equal(plain(renderer.formatValue(3000, settings, value({ compact: true }))), "3 B");
+  assert.equal(plain(renderer.formatValue(-1250000, settings, value({ compact: true, negative: "parentheses" }))),
+    "(1,25 Mn)");
+  // An empty cell is still the grid's empty text, never the zero text.
+  assert.equal(renderer.formatValue(null, settings, value({ zeroText: "—" })), "-");
+});
+
+test("customizeText has the last word, by function or by the name of one on the page", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({}, { culture: "tr-TR" });
+  const settings = { ...renderer.options, emptyText: "-" };
+  const seen = [];
+  const definition = customizeText => ({ key: "Amount_sum", format: { decimals: 0 }, customizeText });
+
+  const text = renderer.formatValue(1500, settings, definition(info => {
+    seen.push(info);
+    return info.value > 1000 ? `${info.valueText} ▲` : null;
+  }));
+  assert.equal(text, "1.500 ▲");
+  assert.deepEqual(seen, [{ value: 1500, valueText: "1.500", valueKey: "Amount_sum" }]);
+
+  // Null keeps the formatted text.
+  assert.equal(renderer.formatValue(20, settings, definition(() => null)), "20");
+
+  globalThis.pivotTexts = { amount: ({ valueText }) => `${valueText} TL` };
+  try {
+    assert.equal(renderer.formatValue(20, settings, definition("pivotTexts.amount")), "20 TL");
+    assert.throws(() => renderer.formatValue(20, settings, definition("pivotTexts.missing")),
+      /customizeText "pivotTexts.missing" for "Amount_sum" is not a function/);
+  } finally {
+    delete globalThis.pivotTexts;
+  }
+});
+
+test("the Excel number format carries parentheses and the zero text as format sections", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const excel = format => renderer.getExcelNumberFormat({ format });
+
+  assert.equal(excel({ decimals: 0 }), "#,##0");
+  assert.equal(excel({ decimals: 0, negative: "parentheses" }), "#,##0;(#,##0)");
+  assert.equal(excel({ decimals: 0, zeroText: "—" }), '#,##0;-#,##0;"—"');
+  assert.equal(excel({ type: "currency", currency: "TRY", decimals: 0, negative: "parentheses", zeroText: 'a"b' }),
+    '₺#,##0;(₺#,##0);"a""b"');
+  // No locale-neutral Excel spelling for a short form, so the full figure stays.
+  assert.equal(excel({ decimals: 0, compact: true }), "#,##0");
+});
