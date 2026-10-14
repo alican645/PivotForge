@@ -239,6 +239,18 @@ test("search matches case-insensitively", async () => {
   assert.deepEqual(labelsOf(host), ["Ege"]);
 });
 
+test("search ignores accents and the dotted or dotless i", async () => {
+  const { picker, host } = build({ values: ["İzmir", "Iğdır", "Muğla"] });
+  await open(host, picker);
+
+  const search = byAction(host, "filter-search")[0];
+  for (const [term, expected] of [["izm", ["İzmir"]], ["igd", ["Iğdır"]], ["mug", ["Muğla"]]]) {
+    search.value = term;
+    search.dispatch("input");
+    assert.deepEqual(labelsOf(host), expected);
+  }
+});
+
 test("select all and clear act on the searched subset only", async () => {
   const { picker, host } = build();
   const applied = await open(host, picker, { selected: [] });

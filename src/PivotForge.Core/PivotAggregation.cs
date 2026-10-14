@@ -23,5 +23,13 @@ public enum PivotAggregation
     /// <summary>Calculates the sample variance (n - 1), as Excel's <c>VAR.S</c>. Empty below two values.</summary>
     Variance,
     /// <summary>Calculates the sample standard deviation (n - 1), as Excel's <c>STDEV.S</c>. Empty below two values.</summary>
-    StandardDeviation
+    StandardDeviation,
+    /// <summary>Calculates the population variance (n), as Excel's <c>VAR.P</c>. Empty without values.</summary>
+    VariancePopulation,
+    /// <summary>Calculates the population standard deviation (n), as Excel's <c>STDEV.P</c>. Empty without values.</summary>
+    StandardDeviationPopulation,
+    /// <summary>Returns the first numeric value the source yields for the cell, in source order.</summary>
+    First,
+    /// <summary>Returns the last numeric value the source yields for the cell, in source order.</summary>
+    Last
 }

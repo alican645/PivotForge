@@ -1418,6 +1418,35 @@ select {
   opacity: 0.6;
 }
 
+/* Full screen: the toolbar across the top of the window and the grid filling
+   the rest of it, above everything else on the page. */
+.pivot-toolbar.pivot-is-fullscreen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1000;
+  padding: 6px 12px;
+  background: var(--pt-panel);
+  border-bottom: 1px solid var(--pt-border);
+}
+
+.pivot-table.pivot-is-fullscreen {
+  position: fixed;
+  top: var(--pivot-toolbar-height, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  max-height: none;
+}
+
+/* The page behind it must not scroll under the grid. */
+.pivot-has-fullscreen,
+.pivot-has-fullscreen body {
+  overflow: hidden;
+}
+
 /* PivotWidget's load panel. The grid's container is its own scroll box, so the
    panel is a zero-height sticky first child: it stays in view however far the
    table is scrolled, and takes no room from the table beneath it. */

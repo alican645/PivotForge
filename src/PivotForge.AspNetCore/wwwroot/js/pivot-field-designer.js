@@ -1,7 +1,13 @@
 (function (root) {
   const PivotForge = root.PivotForge ??= {};
 
-  const AGGREGATIONS = ["sum", "count", "average", "min", "max", "countDistinct", "median", "variance", "standardDeviation"];
+  // Search text compared without case, accents or the dotted/dotless i:
+  // "isk" finds "İskonto", "satis" finds "Satış", "it" finds "Item". Lowered
+  // the Turkish way, so I and İ both reach i once the marks are gone.
+  const foldSearch = text => String(text ?? "").toLocaleLowerCase("tr")
+    .normalize("NFD").replace(/\p{M}/gu, "").replace(/ı/g, "i");
+
+  const AGGREGATIONS = ["sum", "count", "average", "min", "max", "countDistinct", "median", "variance", "standardDeviation", "variancePopulation", "standardDeviationPopulation", "first", "last"];
 
   const DEFAULT_LABELS = {
     available: "Fields",
@@ -78,7 +84,11 @@
       countDistinct: "Distinct count",
       median: "Median",
       variance: "Variance",
-      standardDeviation: "Standard deviation"
+      standardDeviation: "Standard deviation",
+      variancePopulation: "Variance (population)",
+      standardDeviationPopulation: "Standard deviation (population)",
+      first: "First value",
+      last: "Last value"
     },
     calculatedField: "Calculated field",
     addCalculatedField: "Add calculated field",
@@ -189,15 +199,17 @@
   ];
   // How a field in the builder is summarized, named by the aggregations the
   // designer already has words for, and written as the formula's functions.
-  const FORMULA_SUMMARIES = ["sum", "average", "count", "min", "max", "countDistinct", "median", "variance", "standardDeviation"];
+  const FORMULA_SUMMARIES = ["sum", "average", "count", "min", "max", "countDistinct", "median", "variance", "standardDeviation", "variancePopulation", "standardDeviationPopulation", "first", "last"];
   const SUMMARY_FUNCTIONS = {
     sum: "Sum", average: "Avg", count: "Count", min: "Min", max: "Max",
-    countDistinct: "CountDistinct", median: "Median", variance: "Var", standardDeviation: "StDev"
+    countDistinct: "CountDistinct", median: "Median", variance: "Var", standardDeviation: "StDev",
+    variancePopulation: "VarP", standardDeviationPopulation: "StDevP", first: "First", last: "Last"
   };
   const FUNCTION_SUMMARIES = {
     sum: "sum", avg: "average", average: "average", count: "count", min: "min", max: "max",
     countdistinct: "countDistinct", median: "median",
-    var: "variance", variance: "variance", stdev: "standardDeviation", stddev: "standardDeviation"
+    var: "variance", variance: "variance", stdev: "standardDeviation", stddev: "standardDeviation",
+    varp: "variancePopulation", stdevp: "standardDeviationPopulation", first: "first", last: "last"
   };
 
   function operatorToken(value) {
@@ -2037,13 +2049,13 @@
     }
 
     renderAvailableChips(body) {
-      const term = this.searchTerm.trim().toLowerCase();
+      const term = foldSearch(this.searchTerm.trim());
       const names = this.namesIn("available").filter(name => {
         if (!term) {
           return true;
         }
         const caption = this.state.field(name).caption ?? "";
-        return caption.toLowerCase().includes(term);
+        return foldSearch(caption).includes(term);
       });
 
       // Fields with no folder first, then each folder in the order the catalog

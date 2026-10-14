@@ -21,7 +21,8 @@ for (const path of PAGES) {
 
       const items = await toolbar.locator("button").evaluateAll(buttons =>
         buttons.map(button => button.dataset.toolbarItem));
-      expect(items).toEqual(["excel", "csv", "print", "expandAll", "collapseAll"]);
+      expect(items).toEqual(
+        ["excel", "csv", "print", "expandAll", "collapseAll", "saveReport", "openReport", "fullscreen"]);
       expect(page.errors).toEqual([]);
     });
 

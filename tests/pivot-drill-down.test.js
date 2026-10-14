@@ -100,3 +100,19 @@ test("the detail formatter writes zero text, parentheses and short numbers as th
   const compact = drillDown.createFormatter({ compact: true }, "tr-TR");
   assert.equal(compact(1250000).replace(/\s/g, " "), "1,25 Mn");
 });
+
+test("search ignores case, accents and the dotted or dotless i", () => {
+  const rows = [
+    { region: "İzmir", category: "Çimento", amount: 1 },
+    { region: "Iğdır", category: "Satış", amount: 2 },
+    { region: "Item", category: "Beton", amount: 3 }
+  ];
+  const regions = term => drillDown.filterRecords(rows, columns, term).map(row => row.region);
+
+  assert.deepEqual(regions("izm"), ["İzmir"]);
+  assert.deepEqual(regions("IZM"), ["İzmir"]);
+  assert.deepEqual(regions("igd"), ["Iğdır"]);
+  assert.deepEqual(regions("cimento"), ["İzmir"]);
+  assert.deepEqual(regions("satis"), ["Iğdır"]);
+  assert.deepEqual(regions("ite"), ["Item"]);
+});

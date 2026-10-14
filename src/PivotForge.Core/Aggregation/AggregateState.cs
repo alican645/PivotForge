@@ -20,6 +20,8 @@ internal sealed class AggregateState(MeasureInput input)
     private int _count;
     private decimal? _min;
     private decimal? _max;
+    private decimal? _first;
+    private decimal? _last;
 
     public void Add(object? value)
     {
@@ -65,8 +67,16 @@ internal sealed class AggregateState(MeasureInput input)
             case PivotAggregation.Max:
                 _max = _max is null || numericValue > _max.Value ? numericValue : _max;
                 break;
+            case PivotAggregation.First:
+                _first ??= numericValue;
+                break;
+            case PivotAggregation.Last:
+                _last = numericValue;
+                break;
             case PivotAggregation.Variance:
             case PivotAggregation.StandardDeviation:
+            case PivotAggregation.VariancePopulation:
+            case PivotAggregation.StandardDeviationPopulation:
                 _count++;
                 var deviation = numericValue - _mean;
                 _mean += deviation / _count;
@@ -96,6 +106,10 @@ internal sealed class AggregateState(MeasureInput input)
             PivotAggregation.CountDistinct => _distinct!.Count,
             PivotAggregation.Variance => _count < 2 ? null : _squaredDeviations / (_count - 1),
             PivotAggregation.StandardDeviation => _count < 2 ? null : SquareRoot(_squaredDeviations / (_count - 1)),
+            PivotAggregation.VariancePopulation => _count == 0 ? null : _squaredDeviations / _count,
+            PivotAggregation.StandardDeviationPopulation => _count == 0 ? null : SquareRoot(_squaredDeviations / _count),
+            PivotAggregation.First => _first,
+            PivotAggregation.Last => _last,
             _ => throw new InvalidOperationException($"Unsupported pivot aggregation '{input.Aggregation}'.")
         };
     }
