@@ -281,10 +281,10 @@ Açık kalanlar:
 | Tabular / Compact düzen | ✅ `layout-mode` |
 | Satır başlığı ağaç düzeni (`rowHeaderLayout: tree`) | ✅ `layout-mode="Tree"` |
 | `showTotalsPrior` — toplamları önde göster | ✅ varsayılan önde; `totals-position="After"` ile altta |
-| `showBorders` | ❌ |
+| `showBorders` | ✅ `show-borders="true\|false"` |
 | Sütun genişliği sürükleme | ✅ |
 | Genişlet / daralt | ✅ motorda, ⚠️ bildirimi yok |
-| `wordWrapEnabled` | ❌ |
+| `wordWrapEnabled` | ✅ alan başına `word-wrap` |
 | `rtlEnabled` | ❌ |
 | Yükleme göstergesi (`loadPanel`) | ✅ `load-panel`, varsayılan açık |
 | Isı haritası (PivotTable.js'teki heatmap renderer) | ✅ `heatmap="Table\|Rows\|Columns"` |
@@ -293,8 +293,9 @@ Açık kalanlar:
 - [x] Toplamın konumu — `totals-position="Before|After"`
 - [x] Paketlenmiş yükleme göstergesi
 - [x] Isı haritası — `heatmap`, her ölçü kendi ölçeğinde, toplamlar boyanmıyor
+- [x] Kenarlıklar — `show-borders`: `true` dış çerçeve, `false` gövdede çizgi yok
+- [x] `word-wrap` — alan başına, bkz. Bölüm 1
 - [ ] RTL desteği
-- [ ] `word-wrap`
 
 ---
 

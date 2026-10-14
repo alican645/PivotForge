@@ -164,6 +164,13 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("repeat-row-labels")]
     public bool? RepeatRowLabels { get; set; }
 
+    /// <summary>
+    /// Gets or sets the cell lines: true frames the grid, false keeps only the header's lines.
+    /// Left unset, the grid keeps its default lines between cells.
+    /// </summary>
+    [HtmlAttributeName("show-borders")]
+    public bool? ShowBorders { get; set; }
+
     /// <summary>Gets or sets the narrowest a column may be, in pixels.</summary>
     [HtmlAttributeName("min-column-width")]
     public int? MinColumnWidth { get; set; }
@@ -426,6 +433,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (RepeatRowLabels is { } repeatRowLabels)
         {
             builder.RepeatRowLabels(repeatRowLabels);
+        }
+
+        if (ShowBorders is { } showBorders)
+        {
+            builder.ShowBorders(showBorders);
         }
 
         if (MinColumnWidth is { } minColumnWidth)

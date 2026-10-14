@@ -360,6 +360,52 @@ test("clicking a column field header orders its values and flips on the next cli
   PivotForge.PivotTableRenderer = previous;
 });
 
+// A row field's own order -- declared, or picked in the designer's sort panel --
+// reaches the renderer so its arrow can show it, and the first header click
+// turns that order around instead of repeating it.
+test("a row field's own order marks its arrow and the first click reverses it", async () => {
+  const captured = {};
+  class FakeRenderer {
+    constructor(container, options) { this.options = options; Object.assign(captured, options); }
+    render() {}
+  }
+  const previous = PivotForge.PivotTableRenderer;
+  PivotForge.PivotTableRenderer = FakeRenderer;
+
+  const calls = [];
+  const widget = PivotForge.create(createContainer(), {
+    fields: [
+      { caption: "Ürün", dataField: "urun", area: "row", sortOrder: "Ascending", sortByValueKey: "tutar_sum" },
+      { caption: "Bölge", dataField: "bolge", area: "row" },
+      { caption: "Yıl", dataField: "yil", area: "column", sortByValueKey: "tutar_sum" },
+      fields[1]
+    ],
+    autoLoad: false,
+    fetchImpl: async (url, init) => {
+      calls.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ cells: [], grandTotals: {} }) };
+    }
+  });
+  await widget.refresh();
+
+  // A value sort declared without a direction ascends, as the request says.
+  assert.deepEqual(captured.rowFieldSorts, ["Ascending", null]);
+  assert.deepEqual(captured.columnFieldSorts, ["Ascending"]);
+
+  captured.onSortRequested({ mode: "RowLabel", field: "urun" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls.at(-1).rowSort, { mode: "RowLabel", field: "urun", direction: "Descending" });
+
+  // A field with no order of its own starts ascending, as before.
+  widget.rowSort = null;
+  captured.onSortRequested({ mode: "RowLabel", field: "bolge" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.at(-1).rowSort.direction, "Ascending");
+
+  widget.dispose();
+  PivotForge.PivotTableRenderer = previous;
+});
+
 // "Sort columns by this row" orders every column level by that row's value.
 // It is a widget-level sort like the row sort, flips on a second click of the
 // same row, and gives way to a label sort picked on a column field.

@@ -665,6 +665,7 @@ public class PivotTagHelperTests
                 ShowGrandTotal = false,
                 ContextMenu = false,
                 RepeatRowLabels = true,
+                ShowBorders = false,
                 MinColumnWidth = 90,
                 MaxColumnWidth = 300,
                 EmptyText = "",
@@ -678,6 +679,7 @@ public class PivotTagHelperTests
         Assert.False(renderer.GetProperty("showGrandTotal").GetBoolean());
         Assert.False(renderer.GetProperty("contextMenu").GetBoolean());
         Assert.True(renderer.GetProperty("repeatRowLabels").GetBoolean());
+        Assert.False(renderer.GetProperty("showBorders").GetBoolean());
         Assert.Equal(90, renderer.GetProperty("minColumnWidth").GetInt32());
         Assert.Equal(300, renderer.GetProperty("maxColumnWidth").GetInt32());
         Assert.Equal("", renderer.GetProperty("emptyText").GetString());
@@ -698,6 +700,7 @@ public class PivotTagHelperTests
         Assert.False(renderer.TryGetProperty("layoutMode", out _));
         Assert.False(renderer.TryGetProperty("heatmap", out _));
         Assert.False(renderer.TryGetProperty("totalsPosition", out _));
+        Assert.False(renderer.TryGetProperty("showBorders", out _));
     }
 
     [Theory]

@@ -1481,6 +1481,23 @@ select {
   background: var(--pt-panel);
 }
 
+/* show-borders="true": the cells already draw the lines on their right and
+   bottom, so the table closes the frame with the two edges they leave open. */
+.pivot-table__table.is-bordered {
+  border-top: 1px solid var(--pt-border);
+  border-left: 1px solid var(--pt-border);
+}
+
+/* show-borders="false": the lines go transparent rather than away, so no
+   cell changes size and the sticky offsets measured from them still hold.
+   The header keeps its lines; that is where the reader looks for structure. */
+.pivot-table__table.is-borderless tbody th,
+.pivot-table__table.is-borderless tbody td,
+.pivot-table__table.is-borderless .pivot-table__subtotal-row th,
+.pivot-table__table.is-borderless .pivot-table__subtotal-row td {
+  border-color: transparent !important;
+}
+
 .pivot-table__table [data-selection-target] {
   cursor: pointer;
 }

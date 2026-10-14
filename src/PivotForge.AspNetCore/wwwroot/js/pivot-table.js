@@ -319,6 +319,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // in ("Ascending", "Descending"), or null for the order the data arrived
       // in. Only marks the field header's arrow; the ordering is the server's.
       columnFieldSorts: [],
+      // The row axis' half of the above, shown only while no row sort
+      // (sortState) is in place: a row sort replaces every field's own order.
+      rowFieldSorts: [],
       // Parallel to rowFields, following rowFieldLabels' shape. A false entry
       // means that row field starts collapsed, or produces no total.
       rowFieldExpanded: null,
@@ -384,6 +387,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       onSelectionChanged: null,
       layoutMode: "tabular",
       repeatRowLabels: false,
+      // Cell lines: null keeps the default grid (lines between cells, none
+      // round the outside), true closes it with an outer frame, false takes
+      // the lines between body cells away and keeps the header's.
+      showBorders: null,
       minColumnWidth: 72,
       maxColumnWidth: 420,
       // Left null so Intl falls back to the reader's own locale: a package that
@@ -438,6 +445,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     table.className = settings.layoutMode === "tree"
       ? "pivot-table__table is-compact is-tree"
       : `pivot-table__table is-${settings.layoutMode}`;
+    if (settings.showBorders === true || settings.showBorders === false) {
+      table.classList.add(settings.showBorders ? "is-bordered" : "is-borderless");
+    }
     // The renderer already ships the whole grid keyboard contract — arrow keys,
     // Enter, Ctrl+C, a roving tabindex and cell selection. Declaring the role is
     // what makes that contract discoverable, and what makes the aria-selected
@@ -2820,7 +2830,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
   // The direction a header's own sort is in, or null when it is not sorted. A
   // column field's order is not the row sort: it rides on the field itself, so
-  // it is read from what the host says each column level is sorted by.
+  // it is read from what the host says each column level is sorted by. A row
+  // field's own order is read the same way until a row sort takes over.
   activeSortDirection(request, settings) {
     if (request?.mode === "ColumnLabel") {
       // A value sort on the columns stands in for their label order.
@@ -2830,6 +2841,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       const level = (settings.columnFields ?? []).indexOf(request.field);
       return level >= 0 ? settings.columnFieldSorts?.[level] ?? null : null;
+    }
+
+    if (request?.mode === "RowLabel" && !settings.sortState) {
+      const level = (settings.rowFields ?? []).indexOf(request.field);
+      return level >= 0 ? settings.rowFieldSorts?.[level] ?? null : null;
     }
 
     if (request?.mode === "ColumnTotalValue") {
