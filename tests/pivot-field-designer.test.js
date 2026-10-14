@@ -2375,3 +2375,65 @@ test("the field search finds İ and accented captions from plain letters", () =>
   designer.render();
   assert.deepEqual(listed(host), ["[Müşteri]", "City"]);
 });
+
+function buildWithValueFilters(active = []) {
+  const calls = [];
+  const widget = {
+    options: {},
+    valueFilters: active,
+    update: async () => {},
+    setValueFilter: async (field, filter) => {
+      calls.push([field, filter]);
+      widget.valueFilters = filter ? [{ field, ...filter }] : [];
+    }
+  };
+  const state = new PivotForge.PivotLayoutState(catalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget });
+  return { designer, host, calls, widget };
+}
+
+test("a row field's settings offer a value filter that applies a complete condition", async () => {
+  const { host, calls } = buildWithValueFilters();
+  openSettings(host, "Region");
+
+  const apply = () => findByAction(settingsPanel(), "value-filter-apply");
+  assert.equal(apply().disabled, true);
+
+  choice("value-filter-operator", "Between").dispatch("click", {});
+  const low = findByAction(settingsPanel(), "value-filter-value");
+  low.value = "100";
+  low.dispatch("input", {});
+  // A range needs both bounds before it can be applied.
+  assert.equal(apply().disabled, true);
+  const high = findByAction(settingsPanel(), "value-filter-value2");
+  high.value = "500";
+  high.dispatch("input", {});
+  assert.equal(apply().disabled, false);
+
+  apply().dispatch("click", {});
+  await Promise.resolve();
+  assert.deepEqual(calls, [["Region", { operator: "Between", value: 100, value2: 500, valueKey: "Amount_sum" }]]);
+});
+
+test("an active value filter is shown and can be removed", async () => {
+  const { host, calls } = buildWithValueFilters([{ field: "Region", operator: "LessThan", value: 20 }]);
+  openSettings(host, "Region");
+
+  assert.equal(selected("value-filter-operator").dataset.value, "LessThan");
+  assert.equal(findByAction(settingsPanel(), "value-filter-value").value, "20");
+
+  findByAction(settingsPanel(), "value-filter-clear").dispatch("click", {});
+  await Promise.resolve();
+  assert.deepEqual(calls, [["Region", null]]);
+});
+
+test("no value filter on a column field, or with a widget that cannot apply one", () => {
+  const { host } = buildWithValueFilters();
+  openSettings(host, "Year");
+  assert.equal(findByAction(settingsPanel(), "value-filter-apply"), null);
+
+  const plain = build();
+  openSettings(plain.host, "Region");
+  assert.equal(findByAction(settingsPanel(), "value-filter-apply"), null);
+});

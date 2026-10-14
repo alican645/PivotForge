@@ -31,6 +31,9 @@ public class PivotForgeRequest
     /// <summary>Gets the row header levels limited to their highest or lowest ranking groups.</summary>
     public IReadOnlyList<PivotTopN> TopN { get; init; } = [];
 
+    /// <summary>Gets the row header levels whose groups are kept only when their value meets a condition.</summary>
+    public IReadOnlyList<PivotValueFilter> ValueFilters { get; init; } = [];
+
     internal PivotRequest ToPivotRequest() => new()
     {
         HideEmptySummaryCells = HideEmptySummaryCells,
@@ -39,6 +42,7 @@ public class PivotForgeRequest
         Values = Values,
         Filters = Filters,
         TopN = TopN,
+        ValueFilters = ValueFilters,
         RowSort = RowSort,
         FieldSorts = FieldSorts
     };

@@ -775,3 +775,28 @@ test("customizeText and allowCrossGroupCalculation belong to measures, displayFo
   // Null is what normalizing leaves on a field these do not apply to, so it is no declaration.
   assert.doesNotThrow(() => normalizeFields([{ dataField: "urun", area: "row", customizeText: null }]));
 });
+
+test("value filters are checked and sent only when there are any", () => {
+  const plain = PivotRequestBuilder.buildRequest(salesFields);
+  assert.equal("valueFilters" in plain, false);
+
+  const request = PivotRequestBuilder.buildRequest(salesFields, {
+    valueFilters: [
+      { field: "urun", operator: "GreaterThan", value: "1000" },
+      { field: "urun", operator: "Between", value: 10, value2: 20, valueKey: "tutar_sum" }
+    ]
+  });
+  assert.deepEqual(request.valueFilters, [
+    { field: "urun", operator: "GreaterThan", value: 1000 },
+    { field: "urun", operator: "Between", value: 10, value2: 20, valueKey: "tutar_sum" }
+  ]);
+
+  const { normalizeValueFilters } = PivotRequestBuilder;
+  assert.equal(normalizeValueFilters([{ field: "urun", value: 5 }])[0].operator, "GreaterThan");
+  assert.throws(() => normalizeValueFilters([{ operator: "GreaterThan", value: 1 }]), /requires a "field"/);
+  assert.throws(() => normalizeValueFilters([{ field: "urun", operator: "Over", value: 1 }]), /Unknown value filter operator "Over"/);
+  assert.throws(() => normalizeValueFilters([{ field: "urun", value: "" }]), /requires a number "value"/);
+  assert.throws(() => normalizeValueFilters([{ field: "urun", operator: "Between", value: 1 }]), /requires a number "value2"/);
+  assert.throws(() => normalizeValueFilters([{ field: "urun", operator: "Equal", value: 1, value2: 2 }]),
+    /compares one value/);
+});

@@ -293,6 +293,7 @@ Four child elements declare the state a grid starts in. Each has a
 | --- | --- | --- |
 | `pivot-filter` | `Filter(string, params string[])`, `Filter(string, PivotFilterMode, params string[])`, `Filter(string, PivotFilterMode, PivotFilterOperator, params string[])` | `values` is comma separated and entries are trimmed. A value containing a comma has to go through the builder. `type="Exclude"` turns the list into the values to drop; the default `Include` keeps only the listed ones. `operator` turns the list into a condition's arguments — see [Filter operators](#filter-operators). |
 | `pivot-top-n` | `TopN(string, int)`, `TopN(string, int, string?, PivotTopNMode)` | Repeatable, one per row level. Runs after aggregation — see [Top-N](#top-n). |
+| `pivot-value-filter` | `ValueFilter(string, PivotValueFilterOperator, decimal, decimal?, string?)` | Repeatable, one per row level. Keeps the groups whose value meets a condition — see [Value filters](#value-filters). |
 | `pivot-sort` | `RowSort(PivotSort)` | At most one per grid — rows order one way, so a second is refused rather than merged. |
 | `pivot-conditional-rule` | `ConditionalRule(...)` | Repeatable. Later rules win over earlier ones on the same cell. |
 
@@ -644,6 +645,40 @@ endpoint cache a ranked result.
 
 A ranking naming no row level, keeping fewer than one group, or ranked by an
 undeclared value is refused rather than quietly showing every row.
+
+#### Value filters
+
+`pivot-value-filter` keeps the groups of one row level whose summary value meets a
+condition — "regions whose sales exceed 10,000":
+
+```html
+<pivot-value-filter field="Region" operator="GreaterThan" value="10000" />
+<pivot-value-filter field="Category" operator="Between" value="100" value2="500" value-key="Amount_sum" />
+```
+
+| Attribute | Default | Meaning |
+| --- | --- | --- |
+| `field` | required | The row field, or `field:interval` level key, being filtered. |
+| `operator` | `GreaterThan` | `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`, `Equal`, `NotEqual`, `Between`, `NotBetween`. |
+| `value` | required | The value compared against; the lower bound of a range. |
+| `value2` | — | The upper bound, required by `Between` / `NotBetween` and refused by the rest. Both bounds are included. |
+| `value-key` | first declared value | The measure compared, as `Field_aggregation`. |
+
+It works the way a ranking does: after aggregation, each group of an inner level on
+its own, and the groups it drops leave the result, totals included. A group with no
+value meets no condition and is dropped. A ranking on the same level is taken among
+the groups the filter keeps, so a filter and a `Top 3` mean "the top three of those
+over 10,000".
+
+The reader sets one too: a row field's settings in the designer carry a **Value
+filter** section — the value to compare (when the grid has more than one), the
+condition, the bound or bounds, **Apply** and **Remove value filter**. A value-filtered
+field lights its header funnel. In JavaScript: `valueFilters` declares them
+(`{ field, operator, value, value2?, valueKey? }`), `setValueFilter(field, filter)`
+sets or, with `null`, removes one, `clearValueFilters()` removes them all, and
+`getState().valueFilters` lists them. They are stored with the view (`state-storing`,
+report files). A filter on a field that leaves the rows, or comparing a value no longer
+on the grid, is kept but not sent until the field or the value comes back.
 
 A chip in the **Filters** zone carries a third control, `▼`, which opens the packaged `PivotFilterPicker`. The button is rendered only when the widget exposes `fieldValues()` and `pivot-filter-picker.js` was loaded, so an older host gets no control rather than a broken one. Once a filter accepts fewer than all values, its chip shows the count — `Çeyrek (3)` — because a Filters zone that shows only field names gives no clue that anything is being restricted.
 

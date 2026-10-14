@@ -208,6 +208,10 @@ Top-N.
       `Exclude` modu hangi operatör kullanıldıysa onu olumsuzluyor. Seçicide
       koşul satırı, `<pivot-filter operator="...">` ile bildirim, gruplu
       seviyelerde de çalışıyor
+- [x] Değer filtresi — `<pivot-value-filter field="Region" operator="GreaterThan" value="10000" />`;
+      tasarımcıda satır alanı ayarlarında "Değer filtresi" bölümü. Top-N gibi toplamadan sonra
+      çalışıyor, elenen gruplar toplamlardan da düşüyor; aynı seviyedeki Top-N kalan gruplar
+      arasında sıralıyor. Yalnızca satır seviyeleri
 - [x] Top-N — `<pivot-top-n field="Region" count="3" />`. Diğer filtrelerden farkı
       **toplama sonrası** çalışması: karşılaştırdığı gruplar kayıtlar toplanana
       kadar var olmuyor. Üç karar: sayı tablo genelinde değil **her üst grubun

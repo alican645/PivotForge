@@ -71,6 +71,21 @@ var byColumn = PivotSort.RowColumnValue(
 
 Only row order changes. Column headers keep their calculated order.
 
+## Value Filters
+
+`ValueFilters` keep the groups of a row level whose summary value meets a condition. They run after aggregation, like `TopN`, and the groups they drop leave the totals too:
+
+```csharp
+var request = new PivotRequest
+{
+    Rows = ["Region"],
+    Values = [PivotValueDefinition.Sum("Amount")],
+    ValueFilters = [new PivotValueFilter("Region", PivotValueFilterOperator.GreaterThan, 10_000m)]
+};
+```
+
+`Between` and `NotBetween` take `Value2` as the upper bound, both bounds included; `ValueKey` picks the value compared (the first declared one otherwise). A group with no value is dropped, and a `TopN` on the same level ranks only the groups the filter keeps. A filter naming no row level, comparing an undeclared value, or a range without its upper bound is refused.
+
 ## Show Values As
 
 ```csharp

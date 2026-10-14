@@ -35,6 +35,11 @@ public sealed class PivotRequest
     /// been summed, which is what separates them from <see cref="Filters"/>.</remarks>
     public IReadOnlyList<PivotTopN> TopN { get; init; } = [];
 
+    /// <summary>Gets the row header levels whose groups are kept only when their value meets a condition.</summary>
+    /// <remarks>Like <see cref="TopN"/> these run after aggregation; a ranking on the same level is
+    /// taken among the groups these keep.</remarks>
+    public IReadOnlyList<PivotValueFilter> ValueFilters { get; init; } = [];
+
     /// <summary>Gets the per-field ordering of individual row and column header levels.</summary>
     /// <remarks><see cref="RowSort"/> orders the row axis as a whole and takes precedence over these
     /// on that axis; the column axis is governed by these alone. A sort carrying a value key orders

@@ -30,6 +30,7 @@ public sealed class PivotGridBuilder : IHtmlContent
     // Initial state the grid starts with, rather than settings it is configured by.
     private readonly List<Dictionary<string, object?>> _filters = [];
     private readonly List<Dictionary<string, object?>> _topN = [];
+    private readonly List<Dictionary<string, object?>> _valueFilters = [];
     private readonly List<Dictionary<string, object?>> _conditionalRules = [];
     private readonly SortedDictionary<string, string> _drillDownLabels = new(StringComparer.Ordinal);
 
@@ -623,6 +624,63 @@ public sealed class PivotGridBuilder : IHtmlContent
         return this;
     }
 
+    /// <summary>Keeps the groups of a row header level whose summary value meets a condition.</summary>
+    /// <remarks>
+    /// Like <see cref="TopN(string, int, string, PivotTopNMode)"/> this runs after aggregation --
+    /// "regions whose sales exceed 10,000" -- and the groups it drops leave the result, totals
+    /// included. A group with no value is dropped. A ranking on the same level is taken among
+    /// the groups this keeps.
+    /// </remarks>
+    /// <param name="field">The row field, or <c>field:interval</c> level key, being filtered.</param>
+    /// <param name="op">How each group's value is compared.</param>
+    /// <param name="value">The value compared against; the lower bound of a range.</param>
+    /// <param name="value2">The upper bound for <see cref="PivotValueFilterOperator.Between"/> and
+    /// <see cref="PivotValueFilterOperator.NotBetween"/>; must be null otherwise.</param>
+    /// <param name="valueKey">The value key compared, as <c>Field_aggregation</c>. Null uses the
+    /// first declared value.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The field name is blank, or a range lacks its upper
+    /// bound, or a single comparison carries one.</exception>
+    public PivotGridBuilder ValueFilter(
+        string field,
+        PivotValueFilterOperator op,
+        decimal value,
+        decimal? value2 = null,
+        string? valueKey = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(field);
+
+        var range = op is PivotValueFilterOperator.Between or PivotValueFilterOperator.NotBetween;
+        if (range != value2.HasValue)
+        {
+            throw new ArgumentException(
+                range
+                    ? $"A {op} value filter needs value2, its upper bound."
+                    : $"A {op} value filter compares one value; value2 is only for Between and NotBetween.",
+                nameof(value2));
+        }
+
+        var filter = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["field"] = field,
+            ["operator"] = op.ToString(),
+            ["value"] = value
+        };
+
+        if (value2 is { } upper)
+        {
+            filter["value2"] = upper;
+        }
+
+        if (!string.IsNullOrWhiteSpace(valueKey))
+        {
+            filter["valueKey"] = valueKey;
+        }
+
+        _valueFilters.Add(filter);
+        return this;
+    }
+
     private static int RequiredArguments(PivotFilterOperator op) => op switch
     {
         PivotFilterOperator.Blank => 0,
@@ -797,6 +855,11 @@ public sealed class PivotGridBuilder : IHtmlContent
         if (_topN.Count > 0)
         {
             payload["topN"] = _topN;
+        }
+
+        if (_valueFilters.Count > 0)
+        {
+            payload["valueFilters"] = _valueFilters;
         }
 
         // Conditional rules are drawn by the renderer, so they ride with the other

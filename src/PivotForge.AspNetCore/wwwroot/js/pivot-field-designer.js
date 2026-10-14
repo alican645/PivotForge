@@ -53,6 +53,21 @@
     sortDescending: "Descending",
     sortBy: "Sort by",
     sortByLabel: "Its own labels",
+    valueFilter: "Value filter",
+    valueFilterOperators: {
+      GreaterThan: "Greater than",
+      GreaterThanOrEqual: "At least",
+      LessThan: "Less than",
+      LessThanOrEqual: "At most",
+      Equal: "Equal to",
+      NotEqual: "Not equal to",
+      Between: "Between",
+      NotBetween: "Not between"
+    },
+    valueFilterValue: "Value",
+    valueFilterValue2: "and",
+    valueFilterApply: "Apply",
+    valueFilterClear: "Remove value filter",
     moveUp: "Move up",
     moveDown: "Move down",
     removeField: "Remove field",
@@ -1082,6 +1097,125 @@
       body.appendChild(measure);
     }
 
+    // Filtering is the widget's to allow, and then the field's; a widget without
+    // the value filter API is one built before it existed.
+    canValueFilter(name) {
+      return this.widget?.options?.allowFiltering !== false &&
+        this.state.field(name).allowFiltering !== false &&
+        typeof this.widget?.setValueFilter === "function";
+    }
+
+    // "Regions whose sales exceed 10,000": which value, how it is compared and
+    // against what. Picks change a draft kept on the designer until Apply sends
+    // it, so a half-typed bound never reaches the server.
+    appendValueFilterSection(body, name) {
+      const document = root.document;
+      const { VALUE_FILTER_OPERATORS } = PivotForge.PivotRequestBuilder;
+      const valueKeys = this.state.valueKeys();
+      const values = this.state.getState().values;
+      const active = (this.widget.valueFilters ?? []).find(filter => filter.field === name) ?? null;
+
+      if (this.valueFilterDraft?.field !== name) {
+        this.valueFilterDraft = {
+          field: name,
+          operator: active?.operator ?? "GreaterThan",
+          value: active ? String(active.value) : "",
+          value2: active?.value2 !== undefined ? String(active.value2) : "",
+          valueKey: valueKeys.includes(active?.valueKey) ? active.valueKey : valueKeys[0] ?? null
+        };
+      }
+
+      const draft = this.valueFilterDraft;
+      const range = draft.operator === "Between" || draft.operator === "NotBetween";
+      const section = this.settingsSection(this.labels.valueFilter);
+      const redraw = () => this.renderSettings(name);
+
+      // Only worth asking when there is more than one value to compare.
+      if (valueKeys.length > 1) {
+        this.settingsChoices(
+          section,
+          "value-filter-by",
+          values.map((value, index) => ({ value: valueKeys[index], label: this.valueLabel(value) })),
+          draft.valueKey,
+          picked => { draft.valueKey = picked; redraw(); }
+        ).classList.add("is-stacked");
+      }
+
+      this.settingsChoices(
+        section,
+        "value-filter-operator",
+        VALUE_FILTER_OPERATORS.map(operator => ({ value: operator, label: this.labels.valueFilterOperators[operator] })),
+        draft.operator,
+        picked => { draft.operator = picked; redraw(); });
+
+      const bounds = document.createElement("div");
+      bounds.className = "pivot-value-settings__row";
+      const bound = (action, member, label) => {
+        const input = document.createElement("input");
+        input.className = "pivot-value-settings__input";
+        input.setAttribute("type", "number");
+        input.setAttribute("aria-label", label);
+        input.setAttribute("placeholder", label);
+        input.dataset.action = action;
+        input.value = draft[member];
+        input.addEventListener("input", () => {
+          draft[member] = input.value;
+          apply.disabled = !complete();
+        });
+        bounds.appendChild(input);
+      };
+      const complete = () => draft.value.trim() !== "" && Number.isFinite(Number(draft.value)) &&
+        (!range || (draft.value2.trim() !== "" && Number.isFinite(Number(draft.value2))));
+
+      const apply = document.createElement("button");
+      apply.className = "pivot-value-settings__choice";
+      apply.setAttribute("type", "button");
+      apply.dataset.action = "value-filter-apply";
+      apply.textContent = this.labels.valueFilterApply;
+      apply.addEventListener("click", async () => {
+        if (!complete()) {
+          return;
+        }
+
+        await this.widget.setValueFilter(name, {
+          operator: draft.operator,
+          value: Number(draft.value),
+          ...(range ? { value2: Number(draft.value2) } : {}),
+          ...(draft.valueKey ? { valueKey: draft.valueKey } : {})
+        });
+        this.valueFilterDraft = null;
+        if (this.settingsFor === name) {
+          redraw();
+        }
+      });
+
+      bound("value-filter-value", "value", this.labels.valueFilterValue);
+      if (range) {
+        bound("value-filter-value2", "value2", this.labels.valueFilterValue2);
+      }
+      apply.disabled = !complete();
+      bounds.appendChild(apply);
+      section.appendChild(bounds);
+
+      if (active) {
+        const clear = document.createElement("button");
+        clear.className = "pivot-value-settings__choice is-danger";
+        clear.setAttribute("type", "button");
+        clear.dataset.action = "value-filter-clear";
+        clear.textContent = this.labels.valueFilterClear;
+        clear.addEventListener("click", async () => {
+          await this.widget.setValueFilter(name, null);
+          this.valueFilterDraft = null;
+          if (this.settingsFor === name) {
+            redraw();
+          }
+        });
+        section.appendChild(clear);
+      }
+
+      body.appendChild(section);
+    }
+
     // "Tutar (Sum)" -- the caption alone would not tell two summaries of one
     // field apart. A calculated value is its formula's result, so it has none.
     valueLabel(value) {
@@ -1208,6 +1342,10 @@
 
       if ((area === "row" || area === "column") && this.canSort(name)) {
         this.appendSortSections(settings.body, name, area);
+      }
+
+      if (area === "row" && this.canValueFilter(name)) {
+        this.appendValueFilterSection(settings.body, name);
       }
 
       // --- Filter values --------------------------------------------------
@@ -1920,6 +2058,8 @@
     closeSettings() {
       this.endFormulaDrag();
       this.settingsFor = null;
+      // A bound typed and not applied is dropped with the modal.
+      this.valueFilterDraft = null;
       this.formulaFor = null;
       this.formulaEditor = null;
       if (this.settings) {

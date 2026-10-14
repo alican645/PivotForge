@@ -1420,6 +1420,60 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesADeclaredValueFilter()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotValueFilterTagHelper
+            {
+                Field = "Region",
+                Operator = PivotValueFilterOperator.Between,
+                Value = 100m,
+                Value2 = 500m,
+                ValueKey = "Amount_sum"
+            }],
+            MinimalFields));
+
+        var filter = config.GetProperty("valueFilters")[0];
+        Assert.Equal("Region", filter.GetProperty("field").GetString());
+        Assert.Equal("Between", filter.GetProperty("operator").GetString());
+        Assert.Equal(100m, filter.GetProperty("value").GetDecimal());
+        Assert.Equal(500m, filter.GetProperty("value2").GetDecimal());
+        Assert.Equal("Amount_sum", filter.GetProperty("valueKey").GetString());
+    }
+
+    [Fact]
+    public async Task AValueFilterLeavesOutWhatItDidNotDeclare()
+    {
+        var config = ConfigOf(await RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotValueFilterTagHelper { Field = "Region", Value = 10m }],
+            MinimalFields));
+
+        var filter = config.GetProperty("valueFilters")[0];
+        Assert.Equal("GreaterThan", filter.GetProperty("operator").GetString());
+        Assert.False(filter.TryGetProperty("value2", out _));
+        Assert.False(filter.TryGetProperty("valueKey", out _));
+
+        var none = ConfigOf(await RenderAsync(new PivotGridTagHelper { Id = "pivotGrid" }, [], MinimalFields));
+        Assert.False(none.TryGetProperty("valueFilters", out _));
+    }
+
+    [Theory]
+    [InlineData(null, 10, null, PivotValueFilterOperator.GreaterThan)]
+    [InlineData("Region", null, null, PivotValueFilterOperator.GreaterThan)]
+    [InlineData("Region", 10, null, PivotValueFilterOperator.Between)]
+    [InlineData("Region", 10, 20, PivotValueFilterOperator.GreaterThan)]
+    public async Task AnIncompleteValueFilterIsReportedWhereItIsWritten(
+        string? field, int? value, int? value2, PivotValueFilterOperator op)
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderWithChildrenAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            [new PivotValueFilterTagHelper { Field = field, Value = value, Value2 = value2, Operator = op }],
+            MinimalFields));
+    }
+
+    [Fact]
     public async Task OmitsTheRankingListWhenNoneWasDeclared()
     {
         var config = ConfigOf(await RenderAsync(
