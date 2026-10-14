@@ -81,7 +81,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | DevExpress | Motor | Bildirimsel | Not |
 |---|---|---|---|
 | `dataField`, `caption`, `area`, `visible` | ✅ | ✅ | |
-| `summaryType` (aggregation) | ✅ | ✅ | 9 tür: sum/count/average/min/max + countDistinct/median/variance/standardDeviation |
+| `summaryType` (aggregation) | ✅ | ✅ | 13 tür: sum/count/average/min/max, countDistinct/median, örneklem ve popülasyon variance/standardDeviation, first/last |
 | `summaryDisplayMode` (`showAs`) | ✅ | ✅ | `show-as` niteliği ve `ShowAs()` metodu mevcut |
 | `format` / `precision` | ✅ | ✅ | `0.4.0-preview.1`'de eklendi |
 | `areaIndex` | ✅ | ✅ | `area-index` niteliği ve `AreaIndex()` metodu |
@@ -295,6 +295,7 @@ Açık kalanlar:
 - [x] Isı haritası — `heatmap`, her ölçü kendi ölçeğinde, toplamlar boyanmıyor
 - [x] Kenarlıklar — `show-borders`: `true` dış çerçeve, `false` gövdede çizgi yok
 - [x] `word-wrap` — alan başına, bkz. Bölüm 1
+- [x] Tam ekran — araç çubuğunda; sayfa içinde (Fullscreen API değil), Escape ile çıkılıyor
 - [ ] RTL desteği
 
 ---
@@ -351,6 +352,9 @@ aralarında geçmesi için — kendi durum şeması demoya ait, bildirimsel yol 
       alan düzeni, başlıklar, filtre seçimleri, toplama, biçim ve sıralama
 - [x] `adoptLayout` kaydedilmiş **başlıkları** geri yüklüyor — `getState()` çıktısı
       doğrudan yapıcıya geri verilebiliyor
+- [x] Rapor dosyası — araç çubuğunda "Raporu kaydet" / "Rapor aç" (`exportReport()` /
+      `loadReport()`): `state-storing`'in sakladığı görünüm JSON dosyası olarak; uymayan
+      dosya reddediliyor, tablo olduğu gibi kalıyor
 - [x] `state-storing` koşullu biçimlendirme kurallarını taşıyor — okuyucunun
       eklediği kural yenilemeden sağ çıkıyor. Saklanan liste bildirilenlerin
       yerine geçiyor (eklenmiyor): kayıt anında bildirilenler zaten listedeydi,

@@ -73,12 +73,14 @@ test("no toolbar unless one is asked for", () => {
 
 test("toolbar: true offers every button the grid can honour, Excel only when export is allowed", () => {
   const without = createWidget({ toolbar: true });
-  assert.deepEqual(Object.keys(without.buttons), ["csv", "print", "expandAll", "collapseAll"]);
+  assert.deepEqual(Object.keys(without.buttons),
+    ["csv", "print", "expandAll", "collapseAll", "saveReport", "openReport", "fullscreen"]);
   assert.equal(without.toolbar.attributes.role, "toolbar");
   without.widget.dispose();
 
   const withExcel = createWidget({ toolbar: true, allowExcelExport: true });
-  assert.deepEqual(Object.keys(withExcel.buttons), ["excel", "csv", "print", "expandAll", "collapseAll"]);
+  assert.deepEqual(Object.keys(withExcel.buttons),
+    ["excel", "csv", "print", "expandAll", "collapseAll", "saveReport", "openReport", "fullscreen"]);
   withExcel.widget.dispose();
 });
 
@@ -143,4 +145,64 @@ test("dispose takes the toolbar away with the grid", () => {
   const { widget, toolbar } = createWidget({ toolbar: true });
   widget.dispose();
   assert.equal(toolbar.removed, true);
+});
+
+test("save report downloads the view as a JSON file", async () => {
+  const original = PivotForge.download;
+  const downloads = [];
+  PivotForge.download = file => downloads.push(file);
+
+  try {
+    const { widget, buttons } = createWidget({ toolbar: ["saveReport"], locale: "tr" });
+    assert.equal(buttons.saveReport.textContent, "Raporu kaydet");
+
+    await buttons.saveReport.click();
+    assert.equal(downloads.length, 1);
+    assert.match(downloads[0].fileName, /\.json$/);
+    const report = JSON.parse(await downloads[0].blob.text());
+    assert.equal(report.format, "pivotforge-report");
+    widget.dispose();
+  } finally {
+    PivotForge.download = original;
+  }
+});
+
+test("full screen switches on and off, from the button or with Escape", async () => {
+  const keyHandlers = [];
+  const classes = new Set();
+  const originalDocument = globalThis.document;
+  globalThis.document = {
+    createElement: element,
+    documentElement: { classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) } },
+    addEventListener: (type, handler) => keyHandlers.push(handler),
+    removeEventListener: (type, handler) => keyHandlers.splice(keyHandlers.indexOf(handler), 1)
+  };
+
+  try {
+    const container = createContainer();
+    const toggled = [];
+    container.classList.toggle = (name, on) => toggled.push([name, on]);
+    const widget = PivotForge.create(container, { fields, autoLoad: false, loadPanel: false, toolbar: ["fullscreen"], locale: "tr" });
+    const button = container.inserted.children[0];
+    assert.equal(button.textContent, "Tam ekran");
+
+    await button.click();
+    assert.deepEqual(toggled.at(-1), ["pivot-is-fullscreen", true]);
+    assert.equal(classes.has("pivot-has-fullscreen"), true);
+    assert.equal(button.textContent, "Tam ekrandan çık");
+    assert.equal(button.attributes["aria-pressed"], "true");
+
+    keyHandlers[0]({ key: "Escape" });
+    assert.deepEqual(toggled.at(-1), ["pivot-is-fullscreen", false]);
+    assert.equal(classes.has("pivot-has-fullscreen"), false);
+    assert.equal(button.textContent, "Tam ekran");
+    assert.equal(keyHandlers.length, 0);
+
+    // Disposing in full screen gives the page its scrolling back.
+    await button.click();
+    widget.dispose();
+    assert.equal(classes.has("pivot-has-fullscreen"), false);
+  } finally {
+    globalThis.document = originalDocument;
+  }
 });

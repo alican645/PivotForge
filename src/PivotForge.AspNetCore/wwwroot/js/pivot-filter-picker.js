@@ -1,6 +1,12 @@
 (function (root) {
   const PivotForge = root.PivotForge ??= {};
 
+  // Search text compared without case, accents or the dotted/dotless i:
+  // "isk" finds "İskonto", "satis" finds "Satış", "it" finds "Item". Lowered
+  // the Turkish way, so I and İ both reach i once the marks are gone.
+  const foldSearch = text => String(text ?? "").toLocaleLowerCase("tr")
+    .normalize("NFD").replace(/\p{M}/gu, "").replace(/ı/g, "i");
+
   // Read from the request builder at call time rather than captured here: this
   // file is loaded before it in some hosts, and a captured undefined would only
   // show up when someone opened a condition.
@@ -171,7 +177,7 @@
       search.setAttribute("placeholder", this.labels.search);
       search.setAttribute("autocomplete", "off");
       search.addEventListener("input", () => {
-        this.searchTerm = search.value.trim().toLocaleLowerCase();
+        this.searchTerm = foldSearch(search.value.trim());
         this.renderList();
       });
 
@@ -420,7 +426,7 @@
       }
 
       return this.values.filter(value =>
-        this.displayText(value).toLocaleLowerCase().includes(this.searchTerm));
+        foldSearch(this.displayText(value)).includes(this.searchTerm));
     }
 
     displayText(value) {

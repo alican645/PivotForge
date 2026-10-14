@@ -16,5 +16,17 @@ public enum PivotToolbarItem
     ExpandAll,
 
     /// <summary>Collapses every group.</summary>
-    CollapseAll
+    CollapseAll,
+
+    /// <summary>
+    /// Downloads the current view -- layout, filters, sorts and conditional rules -- as a JSON
+    /// report file.
+    /// </summary>
+    SaveReport,
+
+    /// <summary>Opens a report file saved with <see cref="SaveReport"/> and shows its view.</summary>
+    OpenReport,
+
+    /// <summary>Lets the grid and its toolbar fill the browser window; Escape or the button leaves it.</summary>
+    Fullscreen
 }

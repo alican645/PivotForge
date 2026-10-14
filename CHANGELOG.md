@@ -16,6 +16,16 @@ change will require a new major version.
 
 ### Added
 
+- Three toolbar buttons, included in `toolbar="true"`: **Save report**
+  downloads the view (layout, captions, filters, sorts, conditional rules) as
+  a JSON file, **Open report** shows such a file's view, and **Full screen**
+  lets the grid and its toolbar fill the window (Escape leaves it). Also as
+  `exportReport()` / `loadReport()` and `PivotToolbarItem.SaveReport`,
+  `OpenReport`, `Fullscreen`. In English and Turkish. (AspNetCore)
+- Aggregations `VariancePopulation`, `StandardDeviationPopulation` (divided by
+  n, as `VAR.P` / `STDEV.P`), `First` and `Last` (in source order), and the
+  formula functions `VarP`, `StDevP`, `First`, `Last`. (Core, AspNetCore)
+
 - Value text: three format members — `compact` (the culture's short form,
   `1,25 Mn`), `zeroText` (shown in place of an exact zero, `"—"`) and
   `negative: "parentheses"` (`(1.250)`) — as `format-compact`,
@@ -78,6 +88,10 @@ change will require a new major version.
   is an error listing the fifteen there are. (AspNetCore)
 
 ### Fixed
+
+- Searching the field list, a filter's values or the detail modal now ignores
+  accents and the dotted or dotless i: "isk" finds "İskonto", "satis" finds
+  "Satış". (AspNetCore)
 
 - `drillDownModalOptions.labels` replaced the locale pack's whole label set, so
   renaming one text turned the other fourteen English. Labels now merge key by

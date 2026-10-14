@@ -514,6 +514,18 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task TheReportAndFullScreenButtonsAreToolbarItems()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ToolbarItems = "SaveReport,OpenReport,Fullscreen" },
+            new FieldSpec("Amount", PivotArea.Data)));
+
+        Assert.Equal(
+            ["saveReport", "openReport", "fullscreen"],
+            config.GetProperty("toolbar").EnumerateArray().Select(item => item.GetString()));
+    }
+
+    [Fact]
     public async Task AGridWithoutAToolbarDeclaresNone()
     {
         var config = ConfigOf(await RenderAsync(

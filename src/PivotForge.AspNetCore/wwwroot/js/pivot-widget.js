@@ -186,8 +186,15 @@
     csv: { text: "toolbarCsv", label: "CSV" },
     print: { text: "toolbarPrint", label: "Print" },
     expandAll: { text: "toolbarExpandAll", label: "Expand all" },
-    collapseAll: { text: "toolbarCollapseAll", label: "Collapse all" }
+    collapseAll: { text: "toolbarCollapseAll", label: "Collapse all" },
+    saveReport: { text: "toolbarSaveReport", label: "Save report" },
+    openReport: { text: "toolbarOpenReport", label: "Open report" },
+    fullscreen: { text: "toolbarFullscreen", label: "Full screen" }
   };
+
+  // Written into a saved report file beside the state's version, so a file
+  // picked by mistake is told apart from a view this grid can open.
+  const REPORT_FORMAT = "pivotforge-report";
 
   class PivotWidget {
     constructor(container, options) {
@@ -215,6 +222,10 @@
 
       // Validate eagerly so configuration mistakes surface at the call site.
       this.fields = PivotForge.PivotRequestBuilder.normalizeFields(this.options.fields ?? []);
+      // The declared catalog, kept apart from options.fields, which the designer
+      // rewrites to the current layout: an opened report is laid out against
+      // every field the page offers, not only the ones on screen.
+      this.declaredFields = this.options.fields ?? [];
       PivotForge.PivotRequestBuilder.buildRequest(this.options.fields ?? []);
 
       // Resolved before anything reads state, and never fatal: a page that
@@ -369,10 +380,12 @@
         return null;
       }
 
-      if (payload?.version !== STATE_VERSION) {
-        return null;
-      }
+      return payload?.version === STATE_VERSION ? this.parseState(payload) : null;
+    }
 
+    // What a stored payload -- or an opened report -- restores, with anything
+    // this grid can no longer honour left out.
+    parseState(payload) {
       return {
         layout: payload.layout ?? null,
         captions: payload.captions ?? null,
@@ -416,8 +429,20 @@
         return false;
       }
 
+      try {
+        storage.setItem(this.stateKey, JSON.stringify(this.snapshotState()));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    // The view as state-storing keeps it: layout, captions, filters, sorts and
+    // conditional rules -- everything the reader changed, nothing the page
+    // declares anyway.
+    snapshotState() {
       const layout = this.layoutState?.getState() ?? null;
-      const payload = {
+      return {
         version: STATE_VERSION,
         ...(layout
           ? {
@@ -445,13 +470,78 @@
         columnSort: this.columnSort,
         conditionalRules: this.conditionalRules
       };
+    }
 
+    // The view as a file the reader keeps or hands on, and opens again with
+    // loadReport -- in this grid or another page offering the same fields.
+    exportReport(options = {}) {
+      this.assertNotDisposed();
+      const text = JSON.stringify({ format: REPORT_FORMAT, ...this.snapshotState() }, null, 2);
+
+      return {
+        blob: new root.Blob([text], { type: "application/json" }),
+        fileName: options.fileName ?? `pivotforge-report-${new Date().toISOString().slice(0, 10)}.json`
+      };
+    }
+
+    // Opens a report exportReport wrote: a File or Blob, its JSON text, or the
+    // parsed object. Unlike a stored view, which falls back to the declaration
+    // when it no longer fits, a report the reader picked and that does not fit
+    // is an error -- they asked for that view, not for whatever loads.
+    async loadReport(source) {
+      this.assertNotDisposed();
+      const text = typeof source?.text === "function" ? await source.text() : source;
+      let payload;
       try {
-        storage.setItem(this.stateKey, JSON.stringify(payload));
-        return true;
+        payload = typeof text === "string" ? JSON.parse(text) : text;
       } catch {
-        return false;
+        throw new Error("This file is not a PivotForge report: it is not JSON.");
       }
+
+      if (payload?.format !== REPORT_FORMAT || payload.version !== STATE_VERSION) {
+        throw new Error("This file is not a PivotForge report this grid can open.");
+      }
+
+      const report = this.parseState(payload);
+
+      if (report.layout && PivotForge.PivotLayoutState) {
+        const state = new PivotForge.PivotLayoutState(this.declaredFields, {
+          ...report.layout,
+          captions: report.captions,
+          sortOrders: report.sortOrders,
+          sortBys: report.sortBys
+        });
+
+        this.options.fields = state.toFields();
+        this.fields = PivotForge.PivotRequestBuilder.normalizeFields(this.options.fields);
+
+        if (this.layoutState) {
+          this.layoutState = state;
+          this.layoutState.on("change", () => this.saveState());
+          if (this.designer) {
+            this.designer.state = state;
+            this.designer.render();
+          }
+        }
+
+        if (this.renderer) {
+          this.renderer = this.createRenderer();
+        }
+      }
+
+      // Read again now the fields are the report's: a filter on a field the
+      // report seats is checked against those fields, not the ones it replaced.
+      const filters = this.parseState(payload).filters;
+      this.filters = filters ?? (report.layout ? [] : this.filters);
+      this.rowSort = report.rowSort;
+      this.columnSort = report.columnSort;
+      this.syncRendererSortState();
+      if (report.conditionalRules) {
+        this.conditionalRules = report.conditionalRules;
+      }
+
+      this.saveState();
+      return this.refresh();
     }
 
     clearState() {
@@ -1148,9 +1238,80 @@
           case "collapseAll":
             this.renderer.collapseAll();
             break;
+          case "saveReport":
+            PivotForge.download(this.exportReport());
+            break;
+          case "openReport":
+            await this.loadReport(await this.pickReportFile());
+            break;
+          case "fullscreen":
+            this.toggleFullscreen();
+            break;
         }
       } catch (error) {
         this.emit("error", error);
+      }
+    }
+
+    // The browser's own file dialog, asked for one JSON file. Resolves with the
+    // file, or not at all when the reader cancels -- there is nothing to do.
+    // The input sits hidden in the page while the dialog is open, where every
+    // browser honours a click on it, and leaves with the dialog.
+    pickReportFile() {
+      return new Promise(resolve => {
+        const document = root.document;
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json,application/json";
+        input.hidden = true;
+        const done = () => input.remove?.();
+        input.addEventListener("change", () => {
+          const file = input.files?.[0];
+          done();
+          if (file) {
+            resolve(file);
+          }
+        });
+        input.addEventListener("cancel", done);
+        document.body?.appendChild(input);
+        input.click();
+      });
+    }
+
+    // Full screen in the page rather than through the Fullscreen API: the grid
+    // and its toolbar take the whole window, which keeps the toolbar -- and its
+    // way back -- on screen, works inside an iframe and needs no permission.
+    // Escape leaves it too.
+    toggleFullscreen(on = !this.fullscreen) {
+      const document = root.document;
+      this.fullscreen = on;
+      this.container.classList.toggle("pivot-is-fullscreen", on);
+      this.toolbarNode?.classList?.toggle("pivot-is-fullscreen", on);
+      document?.documentElement?.classList?.toggle("pivot-has-fullscreen", on);
+
+      const button = this.toolbarNode?.children
+        ? Array.from(this.toolbarNode.children).find(child => child.dataset?.toolbarItem === "fullscreen")
+        : null;
+      if (button) {
+        button.textContent = on
+          ? this.tableText("toolbarExitFullscreen", "Exit full screen")
+          : this.tableText(TOOLBAR_ITEMS.fullscreen.text, TOOLBAR_ITEMS.fullscreen.label);
+        button.setAttribute("aria-pressed", String(on));
+      }
+
+      if (on) {
+        // The grid sits below the toolbar, however tall the toolbar wraps.
+        const height = this.toolbarNode?.offsetHeight ?? 0;
+        this.container.style?.setProperty?.("--pivot-toolbar-height", `${height}px`);
+        this.fullscreenKey = event => {
+          if (event.key === "Escape") {
+            this.toggleFullscreen(false);
+          }
+        };
+        document?.addEventListener?.("keydown", this.fullscreenKey);
+      } else if (this.fullscreenKey) {
+        document?.removeEventListener?.("keydown", this.fullscreenKey);
+        this.fullscreenKey = null;
       }
     }
 
@@ -1594,6 +1755,9 @@
       this.headerFilterPicker = null;
       this.drillDownModal?.dispose();
       this.drillDownModal = null;
+      if (this.fullscreen) {
+        this.toggleFullscreen(false);
+      }
       this.toolbarNode?.remove();
       this.toolbarNode = null;
       this.container.replaceChildren();

@@ -1,9 +1,15 @@
 (function (root) {
   const PivotForge = root.PivotForge ??= {};
 
+  // Search text compared without case, accents or the dotted/dotless i:
+  // "isk" finds "İskonto", "satis" finds "Satış", "it" finds "Item". Lowered
+  // the Turkish way, so I and İ both reach i once the marks are gone.
+  const foldSearch = text => String(text ?? "").toLocaleLowerCase("tr")
+    .normalize("NFD").replace(/\p{M}/gu, "").replace(/ı/g, "i");
+
   const api = {
     filterRecords(records, columns, searchTerm, columnFilters = {}) {
-      const normalizedSearch = String(searchTerm ?? "").trim().toLocaleLowerCase("tr");
+      const normalizedSearch = foldSearch(String(searchTerm ?? "").trim());
 
       return (records ?? []).filter(record => {
         const matchesColumns = columns.every(column => {
@@ -20,8 +26,7 @@
           return matchesColumns;
         }
 
-        return columns.some(column => api.formatValue(record[column.key], column)
-          .toLocaleLowerCase("tr")
+        return columns.some(column => foldSearch(api.formatValue(record[column.key], column))
           .includes(normalizedSearch));
       });
     },

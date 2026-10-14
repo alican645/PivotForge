@@ -127,8 +127,8 @@ public sealed class PivotGridBuilder : IHtmlContent
 
     /// <summary>Shows or hides a toolbar above the grid with every button it can offer.</summary>
     /// <remarks>
-    /// The buttons are Excel (only when <see cref="AllowExcelExport"/> is on), CSV, Print, Expand all
-    /// and Collapse all. Excel and Print title the file and the page with the grid's
+    /// The buttons are Excel (only when <see cref="AllowExcelExport"/> is on), CSV, Print, Expand all,
+    /// Collapse all, Save report, Open report and Full screen. Excel and Print title the file and the page with the grid's
     /// <see cref="AriaLabel"/>. A failure is raised as the grid's <c>error</c> event.
     /// </remarks>
     /// <param name="enabled">True to show the toolbar.</param>

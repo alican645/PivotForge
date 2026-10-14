@@ -88,6 +88,50 @@ public sealed class PivotStatisticalAggregationTests
     }
 
     [Fact]
+    public void PopulationVarianceAndStandardDeviationDivideByN()
+    {
+        var result = Run(
+            PivotValueDefinition.VariancePopulation("Amount"),
+            PivotValueDefinition.StandardDeviationPopulation("Amount"));
+
+        // 10, 20, 30, 40: mean 25, squared deviations 500, over 4.
+        Assert.Equal(125m, Row(result, "Marmara", "Amount_variancepopulation"));
+        Assert.Equal(
+            Math.Round(11.180339887498948482045868344m, 10),
+            Math.Round(Row(result, "Marmara", "Amount_standarddeviationpopulation")!.Value, 10));
+        // 5 and 15, the empty amount skipped.
+        Assert.Equal(25m, Row(result, "Ege", "Amount_variancepopulation"));
+        Assert.Equal(5m, Row(result, "Ege", "Amount_standarddeviationpopulation"));
+        // A single value has no spread, rather than none at all as the sample statistics say.
+        Assert.Equal(0m, Row(result, "Karadeniz", "Amount_variancepopulation"));
+        Assert.Equal(0m, Row(result, "Karadeniz", "Amount_standarddeviationpopulation"));
+    }
+
+    [Fact]
+    public void FirstAndLastFollowTheSourceOrderAndSkipEmptyValues()
+    {
+        var result = Run(PivotValueDefinition.First("Amount"), PivotValueDefinition.Last("Amount"));
+
+        Assert.Equal(10m, Row(result, "Marmara", "Amount_first"));
+        Assert.Equal(40m, Row(result, "Marmara", "Amount_last"));
+        // Ege's last record has no amount, so its last value is the one before.
+        Assert.Equal(15m, Row(result, "Ege", "Amount_last"));
+        Assert.Equal(10m, result.GrandTotals["Amount_first"]);
+        Assert.Equal(7m, result.GrandTotals["Amount_last"]);
+    }
+
+    [Fact]
+    public void TheNewSummariesCanBeCalledFromAFormula()
+    {
+        var result = Run(
+            PivotValueDefinition.Calculated("Change", "Last([Amount]) - First([Amount])"),
+            PivotValueDefinition.Calculated("Spread", "StDevP([Amount]) + VarP([Amount])"));
+
+        Assert.Equal(30m, Row(result, "Marmara", "Change_calculated"));
+        Assert.Equal(30m, Row(result, "Ege", "Spread_calculated"));
+    }
+
+    [Fact]
     public void MedianRejectsAValueThatIsNotANumber()
     {
         Assert.Throws<PivotFieldTypeException>(() => Run(PivotValueDefinition.Median("Customer")));

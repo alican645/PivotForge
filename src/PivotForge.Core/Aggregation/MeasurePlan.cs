@@ -140,6 +140,10 @@ internal sealed class MeasurePlan
         "MEDIAN" => PivotAggregation.Median,
         "VAR" or "VARIANCE" => PivotAggregation.Variance,
         "STDEV" or "STDDEV" => PivotAggregation.StandardDeviation,
+        "VARP" => PivotAggregation.VariancePopulation,
+        "STDEVP" => PivotAggregation.StandardDeviationPopulation,
+        "FIRST" => PivotAggregation.First,
+        "LAST" => PivotAggregation.Last,
         _ => null
     };
 }

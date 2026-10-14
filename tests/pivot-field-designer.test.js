@@ -2363,3 +2363,15 @@ test("a folder closes and opens, and a search opens every folder", () => {
   heading().dispatch("click", {});
   assert.deepEqual(listed(host), ["Note", "[Satış]", "Quantity", "Discount", "[Müşteri]", "City"]);
 });
+
+test("the field search finds İ and accented captions from plain letters", () => {
+  const { host, designer } = buildWithFolders();
+
+  designer.searchTerm = "isk";
+  designer.render();
+  assert.deepEqual(listed(host), ["[Satış]", "Discount"]);
+
+  designer.searchTerm = "sehir";
+  designer.render();
+  assert.deepEqual(listed(host), ["[Müşteri]", "City"]);
+});

@@ -3,7 +3,7 @@
 
   const AREAS = ["row", "column", "data", "filter", "available"];
   const ROLES = ["dimension", "measure"];
-  const AGGREGATIONS = ["sum", "count", "average", "min", "max", "countDistinct", "median", "variance", "standardDeviation"];
+  const AGGREGATIONS = ["sum", "count", "average", "min", "max", "countDistinct", "median", "variance", "standardDeviation", "variancePopulation", "standardDeviationPopulation", "first", "last"];
   // Not among the choices above: a calculated field's formula is its aggregation,
   // so this one is never picked, only implied by an expression.
   const CALCULATED = "calculated";
@@ -11,7 +11,8 @@
   // Anything else is a custom aggregate, which only the server can resolve.
   const FORMULA_FUNCTIONS = [
     "Sum", "Count", "Avg", "Average", "Min", "Max",
-    "CountDistinct", "Median", "Var", "Variance", "StDev", "StdDev"
+    "CountDistinct", "Median", "Var", "Variance", "StDev", "StdDev",
+    "VarP", "StDevP", "First", "Last"
   ];
   const FORMAT_TYPES = ["number", "currency", "percent"];
   // How a negative number is written: with its sign, or in parentheses as

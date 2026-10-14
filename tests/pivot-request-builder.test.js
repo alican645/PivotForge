@@ -56,17 +56,25 @@ test("supports every aggregation and showAs value", () => {
     { dataField: "g", area: "data", aggregation: "countDistinct" },
     { dataField: "h", area: "data", aggregation: "median" },
     { dataField: "i", area: "data", aggregation: "variance" },
-    { dataField: "j", area: "data", aggregation: "standardDeviation" }
+    { dataField: "j", area: "data", aggregation: "standardDeviation" },
+    { dataField: "k", area: "data", aggregation: "variancePopulation" },
+    { dataField: "l", area: "data", aggregation: "standardDeviationPopulation" },
+    { dataField: "m", area: "data", aggregation: "first" },
+    { dataField: "n", area: "data", aggregation: "last" }
   ]);
 
   assert.deepEqual(request.values.map(value => value.aggregation), [
     "count", "average", "min", "max", "sum", "sum",
-    "countDistinct", "median", "variance", "standardDeviation"
+    "countDistinct", "median", "variance", "standardDeviation",
+    "variancePopulation", "standardDeviationPopulation", "first", "last"
   ]);
   // The server lower-cases the enum name the same way.
   assert.equal(PivotRequestBuilder.valueKey({ dataField: "g", aggregation: "countDistinct" }), "g_countdistinct");
   assert.equal(
     PivotRequestBuilder.valueKey({ dataField: "j", aggregation: "standardDeviation" }), "j_standarddeviation");
+  assert.equal(
+    PivotRequestBuilder.valueKey({ dataField: "l", aggregation: "standardDeviationPopulation" }),
+    "l_standarddeviationpopulation");
   assert.equal(request.values[4].showAs, "percentOfRowTotal");
   assert.equal(request.values[5].showAs, "runningTotal");
 });

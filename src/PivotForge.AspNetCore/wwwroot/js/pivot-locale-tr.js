@@ -40,7 +40,11 @@
         toolbarCsv: "CSV",
         toolbarPrint: "Yazdır",
         toolbarExpandAll: "Tümünü aç",
-        toolbarCollapseAll: "Tümünü kapat"
+        toolbarCollapseAll: "Tümünü kapat",
+        toolbarSaveReport: "Raporu kaydet",
+        toolbarOpenReport: "Rapor aç",
+        toolbarFullscreen: "Tam ekran",
+        toolbarExitFullscreen: "Tam ekrandan çık"
       }
     },
     designer: {
@@ -113,7 +117,11 @@
         countDistinct: "Benzersiz sayısı",
         median: "Medyan",
         variance: "Varyans",
-        standardDeviation: "Standart sapma"
+        standardDeviation: "Standart sapma",
+        variancePopulation: "Varyans (popülasyon)",
+        standardDeviationPopulation: "Standart sapma (popülasyon)",
+        first: "İlk değer",
+        last: "Son değer"
       },
       calculatedField: "Hesaplanan alan",
       addCalculatedField: "Hesaplanan alan ekle",

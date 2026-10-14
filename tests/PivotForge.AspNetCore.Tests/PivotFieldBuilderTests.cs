@@ -93,6 +93,10 @@ public class PivotFieldBuilderTests
     [InlineData(PivotAggregation.Median, "median")]
     [InlineData(PivotAggregation.Variance, "variance")]
     [InlineData(PivotAggregation.StandardDeviation, "standardDeviation")]
+    [InlineData(PivotAggregation.VariancePopulation, "variancePopulation")]
+    [InlineData(PivotAggregation.StandardDeviationPopulation, "standardDeviationPopulation")]
+    [InlineData(PivotAggregation.First, "first")]
+    [InlineData(PivotAggregation.Last, "last")]
     public void EveryAggregationSerializesAsLowerCamelCase(PivotAggregation aggregation, string expected)
     {
         var field = new PivotFieldBuilder()

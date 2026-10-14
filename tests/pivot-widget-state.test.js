@@ -727,3 +727,66 @@ test("a sort picked in the designer's panel is stored and comes back", () => {
   assert.equal(region.sortByValueKey, "Amount_sum");
   reloaded.dispose();
 });
+
+// --- Report files -------------------------------------------------------------
+
+test("a saved report opens in another grid with its layout, captions, filters, sort and rules", async () => {
+  const source = build({ designer: true });
+  source.widget.layoutState.setCaption("Region", "Satış Bölgesi");
+  source.widget.layoutState.move("Quarter", "row");
+  source.widget.layoutState.move("Year", "filter");
+  source.widget.layoutState.setFilterValues("Year", ["2025"]);
+  await source.widget.sortBy({ mode: "RowLabel", direction: "Descending", field: "Region" });
+  source.widget.setConditionalRules([
+    { id: "high", valueKey: "Amount_sum", operator: "greaterThan", threshold: 100, color: "green" }
+  ]);
+
+  const file = source.widget.exportReport();
+  assert.match(file.fileName, /^pivotforge-report-\d{4}-\d{2}-\d{2}\.json$/);
+  const written = JSON.parse(await file.blob.text());
+  assert.equal(written.format, "pivotforge-report");
+  assert.equal(written.version, 1);
+  source.widget.dispose();
+
+  const target = build({ designer: true, storage: createStorage() });
+  const requests = [];
+  target.widget.options.fetchImpl = async (url, init) => {
+    requests.push(JSON.parse(init.body));
+    return { ok: true, status: 200, json: async () => ({ rowHeaders: [], columnHeaders: [], cells: [] }) };
+  };
+
+  await target.widget.loadReport(file.blob);
+
+  const layout = target.widget.layoutState.getState();
+  assert.deepEqual(layout.rows, ["Region", "Quarter"]);
+  assert.equal(target.widget.layoutState.field("Region").caption, "Satış Bölgesi");
+  // The designer draws the opened layout, not the one it was built with.
+  assert.equal(target.widget.designer.state, target.widget.layoutState);
+  assert.deepEqual(target.widget.filters, [{ field: "Year", values: ["2025"], mode: "Include" }]);
+  assert.equal(target.widget.rowSort.direction, "Descending");
+  assert.equal(target.widget.conditionalRules[0].id, "high");
+  // It is fetched straight away and stored as this grid's view.
+  assert.deepEqual(requests.at(-1).rows, ["Region", "Quarter"]);
+  assert.deepEqual(saved(target.store).layout.rows, ["Region", "Quarter"]);
+
+  // Later edits go on being stored, from the opened layout.
+  target.widget.layoutState.setCaption("Quarter", "Ç");
+  assert.deepEqual(saved(target.store).captions, { Region: "Satış Bölgesi", Quarter: "Ç" });
+  target.widget.dispose();
+});
+
+test("a file that is not a report, or does not fit the grid, is refused", async () => {
+  const { widget } = build({ designer: true });
+
+  await assert.rejects(widget.loadReport("not json"), /not a PivotForge report: it is not JSON/);
+  await assert.rejects(widget.loadReport({ version: 1 }), /not a PivotForge report this grid can open/);
+  await assert.rejects(widget.loadReport({ format: "pivotforge-report", version: 2 }),
+    /not a PivotForge report this grid can open/);
+  await assert.rejects(
+    widget.loadReport({ format: "pivotforge-report", version: 1, layout: { rows: ["Nope"], columns: [], values: [{ field: "Amount", aggregation: "sum" }], filters: [] } }),
+    /not in the catalog/);
+
+  // The grid is left as it was.
+  assert.deepEqual(widget.layoutState.getState().rows, ["Region"]);
+  widget.dispose();
+});
