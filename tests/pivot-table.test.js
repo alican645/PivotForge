@@ -840,3 +840,52 @@ test("a column sort request reads the cell's row, and the grand total row as no 
     renderer.createColumnSortRequest({ rowType: "grandTotal", rowHeader: [], valueKey: "a" }),
     { mode: "ColumnTotalValue", valueKey: "a", rowPath: null });
 });
+
+test("heatmap levels scale each measure on its own and split by row or column", () => {
+  const { heatmapLevels } = window.PivotForge;
+  const entries = [
+    { valueKey: "amount", rowKey: "r1", columnIndex: 0, value: 10 },
+    { valueKey: "amount", rowKey: "r1", columnIndex: 1, value: 30 },
+    { valueKey: "amount", rowKey: "r2", columnIndex: 0, value: 20 },
+    { valueKey: "amount", rowKey: "r2", columnIndex: 1, value: null },
+    { valueKey: "count", rowKey: "r1", columnIndex: 0, value: 1 },
+    { valueKey: "count", rowKey: "r2", columnIndex: 0, value: 3 }
+  ];
+
+  assert.deepEqual(heatmapLevels(entries, "table"), [0, 1, 0.5, null, 0, 1]);
+  // r2 has a single amount, so there is nothing to compare it with.
+  assert.deepEqual(heatmapLevels(entries, "rows"), [0, 1, null, null, null, null]);
+  assert.deepEqual(heatmapLevels(entries, "columns"), [0, null, 1, null, 0, 1]);
+  assert.deepEqual(heatmapLevels(entries, "none"), entries.map(() => null));
+  assert.deepEqual(heatmapLevels(entries, "bogus"), entries.map(() => null));
+});
+
+test("heatmap shades value cells and clears the shading when switched off", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const makeCell = () => {
+    const classes = new Set();
+    const style = new Map();
+    return {
+      classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)), has: name => classes.has(name) },
+      style: { setProperty: (name, value) => style.set(name, value), removeProperty: name => style.delete(name) },
+      heat: () => style.get("--pt-heat")
+    };
+  };
+  const cells = [makeCell(), makeCell(), makeCell()];
+  const table = {
+    querySelectorAll(selector) {
+      assert.equal(selector, "td.pivot-table__value:not(.pivot-table__column-subtotal)");
+      return cells;
+    }
+  };
+  [5, 15, 10].forEach((value, index) =>
+    renderer.selectionMetadata.set(cells[index], { valueKey: "amount", rowKey: "r", columnIndex: index, value }));
+
+  renderer.applyHeatmap(table, { heatmap: "table" });
+  assert.deepEqual(cells.map(cell => cell.heat()), ["0", "1", "0.5"]);
+  assert.equal(cells.every(cell => cell.classList.has("is-heat")), true);
+
+  renderer.applyHeatmap(table, { heatmap: "none" });
+  assert.deepEqual(cells.map(cell => cell.heat()), [undefined, undefined, undefined]);
+  assert.equal(cells.some(cell => cell.classList.has("is-heat")), false);
+});

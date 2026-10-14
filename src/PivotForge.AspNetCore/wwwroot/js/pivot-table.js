@@ -41,6 +41,48 @@ const CONDITIONAL_OPERATORS = [
 
 const CONDITIONAL_COLORS = ["green", "amber", "red", "blue"];
 
+// What a heatmap scale is drawn across: every value cell of a measure, or one
+// row or one column of it. "none" draws nothing.
+const HEATMAP_MODES = ["none", "table", "rows", "columns"];
+
+// Where each value sits on its heatmap scale, from 0 (the smallest in its group)
+// to 1 (the largest). Each measure is its own scale -- an amount and a count
+// share no units, so one cannot shade the other -- and "rows" / "columns" split
+// it further by row or column. A non-number gets null, and so does every value
+// of a group whose values are all equal: there is no hotter or colder there.
+PivotForge.heatmapLevels = function heatmapLevels(entries, mode) {
+  if (!HEATMAP_MODES.includes(mode) || mode === "none") {
+    return entries.map(() => null);
+  }
+
+  const groupOf = entry => JSON.stringify([
+    entry.valueKey ?? null,
+    mode === "rows" ? entry.rowKey ?? null : null,
+    mode === "columns" ? entry.columnIndex ?? null : null
+  ]);
+  const ranges = new Map();
+
+  entries.forEach(entry => {
+    if (!Number.isFinite(entry.value)) {
+      return;
+    }
+
+    const key = groupOf(entry);
+    const range = ranges.get(key);
+    ranges.set(key, range
+      ? { min: Math.min(range.min, entry.value), max: Math.max(range.max, entry.value) }
+      : { min: entry.value, max: entry.value });
+  });
+
+  return entries.map(entry => {
+    const range = Number.isFinite(entry.value) ? ranges.get(groupOf(entry)) : null;
+
+    return range && range.max > range.min
+      ? (entry.value - range.min) / (range.max - range.min)
+      : null;
+  });
+};
+
 // Turns an export model into comma-separated text. Takes the same model the
 // Excel endpoint is sent, so the two exports can never disagree about what the
 // grid says -- and it inherits the model's cleaning, which drops the sort
@@ -197,6 +239,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       selectionMode: "single",
       contextMenu: true,
       conditionalRules: [],
+      // A colour scale over the value cells: "table", "rows", "columns" or
+      // "none". Totals and subtotals are left out -- they would always be the
+      // hottest cells and flatten the scale for everything else. A conditional
+      // rule's colour wins over the scale on the cells it matches.
+      heatmap: "none",
       // DevExtreme names a grand total after the area its header sits in, and
       // so does this: showGrandTotal is the total *row* along the bottom (the
       // row grand total), showColumnGrandTotals the total *column* on the right.
@@ -291,6 +338,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.wireSubtotalToggles(table, result, options);
     this.wireSelection(table, settings);
     this.applySelectionState(table);
+    this.applyHeatmap(table, settings);
     this.applyConditionalFormatting(table, settings);
     this.applyColumnWidths(table);
     this.wireColumnResize(table, settings);
@@ -1889,6 +1937,37 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       cell.classList.add(`is-conditional-${rule.color}`);
       cell.dataset.conditionalRule = rule.id ?? "rule";
+    });
+  }
+
+  // Only the plain value cells: a subtotal or total cell carries other classes.
+  // In large-data mode the scale covers the rows on screen, which are the only
+  // values the renderer has.
+  applyHeatmap(table, settings = this.lastSettings) {
+    const cells = Array.from(
+      table?.querySelectorAll("td.pivot-table__value:not(.pivot-table__column-subtotal)") ?? []);
+    const entries = cells.map(cell => {
+      const selection = this.selectionMetadata.get(cell);
+
+      return {
+        value: selection?.value,
+        valueKey: selection?.valueKey,
+        rowKey: selection?.rowKey,
+        columnIndex: selection?.columnIndex
+      };
+    });
+    const levels = PivotForge.heatmapLevels(entries, settings?.heatmap ?? "none");
+
+    cells.forEach((cell, index) => {
+      const level = levels[index];
+      cell.classList.toggle("is-heat", level !== null);
+
+      if (level === null) {
+        cell.style.removeProperty("--pt-heat");
+      } else {
+        // Rounded so the attribute stays readable in the inspector.
+        cell.style.setProperty("--pt-heat", String(Math.round(level * 1000) / 1000));
+      }
     });
   }
 

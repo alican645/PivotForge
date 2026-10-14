@@ -14,6 +14,17 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- Heatmap: `heatmap="Table|Rows|Columns"` / `Heatmap(PivotHeatmapMode)` /
+  `heatmap: "table" | "rows" | "columns"` shades the value cells on a colour
+  scale from the smallest value to the largest — across every cell of a data
+  field, or within each row or column. Each data field is its own scale;
+  totals and subtotals are not shaded, and a conditional formatting rule's
+  colour wins on the cells it matches. The colour is the `--pt-heat-color`
+  CSS variable. In large-data mode the scale covers the rows on screen.
+  `PivotForge.heatmapLevels` exposes the scale calculation. (AspNetCore)
+
 ## [0.6.0-preview.6] — 2026-10-02
 
 Subtotal columns, sorting by a summary value on both axes, and a loading

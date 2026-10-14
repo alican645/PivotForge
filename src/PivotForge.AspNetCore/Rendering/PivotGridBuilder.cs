@@ -218,6 +218,22 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder LayoutMode(PivotGridLayoutMode mode) =>
         SetRenderer("layoutMode", mode == PivotGridLayoutMode.Compact ? "compact" : "tabular");
 
+    /// <summary>Shades the value cells on a colour scale, from the smallest value to the largest.</summary>
+    /// <remarks>
+    /// Each data field is its own scale; totals and subtotals are not shaded. A conditional
+    /// formatting rule's colour wins on the cells it matches.
+    /// </remarks>
+    /// <param name="mode">What the scale is drawn across.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder Heatmap(PivotHeatmapMode mode) =>
+        SetRenderer("heatmap", mode switch
+        {
+            PivotHeatmapMode.Table => "table",
+            PivotHeatmapMode.Rows => "rows",
+            PivotHeatmapMode.Columns => "columns",
+            _ => "none"
+        });
+
     /// <summary>Repeats a row label on every row it spans instead of only the first.</summary>
     /// <param name="repeat">True to repeat row labels.</param>
     /// <returns>This builder.</returns>

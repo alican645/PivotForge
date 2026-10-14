@@ -287,10 +287,12 @@ Açık kalanlar:
 | `wordWrapEnabled` | ❌ |
 | `rtlEnabled` | ❌ |
 | Yükleme göstergesi (`loadPanel`) | ✅ `load-panel`, varsayılan açık |
+| Isı haritası (PivotTable.js'teki heatmap renderer) | ✅ `heatmap="Table\|Rows\|Columns"` |
 
 - [ ] Ağaç düzeni satır başlıkları
 - [ ] `show-totals-prior`
 - [x] Paketlenmiş yükleme göstergesi
+- [x] Isı haritası — `heatmap`, her ölçü kendi ölçeğinde, toplamlar boyanmıyor
 - [ ] RTL desteği
 - [ ] `word-wrap`
 
