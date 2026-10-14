@@ -16,6 +16,17 @@ change will require a new major version.
 
 ### Added
 
+- A sort panel in the field designer: a row or column chip's settings now
+  offer **Sort order** (ascending / descending) and **Sort by** (the field's
+  own labels, or any value on the grid — "regions by sales, highest first").
+  A pick clears that axis' header sort, which would otherwise outrank it, and
+  is stored with the view. `PivotLayoutState.setSort(name, { order,
+  byValueKey })` and `valueKeys()` underneath; `getState().sortBys` carries it.
+  Left out for a field or grid with `allowSorting: false`. In English and
+  Turkish. (AspNetCore)
+
+### Added
+
 - Per-field presentation: `allow-sorting`, `allow-filtering`, `width` and
   `word-wrap` on `<pivot-field>` / `AllowSorting()`, `AllowFiltering()`,
   `Width()`, `WordWrap()` / `allowSorting`, `allowFiltering`, `width`,

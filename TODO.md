@@ -312,10 +312,10 @@ DevExpress'in alan menüsüne yaklaştı.
 | Ayarlar modali (ad, konum, özet, showAs, biçim, kaldır) | ✅ |
 | Alan seçicide klasörleme (`displayFolder`) | ❌ |
 | Bağımsız (standalone) alan seçici | ❌ |
-| Tasarımcıdan sıralama paneli | ❌ |
+| Tasarımcıdan sıralama paneli | ✅ | çip ayarlarında "Sıralama yönü" ve "Sıralama ölçütü" |
 | Tasarımcıdan filtre seçimi | ✅ | çipteki `▼` düğmesi `PivotFilterPicker`'ı açar |
 
-- [ ] Sıralama paneli — tasarımcıdan `sortBy` sürmek
+- [x] Sıralama paneli — tasarımcıdan `sortBy` sürmek: satır/sütun çipinin ayarlarında yön ve ölçüt (kendi etiketleri ya da bir değer); seçim başlık sıralamasını geri alıyor, kayıtlı görünümde saklanıyor
 - [ ] `display-folder` ile alan gruplama
 - [ ] Alan seçiciyi ayrı bileşen olarak kullanabilme
 

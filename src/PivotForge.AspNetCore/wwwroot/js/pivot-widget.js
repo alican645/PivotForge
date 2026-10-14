@@ -293,7 +293,12 @@
         try {
           return new PivotForge.PivotLayoutState(
             this.options.fields,
-            { ...restored.layout, captions: restored.captions, sortOrders: restored.sortOrders });
+            {
+              ...restored.layout,
+              captions: restored.captions,
+              sortOrders: restored.sortOrders,
+              sortBys: restored.sortBys
+            });
         } catch {
           this.filters = [...(this.options.filters ?? [])];
         }
@@ -365,6 +370,7 @@
         layout: payload.layout ?? null,
         captions: payload.captions ?? null,
         sortOrders: payload.sortOrders ?? null,
+        sortBys: payload.sortBys ?? null,
         // A filter naming a field the catalog dropped would be rejected by the
         // server, so it is discarded here rather than sent. A mode the vocabulary
         // does not know is discarded the same way rather than thrown on: a view
@@ -421,7 +427,8 @@
                 : {})
             },
             captions: layout.captions,
-            sortOrders: layout.sortOrders
+            sortOrders: layout.sortOrders,
+            sortBys: layout.sortBys
           }
           : {}),
         filters: layout

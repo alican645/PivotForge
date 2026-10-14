@@ -709,3 +709,21 @@ test("clearState forgets the rules along with the rest", () => {
   assert.equal(store.getItem(STATE_KEY), null);
   widget.dispose();
 });
+
+test("a sort picked in the designer's panel is stored and comes back", () => {
+  const { widget, store } = build({ designer: true });
+  widget.layoutState.setSort("Region", { order: "Descending", byValueKey: "Amount_sum" });
+
+  const payload = saved(store);
+  assert.deepEqual(payload.sortBys, { Region: "Amount_sum" });
+  assert.deepEqual(payload.sortOrders, { Region: "Descending" });
+  widget.dispose();
+
+  const { widget: reloaded } = build({ designer: true, seed: seedWith({
+    layout: payload.layout, sortOrders: payload.sortOrders, sortBys: payload.sortBys
+  }) });
+  const region = reloaded.layoutState.field("Region");
+  assert.equal(region.sortOrder, "Descending");
+  assert.equal(region.sortByValueKey, "Amount_sum");
+  reloaded.dispose();
+});

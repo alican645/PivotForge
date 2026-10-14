@@ -61,6 +61,9 @@
       // apart for the same reason the captions are: the declaration stays
       // recoverable and a saved view carries only what the user changed.
       this.sortOrders = new Map();
+      // What a row or column field is ordered by, picked in the designer: a
+      // value key, or null for its own labels. Absent means the declaration's.
+      this.sortBys = new Map();
       // Calculated fields the reader defined in the designer, by name. They live
       // in the catalog like declared ones -- so every consumer handles them the
       // same way -- and are listed here because they are the reader's to edit,
@@ -74,6 +77,7 @@
         this.layout = this.adoptLayout(layout);
         this.adoptCaptions(layout.captions);
         this.adoptSortOrders(layout.sortOrders);
+        this.adoptSortBys(layout.sortBys);
       } else {
         this.layout = this.layoutFromCatalog(normalized);
       }
@@ -334,6 +338,7 @@
 
       const caption = this.captions.get(name);
       const sortOrder = this.sortOrders.get(name);
+      const sortBy = this.sortBys.has(name) ? { value: this.sortBys.get(name) } : null;
       // Every caption consumer — the chips, toFields(), the renderer's value
       // labels, the detail modal's headers — reads through here, so an override
       // applied once shows up everywhere without any of them knowing about it.
@@ -341,7 +346,10 @@
       return {
         ...found,
         ...(caption === undefined ? {} : { caption }),
-        ...(sortOrder === undefined ? {} : { sortOrder })
+        ...(sortOrder === undefined ? {} : { sortOrder }),
+        // A summary path belongs to the value it was declared with, so a value
+        // picked here leaves it behind.
+        ...(sortBy === null ? {} : { sortByValueKey: sortBy.value, sortBySummaryPath: null })
       };
     }
 
@@ -363,6 +371,65 @@
       }
 
       this.emitChange();
+    }
+
+    // What the designer's sort panel sets in one go: the direction a row or
+    // column field's level runs in, and whether it is ordered by its labels
+    // (byValueKey null) or by one of the values on the grid. A choice equal to
+    // the declaration is forgotten rather than stored, as setSortOrder does.
+    setSort(name, { order, byValueKey = null }) {
+      this.field(name);
+      const area = this.areaOf(name);
+      const { SORT_ORDERS } = PivotForge.PivotRequestBuilder;
+
+      if (area !== "row" && area !== "column") {
+        throw new Error(`Field "${name}" is in area "${area}"; only a row or column field is sorted.`);
+      }
+
+      if (!SORT_ORDERS.includes(order)) {
+        throw new Error(`Unknown sortOrder "${order}". Expected one of: ${SORT_ORDERS.join(", ")}.`);
+      }
+
+      if (byValueKey !== null && !this.valueKeys().includes(byValueKey)) {
+        throw new Error(`"${byValueKey}" is not a value on the grid, so "${name}" cannot be sorted by it.`);
+      }
+
+      const catalog = this.catalog.get(name);
+      if (order === catalog.sortOrder) {
+        this.sortOrders.delete(name);
+      } else {
+        this.sortOrders.set(name, order);
+      }
+
+      if (byValueKey === (catalog.sortByValueKey ?? null) && !catalog.sortBySummaryPath) {
+        this.sortBys.delete(name);
+      } else {
+        this.sortBys.set(name, byValueKey);
+      }
+
+      this.emitChange();
+    }
+
+    // The keys of the values on the grid, as the renderer and the engine name
+    // them: what a row or column field can be sorted by.
+    valueKeys() {
+      const { valueKey } = PivotForge.PivotRequestBuilder;
+      return this.layout.values.map(value => valueKey({
+        dataField: this.sourceOf(value.field).dataField,
+        aggregation: value.aggregation
+      }));
+    }
+
+    adoptSortBys(sortBys) {
+      if (!sortBys || typeof sortBys !== "object") {
+        return;
+      }
+
+      Object.entries(sortBys).forEach(([name, valueKey]) => {
+        if (this.catalog.has(name) && (valueKey === null || typeof valueKey === "string")) {
+          this.sortBys.set(name, valueKey);
+        }
+      });
     }
 
     // Restores the overrides getState() emitted, skipping what the catalog or
@@ -702,6 +769,7 @@
         // view. adoptLayout does not restore them yet.
         captions: Object.fromEntries(this.captions),
         sortOrders: Object.fromEntries(this.sortOrders),
+        sortBys: Object.fromEntries(this.sortBys),
         calculatedFields: [...this.userCalculated].map(name => ({
           name,
           caption: this.catalog.get(name).caption,
