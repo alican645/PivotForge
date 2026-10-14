@@ -68,7 +68,7 @@ işleyici adı vermek DOM olayını kapatmıyor.
 - [x] `allow-conditional-formatting` + paketlenmiş `PivotConditionalPanel` —
       okuyucu hücre menüsünden kural ekleyip ölçü kurallarını temizleyebiliyor.
       Menü, geri çağırması olmayan eylemi artık hiç göstermiyor.
-- [ ] Detay modalı ayarları: `drill-down-labels`. Sütunlar bilinçli olarak
+- [x] Detay modalı ayarları: `drill-down-label-*` / `DrillDownLabel(key, text)`. Sütunlar bilinçli olarak
       dışarıda: sütun biçimlendiricileri fonksiyon ve bir nitelikte ifade
       edilemiyor; katalogdan türetilen varsayılan zaten doğru çalışıyor.
 

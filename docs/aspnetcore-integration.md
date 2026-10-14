@@ -799,8 +799,26 @@ your own detail UI overrides the packaged one rather than fighting it. Setting
 `drillDownModal: false` does the same without needing a handler.
 
 Labels default to English, come from the `drillDown` section of a locale pack,
-and are overridable per key through `drillDownModalOptions.labels`. `{0}`/`{1}` placeholders in `truncated`,
+and are overridable per key through `drillDownModalOptions.labels` — a declared
+key wins over the pack's word for it, and the pack keeps the rest. `{0}`/`{1}` placeholders in `truncated`,
 `summary`, and `columnFilter` are substituted positionally.
+
+Declaratively, each label is one attribute, `drill-down-label-` followed by the
+key in kebab-case, or one `DrillDownLabel(key, text)` call:
+
+```cshtml
+<pivot-grid id="pivotGrid"
+            drill-down-label-search="Satışlarda ara"
+            drill-down-label-no-records="Bu hücrede kayıt yok">
+```
+
+The keys are `title`, `close`, `search`, `csv`, `all`, `empty`, `loading`,
+`noRecords`, `noMatches`, `failed`, `allRows`, `allColumns`, `truncated`,
+`summary` and `columnFilter`; any other is an error naming them. `title` is
+what the modal shows before its first cell — once open, the heading names the
+cell. Columns stay a JavaScript option: their formatters are functions, which
+an attribute cannot carry, and the default derived from the catalog is the
+right one for a declared grid.
 
 ### Conditional formatting
 
