@@ -32,8 +32,8 @@ public sealed class PivotValueFilterTests
             TopN = topN ?? []
         });
 
-    private static string?[] Regions(PivotResult result) =>
-        result.RowHeaders.Select(header => header[0]).Distinct().ToArray();
+    private static string[] Regions(PivotResult result) =>
+        result.RowHeaders.Select(header => header[0] ?? "").Distinct().ToArray();
 
     [Fact]
     public void KeepsTheGroupsWhoseValueMeetsTheConditionAndTotalsOnlyThose()
@@ -86,7 +86,7 @@ public sealed class PivotValueFilterTests
             null,
             "Region", "City");
 
-        var cities = result.RowHeaders.Select(header => header[1]).ToArray();
+        var cities = result.RowHeaders.Select(header => header[1] ?? "").ToArray();
         // Manisa (10), Antalya (30) and Trabzon (no amount) are gone.
         Assert.Equal(["Bursa", "İstanbul", "İzmir"], cities.Order(StringComparer.Ordinal).ToArray());
 
