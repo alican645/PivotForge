@@ -56,6 +56,7 @@ The default endpoint prefix is `/pivotforge`. Static assets are available at:
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-chart.js"></script>
 ```
 
 Load them in `<head>`, not at the end of `<body>`, and in the order shown: `pivot-table.js` must load before `pivot-widget.js`, `pivot-layout-state.js` and `pivot-field-designer.js` must load before `pivot-widget.js` is asked to build a designer, and any Razor helper that calls `PivotForge.create` inline (see below) needs all of them already loaded when its markup runs.

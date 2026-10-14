@@ -101,6 +101,7 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-chart.js"></script>
 
 <!-- Optional: the language every component shows. English needs nothing. -->
 <script src="/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>
@@ -249,6 +250,7 @@ the renderer keeps its own default.
 | `totals-position` | `TotalsPosition(PivotTotalsPosition)` | `Before` | Where a group's subtotal row goes. `Before` draws it above the group's rows, as the group's own header with the toggle (DevExtreme's `showTotalsPrior: "rows"`). `After` draws it below them, as Excel lays a report out: a heading row with the toggle opens the group, its cells left blank, and the total row closes it. A collapsed group is its total row alone either way. Works in every layout. |
 | `heatmap` | `Heatmap(PivotHeatmapMode)` | `None` | Shades the value cells on a colour scale from the smallest value to the largest. `Table` draws one scale per data field, `Rows` one per row, `Columns` one per column. Totals and subtotals are not shaded, and a conditional formatting rule's colour wins on the cells it matches. The colour is the `--pt-heat-color` CSS variable (a `#rrggbb` value, so the Excel export can reproduce it). The shades go into the Excel export too. In large-data mode each page carries the whole result's value ranges, so a value is shaded the same on every page. |
 | `value-bars` | `ValueBars(PivotValueBarsMode)` | `None` | Draws a bar behind each value cell, as long as the value's share of its scale — a spreadsheet's data bars, PivotTable.js' table bar chart. `Table`, `Rows` and `Columns` group the scale as `heatmap` does, each data field on its own. The bars of a scale share an axis at zero: all-positive values grow from the left, all-negative ones from the right, and a scale holding both puts zero between them, negatives to its left in their own colour. Totals and subtotals get no bar. The colours are the `--pt-bar-color` and `--pt-bar-negative-color` CSS variables. It combines with `heatmap` and with conditional formatting, whose colour stays beneath the bar; it prints, but the Excel export leaves it out. In large-data mode the scale is the whole result's, as for the heatmap. JavaScript: `rendererOptions.valueBars: "table" \| "rows" \| "columns"`. |
+| `chart` | `Chart(PivotChartType, PivotChartPosition, int?)` | `None` | Draws a chart of the pivot beside the grid: `Column`, `StackedColumn`, `Bar` or `Line`; needs `pivot-chart.js`. `chart-position` (`Top`, `Bottom`) and `chart-height` (pixels, at least 120) go with it. Written to the widget's `chart` option, not `rendererOptions`. See [Pivot chart](#pivot-chart). |
 | `context-menu` | `ContextMenu(bool)` | `true` | The right-click cell menu. |
 | `subtotals` | `Subtotals(bool)` | `true` | Subtotal rows. |
 | `column-subtotals` | `ColumnSubtotals(bool)` | `true` | Subtotal columns: a total column after each group of an outer column field. |
@@ -265,7 +267,7 @@ the renderer keeps its own default.
 | `hide-empty-summary-cells` | `HideEmptySummaryCells(bool)` | `false` | Drops rows and columns holding no values at all. The column axis is the product of its levels, so sparse data leaves whole columns that never occurred; a row is empty when its values all aggregated to nothing. Dropped in the engine, so paging, Excel export and drill-down all agree on which rows exist. |
 | `locale` | `Locale(string)` | the request's UI culture | Name of the locale pack supplying every on-screen string. Must not be blank. `en` is the built-in English and loads nothing — see [Localization](#localization). |
 
-`selection-mode`, `layout-mode`, `heatmap`, `value-bars` and `totals-position` are non-nullable enums so Razor accepts the
+`selection-mode`, `layout-mode`, `heatmap`, `value-bars`, `chart`, `chart-position` and `totals-position` are non-nullable enums so Razor accepts the
 unqualified member name; whether the attribute was written is recovered from
 `TagHelperContext.AllAttributes`, so an unwritten attribute is not mistaken for a
 deliberate `Single`/`Tabular`/`None`/`Before`.
@@ -482,6 +484,7 @@ emit identical markup.
 | `loadPanel` | `true` | Draws a "Loading..." panel with a spinner over the grid while a request is out: the first load and every reload a sort, filter or layout change starts. The previous table stays on screen, dimmed, and the container carries `aria-busy="true"` meanwhile. Set to `false` (`load-panel="false"`, `LoadPanel(false)`) to draw your own from the `dataLoading` and `dataLoaded` events. The text is the renderer text `loading` (`rendererOptions.texts.loading`), "Yükleniyor..." in the `tr` locale. |
 | `loadPanelDelay` | `300` | Milliseconds a request must run before the panel appears, so a fast answer does not flash it. |
 | `toolbar` | `false` | A strip of buttons just above the grid, outside its scroll box. `true` (`toolbar="true"`, `Toolbar(true)`) shows every button the grid can offer: `excel` (only with `allowExcelExport`), `csv`, `print`, `expandAll`, `collapseAll`, `saveReport`, `openReport`, `fullscreen`. **Save report** downloads the view — layout, captions, filters, sorts and conditional rules, what `state-storing` keeps — as a JSON file (`exportReport()`); **Open report** picks such a file and shows its view (`loadReport(fileOrTextOrObject)`), in this grid or another offering the same fields. A file that is not a report, or names fields this grid does not have, is refused with the `error` event and the grid stays as it was. **Full screen** lets the grid and its toolbar fill the browser window — in the page rather than through the Fullscreen API, so the toolbar stays on screen and it works inside an iframe; the button or Escape leaves it. A list (`toolbar-items="Excel,Print"`, `Toolbar(PivotToolbarItem.Excel, PivotToolbarItem.Print)`, `["excel", "print"]`) picks the buttons and their order; an unknown name is an error, and `toolbar="false"` beside `toolbar-items` is a contradiction. Excel and Print title the file and the page with the grid's `aria-label`. A failure is raised as the `error` event. The texts are the renderer texts `toolbar` (the strip's accessible name), `toolbarExcel`, `toolbarCsv`, `toolbarPrint`, `toolbarExpandAll`, `toolbarCollapseAll`, `toolbarSaveReport`, `toolbarOpenReport`, `toolbarFullscreen` and `toolbarExitFullscreen`, translated in the `tr` locale. Printing hides the strip. |
+| `chart` | `null` | A chart of the pivot beside the grid; needs `pivot-chart.js`. `true`, a type name, or `{ type, position, height, valueKey }`. See [Pivot chart](#pivot-chart). |
 | `stateStoring` | `null` | `"local"`, `"session"`, or `null`. See [State persistence](#state-persistence). Any other value throws. |
 | `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
 
@@ -508,6 +511,7 @@ emit identical markup.
 | `print(options)` | Prints this grid and nothing else on the page: every sibling of the grid and of its ancestors is hidden for the length of the print and put back on `afterprint`. The stylesheet's `@media print` prints the whole table rather than its scroll window, repeats the column headers on every sheet, drops the controls and the selection, and keeps heatmap and conditional colours. The browser's "Save as PDF" turns the same into a PDF. Options: `title` and `subtitle`, printed above the table. In large-data mode it prints the loaded page of rows. Throws when nothing has been rendered yet. `PivotForge.print(element, options)` does the same for any element. A plain Ctrl+P gets the same table layout, alongside the rest of the page. |
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
 | `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
+| `setChart({ type, valueKey })` | Switches the chart's type or charted value, as the reader's own buttons do, and persists the choice. Throws when the grid has no chart or the type is unknown. |
 | `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, conditionalRules, sessionId, totalRowCount }`. |
 | `dispose()` | Aborts any in-flight request, detaches all `on()` handlers, empties the container, and — when the widget built a designer — calls `widget.designer.dispose()` too. After disposal, any method that would issue a network request or trigger a refresh (`refresh`, `sortBy`, `setFilter`, `clearFilters`, `updateFields`, `update`, `drillDown`, `loadPage`, `exportToExcel`) throws; `getState()` remains safe to call for a final snapshot. |
 
@@ -1155,6 +1159,37 @@ JavaScript: `{ groupInterval: "range", groupSize: 50000 }`; Core:
 `PivotFilter.BinSize` and `PivotEngine.DistinctValues(records, field, interval, binSize)`
 for filters and value lists. The width is set where the field is declared; the
 designer does not change it.
+
+### Pivot chart
+
+`chart` draws the pivot as a chart beside the grid — above it by default, below the
+toolbar — from the same result the grid shows:
+
+```html
+<pivot-grid id="salesGrid" chart="Column" chart-position="Top" chart-height="320">
+```
+
+| | |
+|---|---|
+| Types | `Column` (bars side by side), `StackedColumn` (each category's series stacked into one bar), `Bar` (horizontal, for long labels), `Line` (for categories in an order that means something, such as months) |
+| Categories | the outermost row groups — regions, not region × category — or the rows themselves when there is one row level |
+| Series | the outermost column groups, or the data field itself when nothing is on the columns; at most eight, with a note naming how many were left out |
+| Numbers | each group's own subtotal as the engine computed it, so an average or a distinct count is charted correctly; a tooltip shows the grid's text for it, in the field's format |
+| Value | one data field at a time, so there is only ever one axis: the first, unless `valueKey` names another or the reader picks one from the chart's header |
+
+The reader switches the type and the value from the chart's header; both are kept with
+the view in `stateStoring` and in report files, and `setChart({ type, valueKey })` does
+the same from code. A series keeps its colour when a filter takes others away. Hovering a
+category — or focusing the chart and using the arrow keys, Home and End — shows every
+series' value for it; the grid below is the chart's table view. The series colours are
+the `--pt-series-1` to `--pt-series-8` CSS variables, checked together for colour-blind
+separation; replace them as a set.
+
+`chart-position` and `chart-height` (at least 120 pixels, 320 by default) need `chart`.
+C#: `Chart(PivotChartType.Column, PivotChartPosition.Top, height: 320)`. JavaScript:
+`chart: "column"` or `chart: { type: "line", position: "bottom", height: 280, valueKey: "Amount_sum" }`.
+The chart is not printed with the grid, and in large-data mode it charts the rows of the
+page on screen.
 
 ### Localization
 

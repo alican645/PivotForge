@@ -98,6 +98,7 @@ Reference the Razor Class Library assets. Load them in `<head>`, not at the end 
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-drill-down-modal.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-chart.js"></script>
 
 <!-- Optional: the language every component shows. English needs nothing. -->
 <script src="/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>

@@ -16,6 +16,17 @@ change will require a new major version.
 
 ### Added
 
+- Pivot charts: `chart="Column|StackedColumn|Bar|Line"` with `chart-position`
+  and `chart-height` / `Chart(PivotChartType, PivotChartPosition, height)` /
+  `chart` draws the pivot as an SVG chart beside the grid, from the same
+  result (new `pivot-chart.js`). Categories are the outermost row groups and
+  series the outermost column groups (at most eight), each number the
+  group's own subtotal. One data field at a time, picked from the chart's
+  header beside the type switch; both choices are kept with the view and in
+  report files, and `setChart()` makes them from code. Tooltips on hover and
+  with the arrow keys show the grid's own text; a series keeps its colour
+  (`--pt-series-1..8`) when others are filtered away. In English and
+  Turkish. (AspNetCore)
 - Numeric ranges: `group-interval="Range"` with `group-size="50000"` /
   `GroupInterval(PivotGroupInterval.Range).GroupSize(50000m)` /
   `{ groupInterval: "range", groupSize }` splits a numeric field into ranges —

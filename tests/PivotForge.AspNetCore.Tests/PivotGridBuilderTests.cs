@@ -291,4 +291,42 @@ public class PivotGridBuilderTests
         Assert.Equal("session", config.GetProperty("stateStoring").GetString());
         Assert.Equal("satis", config.GetProperty("stateKey").GetString());
     }
+
+    [Theory]
+    [InlineData(PivotChartType.Column, "column")]
+    [InlineData(PivotChartType.StackedColumn, "stackedColumn")]
+    [InlineData(PivotChartType.Bar, "bar")]
+    [InlineData(PivotChartType.Line, "line")]
+    public void ChartWritesItsTypeAndPositionInCamelCase(PivotChartType type, string expected)
+    {
+        var chart = ConfigOf(SalesGrid().Chart(type)).GetProperty("chart");
+
+        Assert.Equal(expected, chart.GetProperty("type").GetString());
+        Assert.Equal("top", chart.GetProperty("position").GetString());
+        Assert.False(chart.TryGetProperty("height", out _));
+    }
+
+    [Fact]
+    public void ChartCarriesItsPositionAndHeight()
+    {
+        var chart = ConfigOf(SalesGrid().Chart(PivotChartType.Line, PivotChartPosition.Bottom, 400))
+            .GetProperty("chart");
+
+        Assert.Equal("bottom", chart.GetProperty("position").GetString());
+        Assert.Equal(400, chart.GetProperty("height").GetInt32());
+    }
+
+    [Fact]
+    public void NoChartUnlessOneIsAskedFor()
+    {
+        Assert.False(ConfigOf(SalesGrid()).TryGetProperty("chart", out _));
+        Assert.False(ConfigOf(SalesGrid().Chart(PivotChartType.Bar).Chart(PivotChartType.None))
+            .TryGetProperty("chart", out _));
+    }
+
+    [Fact]
+    public void AChartLowerThanItsAxesCanBeDrawnIsRefused()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => SalesGrid().Chart(PivotChartType.Column, height: 80));
+    }
 }
