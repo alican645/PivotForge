@@ -40,6 +40,11 @@
     rename: "Rename",
     resetName: "Reset",
     position: "Position",
+    sortOrder: "Sort order",
+    sortAscending: "Ascending",
+    sortDescending: "Descending",
+    sortBy: "Sort by",
+    sortByLabel: "Its own labels",
     moveUp: "Move up",
     moveDown: "Move down",
     removeField: "Remove field",
@@ -1000,6 +1005,80 @@
       return section;
     }
 
+    // Sorting is the widget's to allow, and then the field's.
+    canSort(name) {
+      return this.widget?.options?.allowSorting !== false &&
+        this.state.field(name).allowSorting !== false &&
+        typeof this.state.setSort === "function";
+    }
+
+    // Direction, and what the level is ordered by: its own labels, or one of
+    // the values on the grid -- "regions by sales, highest first". Each pick
+    // sends both, so the two can never disagree.
+    appendSortSections(body, name, area) {
+      const field = this.state.field(name);
+      const valueKeys = this.state.valueKeys();
+      const values = this.state.getState().values;
+      // A row level with no declared order runs A to Z; a column level keeps
+      // the order its data came in, so neither direction is shown as current.
+      const order = field.sortOrder ?? (area === "row" ? "Ascending" : null);
+      const by = valueKeys.includes(field.sortByValueKey) ? field.sortByValueKey : null;
+      const pick = next => this.applySort(name, area, {
+        order: next.order ?? order ?? "Ascending",
+        byValueKey: next.byValueKey === undefined ? by : next.byValueKey
+      });
+
+      const direction = this.settingsSection(this.labels.sortOrder);
+      this.settingsChoices(
+        direction,
+        "sort-order",
+        [
+          { value: "Ascending", label: this.labels.sortAscending },
+          { value: "Descending", label: this.labels.sortDescending }
+        ],
+        order,
+        picked => pick({ order: picked }));
+      body.appendChild(direction);
+
+      const measure = this.settingsSection(this.labels.sortBy);
+      this.settingsChoices(
+        measure,
+        "sort-by",
+        [
+          { value: "", label: this.labels.sortByLabel },
+          ...values.map((value, index) => ({
+            value: valueKeys[index],
+            label: this.valueLabel(value)
+          }))
+        ],
+        by ?? "",
+        picked => pick({ byValueKey: picked === "" ? null : picked })
+      ).classList.add("is-stacked");
+      body.appendChild(measure);
+    }
+
+    // "Tutar (Sum)" -- the caption alone would not tell two summaries of one
+    // field apart. A calculated value is its formula's result, so it has none.
+    valueLabel(value) {
+      const caption = this.state.field(value.field).caption;
+      const aggregation = this.labels.aggregations?.[value.aggregation];
+      return aggregation && value.aggregation !== PivotForge.PivotRequestBuilder?.CALCULATED
+        ? `${caption} (${aggregation})`
+        : caption;
+    }
+
+    // A header click's sort outranks a field's own, so a choice made here
+    // takes that axis' header sort back; otherwise it would appear to do
+    // nothing until the header sort was cleared some other way.
+    async applySort(name, area, sort) {
+      this.state.setSort(name, sort);
+      this.render();
+      await this.widget.update({
+        ...this.state.toRequestState(),
+        ...(area === "row" ? { rowSort: null } : { columnSort: null })
+      });
+    }
+
     // A row of choice buttons where exactly one is current. The old hand-built
     // menu used buttons rather than a select so the whole set of options is
     // visible at once and the active one is legible without opening anything.
@@ -1101,6 +1180,10 @@
       step("move-down", this.labels.moveDown, index + 2, index < names.length - 1);
       position.appendChild(positionRow);
       settings.body.appendChild(position);
+
+      if ((area === "row" || area === "column") && this.canSort(name)) {
+        this.appendSortSections(settings.body, name, area);
+      }
 
       // --- Filter values --------------------------------------------------
       // The chip's ▼ is out of the tab sequence, so this is the keyboard's way

@@ -1198,3 +1198,44 @@ test("a field's presentation options travel with it into whatever area it is dra
   // And the round trip is a request the builder accepts.
   assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(fields));
 });
+
+test("setSort orders a row or column field by its labels or by a value, and forgets a choice equal to the declaration", () => {
+  const state = create();
+
+  state.setSort("Region", { order: "Descending", byValueKey: "Amount_sum" });
+  let region = state.toFields().find(field => field.dataField === "Region");
+  assert.equal(region.sortOrder, "Descending");
+  assert.equal(region.sortByValueKey, "Amount_sum");
+  assert.deepEqual(state.getState().sortBys, { Region: "Amount_sum" });
+
+  // Back to the declaration: nothing left to store.
+  state.setSort("Region", { order: "Ascending", byValueKey: null });
+  region = state.toFields().find(field => field.dataField === "Region");
+  assert.equal(region.sortByValueKey, undefined);
+  assert.deepEqual(state.getState().sortBys, {});
+
+  assert.throws(() => state.setSort("Amount", { order: "Ascending" }), /only a row or column field is sorted/);
+  assert.throws(() => state.setSort("Region", { order: "Upward" }), /Unknown sortOrder/);
+  assert.throws(() => state.setSort("Region", { order: "Ascending", byValueKey: "Quantity_sum" }),
+    /"Quantity_sum" is not a value on the grid/);
+});
+
+test("a value picked over a declared sort drops the declared summary path, and a saved view brings it back", () => {
+  const declared = [
+    { dataField: "Region", caption: "Bölge", area: "row", sortByValueKey: "Amount_sum", sortBySummaryPath: ["2025"] },
+    { dataField: "Year", caption: "Yıl", area: "column" },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" },
+    { dataField: "Quantity", caption: "Miktar", area: "data", aggregation: "sum" }
+  ];
+  const state = new PivotForge.PivotLayoutState(declared);
+
+  state.setSort("Region", { order: "Descending", byValueKey: "Quantity_sum" });
+  const region = state.toFields().find(field => field.dataField === "Region");
+  assert.equal(region.sortByValueKey, "Quantity_sum");
+  assert.equal(region.sortBySummaryPath, undefined);
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
+
+  const saved = state.getState();
+  const restored = new PivotForge.PivotLayoutState(declared, { ...saved });
+  assert.equal(restored.toFields().find(field => field.dataField === "Region").sortByValueKey, "Quantity_sum");
+});

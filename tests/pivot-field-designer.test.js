@@ -2228,3 +2228,63 @@ test("the reader's own field can be edited and deleted from its settings", async
   await findByAction(panel, "delete-calculated").dispatch("click", {});
   assert.equal(state.catalog.has(name), false);
 });
+
+// --- The sort panel ---------------------------------------------------------
+
+test("a row field's settings offer its direction and what it is ordered by", () => {
+  const { host } = buildWithFormat();
+
+  openSettings(host, "Region");
+
+  assert.deepEqual(allByAction(settingsPanel(), "sort-order").map(button => button.dataset.value),
+    ["Ascending", "Descending"]);
+  assert.deepEqual(allByAction(settingsPanel(), "sort-by").map(button => button.dataset.value),
+    ["", "Amount_sum"]);
+  // A row level with nothing declared runs A to Z, by its own labels.
+  assert.equal(selected("sort-order").dataset.value, "Ascending");
+  assert.equal(selected("sort-by").dataset.value, "");
+});
+
+test("picking a value orders the field by it and takes back a header sort", async () => {
+  const { host, state, updates } = buildWithFormat();
+  openSettings(host, "Region");
+
+  await choice("sort-order", "Descending").dispatch("click", {});
+  await choice("sort-by", "Amount_sum").dispatch("click", {});
+
+  const region = state.toFields().find(field => field.dataField === "Region");
+  assert.equal(region.sortOrder, "Descending");
+  assert.equal(region.sortByValueKey, "Amount_sum");
+  // Both picks sent both halves, and each cleared the row header sort.
+  assert.equal(updates.at(-1).rowSort, null);
+  assert.equal(selected("sort-order").dataset.value, "Descending");
+  assert.equal(selected("sort-by").dataset.value, "Amount_sum");
+
+  await choice("sort-by", "").dispatch("click", {});
+  assert.equal(state.toFields().find(field => field.dataField === "Region").sortByValueKey, undefined);
+});
+
+test("no sort panel on a data field, on a field that opted out, or on a grid without sorting", () => {
+  const { host } = buildWithFormat();
+  openSettings(host, "Amount");
+  assert.equal(allByAction(settingsPanel(), "sort-order").length, 0);
+
+  const updates = [];
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Region", caption: "Bölge", area: "row", allowSorting: false },
+    { dataField: "Category", caption: "Kategori", area: "row" },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+  ]);
+  const optedOut = createElement("div");
+  new PivotForge.PivotFieldDesigner(optedOut, { state, widget: { update: async p => updates.push(p) } });
+  openSettings(optedOut, "Region");
+  assert.equal(allByAction(settingsPanel(), "sort-order").length, 0);
+
+  const gridOff = createElement("div");
+  new PivotForge.PivotFieldDesigner(gridOff, {
+    state: new PivotForge.PivotLayoutState(formatCatalog),
+    widget: { update: async () => {}, options: { allowSorting: false } }
+  });
+  openSettings(gridOff, "Region");
+  assert.equal(allByAction(settingsPanel(), "sort-order").length, 0);
+});
