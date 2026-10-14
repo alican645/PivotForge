@@ -3,7 +3,7 @@ const { test, expect } = require("@playwright/test");
 // Amount grouped into ranges of 50,000 against the real engine: the demo's
 // amounts run from about 18,000 to 156,000, so four ranges, in order, whose
 // quantities add up to the grand total -- and the header funnel lists the
-// same ranges the rows show.
+// ranges the rows show, spelled the same way.
 const PAGE = "/Home/TagHelpers";
 
 test("a numeric field grouped into ranges reads as ordered ranges that add up", async ({ page }) => {
@@ -46,6 +46,11 @@ test("a numeric field grouped into ranges reads as ordered ranges that add up", 
     expect(end).toBe(start + 50000);
   });
   expect(outcome.totals.reduce((sum, value) => sum + value, 0)).toBe(outcome.grandTotal);
-  expect([...outcome.listed].sort()).toEqual([...outcome.labels].sort());
+  // The value list reads the whole source, which can hold more ranges than the
+  // grid's page of records; every range the rows show has to be among them,
+  // spelled the same way, or a filter picked from the funnel would match nothing.
+  for (const label of outcome.labels) {
+    expect(outcome.listed).toContain(label);
+  }
   expect(errors).toEqual([]);
 });
