@@ -1420,6 +1420,12 @@ select {
   color: var(--pt-accent-strong);
 }
 
+.pivot-toolbar__button[aria-pressed="true"] {
+  border-color: var(--pt-accent);
+  background: var(--pt-panel-soft);
+  color: var(--pt-accent-strong);
+}
+
 .pivot-toolbar__button:focus-visible {
   outline: 2px solid var(--pt-selection-ring);
   outline-offset: 1px;
@@ -3391,6 +3397,10 @@ select {
    printed grey says nothing. Applies to a plain Ctrl+P as much as to
    PivotWidget.print(). */
 /* Pivot chart (pivot-chart.js). */
+.pivot-chart[hidden] {
+  display: none;
+}
+
 .pivot-chart {
   margin: 8px 0;
   padding: 10px 12px 8px;

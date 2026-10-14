@@ -939,6 +939,33 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task ChartVisibleFalseStartsTheChartHidden()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                Chart = PivotChartType.Column,
+                ChartVisible = false,
+                ToolbarItems = "Chart"
+            },
+            ["chart", "chart-visible", "toolbar-items"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.GetProperty("chart").GetProperty("visible").GetBoolean());
+        Assert.Equal(["chart"], config.GetProperty("toolbar").EnumerateArray().Select(item => item.GetString()));
+    }
+
+    [Fact]
+    public async Task ChartVisibleWithoutAChartIsReported()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ChartVisible = false },
+            ["chart-visible"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+    }
+
+    [Fact]
     public async Task ChartPositionWithoutAChartIsReported()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(

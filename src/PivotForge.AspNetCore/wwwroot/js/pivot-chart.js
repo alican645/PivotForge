@@ -62,11 +62,18 @@
       throw new Error("chart height must be a number of pixels, at least 120.");
     }
 
+    if (declared.visible !== undefined && typeof declared.visible !== "boolean") {
+      throw new Error("chart visible must be true or false.");
+    }
+
     return {
       type,
       position,
       height,
-      valueKey: declared.valueKey ?? null
+      valueKey: declared.valueKey ?? null,
+      // A chart can be declared and start hidden, for a page where the table
+      // comes first and the chart is one toolbar click away.
+      visible: declared.visible !== false
     };
   }
 

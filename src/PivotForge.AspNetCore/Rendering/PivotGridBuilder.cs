@@ -129,7 +129,8 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <summary>Shows or hides a toolbar above the grid with every button it can offer.</summary>
     /// <remarks>
     /// The buttons are Excel (only when <see cref="AllowExcelExport"/> is on), CSV, Print, Expand all,
-    /// Collapse all, Save report, Open report and Full screen. Excel and Print title the file and the page with the grid's
+    /// Collapse all, Save report, Open report, Full screen and Chart (only when the grid has a
+    /// chart). Excel and Print title the file and the page with the grid's
     /// <see cref="AriaLabel"/>. A failure is raised as the grid's <c>error</c> event.
     /// </remarks>
     /// <param name="enabled">True to show the toolbar.</param>
@@ -160,6 +161,10 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <param name="type">The chart type; <see cref="PivotChartType.None"/> draws no chart.</param>
     /// <param name="position">Whether the chart sits above or below the grid.</param>
     /// <param name="height">The plot's height in pixels, at least 120; 320 when not given.</param>
+    /// <param name="visible">
+    /// False to start with the chart hidden, for the reader to show from the toolbar's
+    /// <see cref="PivotToolbarItem.Chart"/> button; their choice is kept with the view.
+    /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="height"/> is less than 120.
@@ -167,7 +172,8 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder Chart(
         PivotChartType type,
         PivotChartPosition position = PivotChartPosition.Top,
-        int? height = null)
+        int? height = null,
+        bool visible = true)
     {
         if (height is { } requested)
         {
@@ -189,6 +195,11 @@ public sealed class PivotGridBuilder : IHtmlContent
         if (height is { } pixels)
         {
             chart["height"] = pixels;
+        }
+
+        if (!visible)
+        {
+            chart["visible"] = false;
         }
 
         return Set("chart", chart);

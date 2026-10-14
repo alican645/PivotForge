@@ -16,6 +16,12 @@ change will require a new major version.
 
 ### Added
 
+- A **Chart** toolbar button (`toolbar-items="Chart"` / `PivotToolbarItem.Chart`
+  / `"chart"`, part of `toolbar="true"` when the grid has a chart) shows and
+  hides the pivot chart; `showChart()` does it from code. Whether the chart is
+  shown is kept with the view and in report files, and `chart-visible="false"`
+  / `Chart(..., visible: false)` / `chart: { visible: false }` starts it
+  hidden. A hidden chart is not drawn until it is shown. (AspNetCore)
 - Pivot charts: `chart="Column|StackedColumn|Bar|Line"` with `chart-position`
   and `chart-height` / `Chart(PivotChartType, PivotChartPosition, height)` /
   `chart` draws the pivot as an SVG chart beside the grid, from the same

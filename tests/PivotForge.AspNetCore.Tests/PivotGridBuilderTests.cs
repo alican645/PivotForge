@@ -317,6 +317,27 @@ public class PivotGridBuilderTests
     }
 
     [Fact]
+    public void AChartDeclaredHiddenSaysSoAndAVisibleOneSaysNothing()
+    {
+        Assert.False(ConfigOf(SalesGrid().Chart(PivotChartType.Column, visible: false))
+            .GetProperty("chart").GetProperty("visible").GetBoolean());
+        Assert.False(ConfigOf(SalesGrid().Chart(PivotChartType.Column))
+            .GetProperty("chart").TryGetProperty("visible", out _));
+    }
+
+    [Fact]
+    public void TheChartButtonIsAToolbarItem()
+    {
+        var config = ConfigOf(SalesGrid()
+            .Chart(PivotChartType.Line)
+            .Toolbar(PivotToolbarItem.Print, PivotToolbarItem.Chart));
+
+        Assert.Equal(
+            ["print", "chart"],
+            config.GetProperty("toolbar").EnumerateArray().Select(item => item.GetString()));
+    }
+
+    [Fact]
     public void NoChartUnlessOneIsAskedFor()
     {
         Assert.False(ConfigOf(SalesGrid()).TryGetProperty("chart", out _));

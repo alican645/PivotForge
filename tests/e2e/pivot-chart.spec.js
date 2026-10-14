@@ -11,17 +11,17 @@ test.beforeEach(async ({ page }) => {
   page.errors = errors;
 });
 
-async function build(page, fields, chart) {
+async function build(page, fields, chart, extra = {}) {
   await page.goto(PAGE);
   await page.waitForSelector(".pivot-table__table td");
-  await page.evaluate(async ({ fields, chart }) => {
+  await page.evaluate(async ({ fields, chart, extra }) => {
     const host = document.createElement("div");
     host.id = "chartPivot";
     document.body.appendChild(host);
-    window.chartWidget = PivotForge.create(host, { fields, chart, autoLoad: false, locale: "tr" });
+    window.chartWidget = PivotForge.create(host, { fields, chart, autoLoad: false, locale: "tr", ...extra });
     await window.chartWidget.refresh();
-  }, { fields, chart });
-  await page.waitForSelector(".pivot-chart .pivot-chart__svg");
+  }, { fields, chart, extra });
+  await page.waitForSelector("#chartPivot .pivot-table__table td");
 }
 
 const AMOUNT = { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" };
@@ -135,7 +135,7 @@ test("the reader switches type and value, and the choice is kept with the view",
   await expect(page.getByRole("button", { name: "Çubuk" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".pivot-chart__svg")).toHaveAttribute("aria-label", "Grafik: Adet (Çubuk)");
   expect(await page.evaluate(() => window.chartWidget.snapshotState().chart))
-    .toEqual({ type: "bar", valueKey: "Quantity_sum" });
+    .toEqual({ type: "bar", valueKey: "Quantity_sum", visible: true });
   expect(page.errors).toEqual([]);
 });
 
@@ -153,5 +153,32 @@ test("the Grouping page charts its years by quarter", async ({ page }) => {
   expect(categories.every(text => /^\d{4}$/.test(text))).toBe(true);
   await expect(page.locator(".pivot-chart__legend-item")).not.toHaveCount(0);
   await expect(page.locator(".pivot-chart__bar")).not.toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});
+
+test("the toolbar's chart button hides the chart and brings it back, drawn", async ({ page }) => {
+  await build(page, [
+    { dataField: "Region", caption: "Bölge", area: "row" },
+    { dataField: "Year", caption: "Yıl", area: "column" },
+    AMOUNT
+  ], { type: "column", visible: false }, { toolbar: ["chart"] });
+
+  const chart = page.locator(".pivot-chart");
+  const button = page.locator('[data-toolbar-item="chart"]');
+  await expect(chart).toBeHidden();
+  await expect(button).toHaveText("Grafik");
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+
+  await button.click();
+  await expect(chart).toBeVisible();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".pivot-chart__bar")).not.toHaveCount(0);
+  // Drawn at the width it has now, not the width a hidden box reports.
+  const width = await page.locator(".pivot-chart__svg").evaluate(svg => svg.getBoundingClientRect().width);
+  expect(width).toBeGreaterThan(300);
+
+  await button.click();
+  await expect(chart).toBeHidden();
+  expect(await page.evaluate(() => window.chartWidget.snapshotState().chart.visible)).toBe(false);
   expect(page.errors).toEqual([]);
 });

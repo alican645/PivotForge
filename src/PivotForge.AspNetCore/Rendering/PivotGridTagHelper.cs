@@ -139,6 +139,10 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("chart-height")]
     public int? ChartHeight { get; set; }
 
+    /// <summary>Gets or sets whether the chart starts on screen; false leaves it to the toolbar's Chart button.</summary>
+    [HtmlAttributeName("chart-visible")]
+    public bool? ChartVisible { get; set; }
+
     /// <summary>Gets or sets what a heatmap colour scale over the value cells is drawn across.</summary>
     /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
     [HtmlAttributeName("heatmap")]
@@ -410,12 +414,13 @@ public sealed class PivotGridTagHelper : TagHelper
 
         if (written.Contains("chart"))
         {
-            builder.Chart(Chart, ChartPosition, ChartHeight);
+            builder.Chart(Chart, ChartPosition, ChartHeight, ChartVisible ?? true);
         }
-        else if (written.Contains("chart-position") || ChartHeight is not null)
+        else if (written.Contains("chart-position") || ChartHeight is not null || ChartVisible is not null)
         {
             throw new InvalidOperationException(
-                "pivot-grid sets chart-position or chart-height without chart. Add chart=\"Column\" (or another type).");
+                "pivot-grid sets chart-position, chart-height or chart-visible without chart. " +
+                "Add chart=\"Column\" (or another type).");
         }
 
         if (written.Contains("heatmap"))
