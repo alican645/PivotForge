@@ -28,5 +28,11 @@ public enum PivotToolbarItem
     OpenReport,
 
     /// <summary>Lets the grid and its toolbar fill the browser window; Escape or the button leaves it.</summary>
-    Fullscreen
+    Fullscreen,
+
+    /// <summary>
+    /// Shows or hides the grid's chart, keeping the choice with the view. Shown only when the grid
+    /// has a chart; see <see cref="PivotGridBuilder.Chart"/>.
+    /// </summary>
+    Chart
 }

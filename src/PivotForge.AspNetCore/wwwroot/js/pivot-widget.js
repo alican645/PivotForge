@@ -28,8 +28,9 @@
     toolbar: false,
     // A chart of the pivot beside the grid (pivot-chart.js): true, a type name
     // ("column", "stackedColumn", "bar", "line") or
-    // { type, position: "top" | "bottom", height, valueKey }. The reader can
-    // switch its type and value; both are kept with the rest of the view.
+    // { type, position: "top" | "bottom", height, valueKey, visible }. The
+    // reader can switch its type and value, and hide it from the toolbar's
+    // "chart" button; all three are kept with the rest of the view.
     chart: null,
     largeData: false,
     pageSize: 40,
@@ -198,7 +199,8 @@
     collapseAll: { text: "toolbarCollapseAll", label: "Collapse all" },
     saveReport: { text: "toolbarSaveReport", label: "Save report" },
     openReport: { text: "toolbarOpenReport", label: "Open report" },
-    fullscreen: { text: "toolbarFullscreen", label: "Full screen" }
+    fullscreen: { text: "toolbarFullscreen", label: "Full screen" },
+    chart: { text: "toolbarChart", label: "Chart" }
   };
 
   // Written into a saved report file beside the state's version, so a file
@@ -275,9 +277,7 @@
 
       this.renderer = this.options.renderImpl ? null : this.createRenderer();
 
-      this.toolbarNode = this.createToolbar();
-
-      // After the toolbar, so a chart above the grid sits between the two.
+      // Before the toolbar, which offers its chart button only for a chart.
       this.chartOptions = this.resolveChartOptions();
       this.chartState = this.chartOptions
         ? {
@@ -285,6 +285,15 @@
           valueKey: restored?.chart?.valueKey ?? this.chartOptions.valueKey
         }
         : null;
+      // Kept beside the chart's own state rather than in it: the chart knows
+      // what it draws, the widget whether it is drawn at all.
+      this.chartVisible = this.chartOptions
+        ? restored?.chart?.visible ?? this.chartOptions.visible
+        : false;
+
+      this.toolbarNode = this.createToolbar();
+
+      // After the toolbar, so a chart above the grid sits between the two.
       this.chart = this.createChart();
 
       this.layoutState = null;
@@ -469,7 +478,8 @@
       const types = PivotForge.PivotChart?.TYPES ?? [];
       return {
         type: types.includes(chart.type) ? chart.type : undefined,
-        valueKey: typeof chart.valueKey === "string" ? chart.valueKey : undefined
+        valueKey: typeof chart.valueKey === "string" ? chart.valueKey : undefined,
+        visible: typeof chart.visible === "boolean" ? chart.visible : undefined
       };
     }
 
@@ -520,7 +530,7 @@
         columnSort: this.columnSort,
         valueFilters: this.valueFilters,
         conditionalRules: this.conditionalRules,
-        ...(this.chartState ? { chart: { ...this.chartState } } : {})
+        ...(this.chartState ? { chart: { ...this.chartState, visible: this.chartVisible } } : {})
       };
     }
 
@@ -599,6 +609,9 @@
           valueKey: report.chart.valueKey ?? this.chartState.valueKey
         };
         this.chart?.setState(this.chartState);
+        if (report.chart.visible !== undefined) {
+          this.showChart(report.chart.visible, { save: false });
+        }
       }
 
       this.saveState();
@@ -1238,6 +1251,7 @@
         this.container.after(host);
       }
       this.chartNode = host;
+      host.hidden = !this.chartVisible;
 
       return new PivotForge.PivotChart(host, {
         ...this.chartState,
@@ -1257,7 +1271,9 @@
     }
 
     renderChart(result) {
-      if (!this.chart) {
+      // A hidden chart is not drawn: it has no width to be drawn at, and the
+      // reader is not looking. Showing it draws the latest result.
+      if (!this.chart || !this.chartVisible) {
         return;
       }
 
@@ -1267,6 +1283,34 @@
         scope: columns.map(field => field.key).join("|")
       });
       this.chartState = { ...this.chart.state };
+    }
+
+    // Shows or hides the chart, as the toolbar's chart button does, and keeps
+    // the choice with the view. With no argument it toggles.
+    showChart(visible = !this.chartVisible, { save = true } = {}) {
+      this.assertNotDisposed();
+      if (!this.chart) {
+        throw new Error("Cannot show the chart because the grid has no chart.");
+      }
+
+      this.chartVisible = Boolean(visible);
+      if (this.chartNode) {
+        this.chartNode.hidden = !this.chartVisible;
+      }
+      this.syncChartButton();
+      if (this.chartVisible && this.result) {
+        this.renderChart(this.result);
+      }
+      if (save) {
+        this.saveState();
+      }
+    }
+
+    syncChartButton() {
+      const button = this.toolbarNode?.children
+        ? Array.from(this.toolbarNode.children).find(child => child.dataset?.toolbarItem === "chart")
+        : null;
+      button?.setAttribute("aria-pressed", String(this.chartVisible));
     }
 
     // Switches the chart's type or value from code, as the reader's own
@@ -1366,6 +1410,10 @@
             `Unknown toolbar item "${item}". Expected one of: ${Object.keys(TOOLBAR_ITEMS).join(", ")}.`);
         }
 
+        if (item === "chart") {
+          return Boolean(this.chartOptions);
+        }
+
         return item === "excel" ? this.options.allowExcelExport === true : Boolean(this.renderer);
       });
     }
@@ -1393,6 +1441,10 @@
         button.dataset.toolbarItem = item;
         button.textContent = this.tableText(TOOLBAR_ITEMS[item].text, TOOLBAR_ITEMS[item].label);
         button.addEventListener("click", () => this.runToolbarItem(item, button));
+        // A toggle: pressed while the chart is on screen.
+        if (item === "chart") {
+          button.setAttribute("aria-pressed", String(this.chartVisible));
+        }
         toolbar.appendChild(button);
       }
 
@@ -1437,6 +1489,9 @@
             break;
           case "fullscreen":
             this.toggleFullscreen();
+            break;
+          case "chart":
+            this.showChart();
             break;
         }
       } catch (error) {

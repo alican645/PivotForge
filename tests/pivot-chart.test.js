@@ -23,12 +23,15 @@ const flat = {
 };
 
 test("normalize accepts true, a type name in any case, or an object, and refuses the rest", () => {
-  assert.deepEqual(PivotChart.normalize(true), { type: "column", position: "top", height: 320, valueKey: null });
+  assert.deepEqual(PivotChart.normalize(true),
+    { type: "column", position: "top", height: 320, valueKey: null, visible: true });
   assert.equal(PivotChart.normalize("StackedColumn").type, "stackedColumn");
   assert.equal(PivotChart.normalize("LINE").type, "line");
   assert.deepEqual(
     PivotChart.normalize({ type: "bar", position: "Bottom", height: 400, valueKey: "amount_sum" }),
-    { type: "bar", position: "bottom", height: 400, valueKey: "amount_sum" });
+    { type: "bar", position: "bottom", height: 400, valueKey: "amount_sum", visible: true });
+  assert.equal(PivotChart.normalize({ visible: false }).visible, false);
+  assert.throws(() => PivotChart.normalize({ visible: "no" }), /visible must be true or false/);
   assert.equal(PivotChart.normalize(null), null);
   assert.equal(PivotChart.normalize(false), null);
   assert.equal(PivotChart.normalize("None"), null);
@@ -231,7 +234,7 @@ function withChart(run, options = {}, storage = null) {
     appendChild(node) { return node; },
     removeAttribute() {},
     setAttribute() {},
-    before(node) { this.beforeNode = node; },
+    before(node) { (this.beforeNodes ??= []).push(node); this.beforeNode = node; },
     after(node) { this.afterNode = node; }
   };
   const widget = PivotForge.create(container, {
@@ -302,7 +305,7 @@ test("every result is charted with the values on screen, the first one by defaul
     widget.render(flat);
     assert.deepEqual(widget.chart.values.map(value => value.key), ["Amount_sum", "Quantity_sum"]);
     assert.deepEqual(drawn.at(-1), { type: "bar", valueKey: "Amount_sum" });
-    assert.deepEqual(widget.snapshotState().chart, { type: "bar", valueKey: "Amount_sum" });
+    assert.deepEqual(widget.snapshotState().chart, { type: "bar", valueKey: "Amount_sum", visible: true });
     assert.equal(widget.chart.scope, "Year");
   }, { chart: "Bar" });
 });
@@ -334,7 +337,7 @@ test("the reader's switch is kept with the view, and a stored one comes back", (
     assert.deepEqual(widget.chartState, { type: "line", valueKey: "Quantity_sum" });
   }, options, storage);
 
-  assert.deepEqual(JSON.parse([...store.values()][0]).chart, { type: "line", valueKey: "Quantity_sum" });
+  assert.deepEqual(JSON.parse([...store.values()][0]).chart, { type: "line", valueKey: "Quantity_sum", visible: true });
 
   withChart(({ widget, drawn }) => {
     widget.render(flat);
@@ -344,7 +347,8 @@ test("the reader's switch is kept with the view, and a stored one comes back", (
 
 test("a stored chart type this build does not draw falls back to the declared one", () => {
   withChart(({ widget }) => {
-    assert.deepEqual(widget.parseChartState({ type: "pie", valueKey: 4 }), { type: undefined, valueKey: undefined });
+    assert.deepEqual(widget.parseChartState({ type: "pie", valueKey: 4, visible: "yes" }),
+      { type: undefined, valueKey: undefined, visible: undefined });
     assert.equal(widget.parseChartState("line"), null);
   }, { chart: true });
 });
@@ -388,4 +392,104 @@ test("dispose takes the chart away with the grid", () => {
     node = widget.chartNode;
   }, { chart: true });
   assert.equal(node.removed, true);
+});
+
+// ---- The toolbar's chart button. --------------------------------------------
+
+function chartButton(container) {
+  const toolbar = container.beforeNodes?.find(node => node.attributes.role === "toolbar");
+  return toolbar?.children.find(button => button.dataset.toolbarItem === "chart") ?? null;
+}
+
+function memoryStorage() {
+  const store = new Map();
+  return {
+    store,
+    getItem: key => store.get(key) ?? null,
+    setItem: (key, value) => store.set(key, value),
+    removeItem: key => store.delete(key)
+  };
+}
+
+test("the chart button is offered only beside a chart, last with toolbar: true", () => {
+  withChart(({ container }) => {
+    assert.equal(chartButton(container), null);
+  }, { toolbar: ["print", "chart"] });
+
+  withChart(({ container }) => {
+    const toolbar = container.beforeNodes[0];
+    assert.equal(toolbar.children.at(-1).dataset.toolbarItem, "chart");
+    assert.equal(chartButton(container).attributes["aria-pressed"], "true");
+  }, { toolbar: true, chart: true });
+});
+
+test("the chart button hides the chart and shows it again, drawing the latest result", async () => {
+  await withChart(async ({ widget, container, drawn }) => {
+    const button = chartButton(container);
+    widget.result = flat;
+    widget.render(flat);
+    const before = drawn.length;
+
+    await widget.runToolbarItem("chart", button);
+    assert.equal(widget.chartNode.hidden, true);
+    assert.equal(button.attributes["aria-pressed"], "false");
+    assert.equal(widget.snapshotState().chart.visible, false);
+
+    // A hidden chart is not drawn on a new result.
+    widget.render(flat);
+    assert.equal(drawn.length, before);
+
+    await widget.runToolbarItem("chart", button);
+    assert.equal(widget.chartNode.hidden, false);
+    assert.equal(button.attributes["aria-pressed"], "true");
+    assert.equal(drawn.length, before + 1);
+  }, { toolbar: ["chart"], chart: true });
+});
+
+test("a chart declared hidden starts hidden, and a hidden one stays hidden on the next visit", () => {
+  withChart(({ widget, drawn }) => {
+    assert.equal(widget.chartNode.hidden, true);
+    widget.render(flat);
+    assert.equal(drawn.length, 0);
+  }, { chart: { visible: false } });
+
+  const storage = memoryStorage();
+  const options = { chart: true, stateStoring: "local", stateKey: "chart-visible" };
+  withChart(({ widget }) => {
+    widget.showChart(false);
+  }, options, storage);
+  assert.equal(JSON.parse([...storage.store.values()][0]).chart.visible, false);
+
+  withChart(({ widget }) => {
+    assert.equal(widget.chartVisible, false);
+    assert.equal(widget.chartNode.hidden, true);
+  }, options, storage);
+});
+
+test("showChart toggles from code, and needs a chart", () => {
+  withChart(({ widget }) => {
+    widget.showChart();
+    assert.equal(widget.chartVisible, false);
+    widget.showChart(true);
+    assert.equal(widget.chartVisible, true);
+  }, { chart: true });
+
+  withChart(({ widget }) => {
+    assert.throws(() => widget.showChart(), /has no chart/);
+  });
+});
+
+test("an opened report shows or hides the chart as it was saved", async () => {
+  await withChart(async ({ widget }) => {
+    widget.refresh = async () => {};
+    await widget.loadReport({ format: "pivotforge-report", version: 1, chart: { visible: false } });
+    assert.equal(widget.chartNode.hidden, true);
+    assert.equal(widget.chartState.type, "column");
+  }, { chart: "column" });
+});
+
+test("the Turkish pack names the chart button", () => {
+  withChart(({ container }) => {
+    assert.equal(chartButton(container).textContent, "Grafik");
+  }, { chart: true, toolbar: ["chart"], locale: "tr" });
 });

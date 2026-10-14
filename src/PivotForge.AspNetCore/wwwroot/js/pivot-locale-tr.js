@@ -44,6 +44,7 @@
         toolbarSaveReport: "Raporu kaydet",
         toolbarOpenReport: "Rapor aç",
         toolbarFullscreen: "Tam ekran",
+        toolbarChart: "Grafik",
         toolbarExitFullscreen: "Tam ekrandan çık"
       }
     },

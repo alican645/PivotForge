@@ -306,6 +306,8 @@ Açık kalanlar:
 - [x] Hücre içi çubuklar — `value-bars`, sıfırda ortak eksen, negatifler ayrı renkte; Excel'e taşınmıyor
 - [x] Pivot grafikleri — `chart`, `pivot-chart.js`: dış satır grupları kategori, dış sütun
       grupları seri (en fazla 8); tür ve değer grafiğin başlığından seçiliyor, görünümle saklanıyor
+- [x] Araç çubuğunda **Grafik** düğmesi — grafiği gösterip gizliyor, seçim görünümle saklanıyor;
+      `chart-visible="false"` ile gizli başlıyor
 - [x] Kenarlıklar — `show-borders`: `true` dış çerçeve, `false` gövdede çizgi yok
 - [x] `word-wrap` — alan başına, bkz. Bölüm 1
 - [x] Tam ekran — araç çubuğunda; sayfa içinde (Fullscreen API değil), Escape ile çıkılıyor
