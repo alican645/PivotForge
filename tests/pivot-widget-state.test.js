@@ -835,3 +835,39 @@ test("declared value filters are checked where they are declared", () => {
   assert.throws(() => build({ options: { valueFilters: [{ field: "Region", operator: "Between", value: 1 }] } }),
     /requires a number "value2"/);
 });
+
+// --- Range widths --------------------------------------------------------------
+
+const rangeFields = [
+  { dataField: "Amount", caption: "Tutar aralığı", area: "row", groupInterval: "range", groupSize: 50000 },
+  { dataField: "Year", caption: "Yıl", area: "column" },
+  { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+];
+
+test("a range width changed in the designer is stored and comes back, value filter and all", async () => {
+  const first = build({ designer: true, options: { fields: rangeFields } });
+  first.widget.valueFilters = [{ field: "Amount:range50000", operator: "GreaterThan", value: 10 }];
+  first.widget.update = async () => {};
+  await first.widget.designer.applyGroupSize("Amount:range50000", 10000);
+
+  const stored = saved(first.store);
+  assert.deepEqual(stored.groupSizes, { "Amount:range50000": 10000 });
+  assert.deepEqual(stored.layout.rows, ["Amount:range10000"]);
+  assert.equal(stored.valueFilters[0].field, "Amount:range10000");
+  first.widget.dispose();
+
+  const second = build({ designer: true, storage: first.store, options: { fields: rangeFields } });
+  assert.deepEqual(second.widget.layoutState.getState().rows, ["Amount:range10000"]);
+  const row = second.widget.fields.find(field => field.area === "row");
+  assert.equal(row.groupSize, 10000);
+  assert.equal(second.widget.activeValueFilters().length, 1);
+  assert.deepEqual(second.widget.buildRequest().rows, [{ field: "Amount", interval: "range", binSize: 10000 }]);
+  second.widget.dispose();
+});
+
+test("a view whose widths were never changed stores none", () => {
+  const { widget, store } = build({ designer: true, options: { fields: rangeFields } });
+  widget.saveState();
+  assert.equal("groupSizes" in saved(store), false);
+  widget.dispose();
+});

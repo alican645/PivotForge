@@ -348,7 +348,8 @@
               ...restored.layout,
               captions: restored.captions,
               sortOrders: restored.sortOrders,
-              sortBys: restored.sortBys
+              sortBys: restored.sortBys,
+              groupSizes: restored.groupSizes
             });
         } catch {
           this.filters = [...(this.options.filters ?? [])];
@@ -424,6 +425,7 @@
         captions: payload.captions ?? null,
         sortOrders: payload.sortOrders ?? null,
         sortBys: payload.sortBys ?? null,
+        groupSizes: payload.groupSizes ?? null,
         // A filter naming a field the catalog dropped would be rejected by the
         // server, so it is discarded here rather than sent. A mode the vocabulary
         // does not know is discarded the same way rather than thrown on: a view
@@ -520,7 +522,10 @@
             },
             captions: layout.captions,
             sortOrders: layout.sortOrders,
-            sortBys: layout.sortBys
+            sortBys: layout.sortBys,
+            // Only when the reader changed one, so a view saved before range
+            // widths could be changed is byte-identical.
+            ...(Object.keys(layout.groupSizes ?? {}).length > 0 ? { groupSizes: layout.groupSizes } : {})
           }
           : {}),
         filters: layout
@@ -571,7 +576,8 @@
           ...report.layout,
           captions: report.captions,
           sortOrders: report.sortOrders,
-          sortBys: report.sortBys
+          sortBys: report.sortBys,
+          groupSizes: report.groupSizes
         });
 
         this.options.fields = state.toFields();
@@ -1123,6 +1129,17 @@
       this.saveState();
       this.designer?.render();
       await this.refresh();
+    }
+
+    // A level renamed under the value filters -- a range width changed in the
+    // designer renames its level -- takes its value filter with it: the
+    // condition is on the groups' totals, which still mean the same thing.
+    renameField(from, to) {
+      if (from === to) {
+        return;
+      }
+
+      this.valueFilters = this.valueFilters.map(filter => (filter.field === from ? { ...filter, field: to } : filter));
     }
 
     async clearValueFilters() {

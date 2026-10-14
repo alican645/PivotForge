@@ -16,6 +16,12 @@ change will require a new major version.
 
 ### Added
 
+- The field designer changes a numeric range's width: a range level's settings
+  carry a **Range width** box (`Aralık genişliği`) with Apply and a way back
+  to the declared width. The level is renamed with its width, keeping its
+  caption, sort, position and value filter; its filter values start afresh.
+  Kept with the view and in report files (`groupSizes`), and in
+  `PivotLayoutState.setGroupSize()` / `declaredGroupSize()`. (AspNetCore)
 - A **Chart** toolbar button (`toolbar-items="Chart"` / `PivotToolbarItem.Chart`
   / `"chart"`, part of `toolbar="true"` when the grid has a chart) shows and
   hides the pivot chart; `showChart()` does it from code. Whether the chart is

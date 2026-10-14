@@ -68,6 +68,10 @@
     valueFilterValue2: "and",
     valueFilterApply: "Apply",
     valueFilterClear: "Remove value filter",
+    groupSize: "Range width",
+    groupSizeApply: "Apply",
+    groupSizeReset: "Reset to {0}",
+    groupSizeTaken: "This field already has a level of ranges {0} wide.",
     moveUp: "Move up",
     moveDown: "Move down",
     removeField: "Remove field",
@@ -1216,6 +1220,110 @@
       body.appendChild(section);
     }
 
+    // Only a numeric range level has a width, and only a state that can rename
+    // a level can change one.
+    canChangeGroupSize(name) {
+      return this.state.field(name).groupInterval === "range" &&
+        typeof this.state.setGroupSize === "function";
+    }
+
+    // "Amount in ranges of 50,000": the width, typed and applied, and a way
+    // back to the declared one. A typed width waits for Apply, so the grid is
+    // not regrouped on every keystroke.
+    appendGroupSizeSection(body, name) {
+      const document = root.document;
+      const current = this.state.field(name).groupSize;
+      const declared = this.state.declaredGroupSize(name);
+      const section = this.settingsSection(this.labels.groupSize);
+      const row = document.createElement("div");
+      row.className = "pivot-value-settings__row";
+
+      const input = document.createElement("input");
+      input.className = "pivot-value-settings__input";
+      input.setAttribute("type", "number");
+      input.setAttribute("min", "0");
+      input.setAttribute("step", "any");
+      input.setAttribute("aria-label", this.labels.groupSize);
+      input.dataset.action = "group-size";
+      input.value = String(current);
+
+      const valid = () => input.value.trim() !== "" && Number.isFinite(Number(input.value)) && Number(input.value) > 0;
+      const apply = document.createElement("button");
+      apply.className = "pivot-value-settings__choice";
+      apply.setAttribute("type", "button");
+      apply.dataset.action = "group-size-apply";
+      apply.textContent = this.labels.groupSizeApply;
+      const sync = () => { apply.disabled = !valid() || Number(input.value) === current; };
+      input.addEventListener("input", sync);
+      input.addEventListener("keydown", event => {
+        if (event.key === "Enter" && !apply.disabled) {
+          event.preventDefault();
+          apply.click();
+        }
+      });
+      apply.addEventListener("click", () => {
+        if (valid()) {
+          this.applyGroupSize(name, Number(input.value));
+        }
+      });
+      sync();
+      row.appendChild(input);
+      row.appendChild(apply);
+      section.appendChild(row);
+
+      if (this.groupSizeError?.field === name) {
+        const error = document.createElement("p");
+        error.className = "pivot-value-settings__error";
+        error.setAttribute("role", "alert");
+        error.textContent = this.groupSizeError.text;
+        section.appendChild(error);
+      }
+
+      if (current !== declared) {
+        const reset = document.createElement("button");
+        reset.className = "pivot-value-settings__choice";
+        reset.setAttribute("type", "button");
+        reset.dataset.action = "group-size-reset";
+        reset.textContent = format(this.labels.groupSizeReset, declared);
+        reset.addEventListener("click", () => this.applyGroupSize(name, declared));
+        section.appendChild(reset);
+      }
+
+      body.appendChild(section);
+    }
+
+    // The level comes back under a new name, which everything that held the
+    // old one -- this modal, the focused chip, the widget's value filters --
+    // follows.
+    async applyGroupSize(name, size) {
+      let renamed;
+      try {
+        renamed = this.state.setGroupSize(name, size);
+      } catch {
+        // The only width a valid number is refused for is one another level of
+        // the same column already has.
+        this.groupSizeError = { field: name, text: format(this.labels.groupSizeTaken, size) };
+        this.renderSettings(name);
+        return;
+      }
+
+      this.groupSizeError = null;
+      if (renamed === name) {
+        return;
+      }
+
+      if (this.settingsFor === name) {
+        this.settingsFor = renamed;
+      }
+      if (this.focusField === name) {
+        this.focusField = renamed;
+      }
+      this.widget.renameField?.(name, renamed);
+      this.widget.saveState?.();
+      this.render();
+      await this.widget.update(this.state.toRequestState());
+    }
+
     // "Tutar (Sum)" -- the caption alone would not tell two summaries of one
     // field apart. A calculated value is its formula's result, so it has none.
     valueLabel(value) {
@@ -1339,6 +1447,10 @@
       step("move-down", this.labels.moveDown, index + 2, index < names.length - 1);
       position.appendChild(positionRow);
       settings.body.appendChild(position);
+
+      if (area !== "data" && this.canChangeGroupSize(name)) {
+        this.appendGroupSizeSection(settings.body, name);
+      }
 
       if ((area === "row" || area === "column") && this.canSort(name)) {
         this.appendSortSections(settings.body, name, area);
@@ -2060,6 +2172,7 @@
       this.settingsFor = null;
       // A bound typed and not applied is dropped with the modal.
       this.valueFilterDraft = null;
+      this.groupSizeError = null;
       this.formulaFor = null;
       this.formulaEditor = null;
       if (this.settings) {

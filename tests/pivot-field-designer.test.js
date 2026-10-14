@@ -2437,3 +2437,81 @@ test("no value filter on a column field, or with a widget that cannot apply one"
   openSettings(plain.host, "Region");
   assert.equal(findByAction(settingsPanel(), "value-filter-apply"), null);
 });
+
+// ---- Range width ---------------------------------------------------------------
+
+function buildWithRange(extra = []) {
+  const updates = [];
+  const renames = [];
+  const widget = {
+    options: {},
+    valueFilters: [],
+    update: async request => { updates.push(request); },
+    renameField: (from, to) => renames.push([from, to]),
+    saveState: () => {}
+  };
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Amount", caption: "Tutar aralığı", area: "row", groupInterval: "range", groupSize: 50000 },
+    { dataField: "Region", caption: "Region", area: "column" },
+    { dataField: "Amount", caption: "Amount", area: "data", aggregation: "sum" },
+    ...extra
+  ]);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget });
+  return { designer, host, state, updates, renames };
+}
+
+test("a range level's settings change its width and regroup the grid", async () => {
+  const { designer, host, updates, renames } = buildWithRange();
+  openSettings(host, "Amount:range50000");
+
+  const input = findByAction(settingsPanel(), "group-size");
+  const apply = () => findByAction(settingsPanel(), "group-size-apply");
+  assert.equal(input.value, "50000");
+  // Nothing to apply until the width differs.
+  assert.equal(apply().disabled, true);
+  assert.equal(findByAction(settingsPanel(), "group-size-reset"), null);
+
+  input.value = "10000";
+  input.dispatch("input", {});
+  assert.equal(apply().disabled, false);
+  apply().dispatch("click", {});
+  await Promise.resolve();
+
+  assert.deepEqual(renames, [["Amount:range50000", "Amount:range10000"]]);
+  assert.equal(updates.at(-1).fields.find(field => field.area === "row").groupSize, 10000);
+  // The modal follows the renamed level, and offers the way back.
+  assert.equal(designer.settingsFor, "Amount:range10000");
+  assert.equal(findByAction(settingsPanel(), "group-size").value, "10000");
+  const reset = findByAction(settingsPanel(), "group-size-reset");
+  assert.equal(reset.textContent, "Reset to 50000");
+
+  reset.dispatch("click", {});
+  await Promise.resolve();
+  assert.equal(designer.settingsFor, "Amount:range50000");
+  assert.equal(updates.at(-1).fields.find(field => field.area === "row").groupSize, 50000);
+});
+
+test("a width another level already has is reported in the modal, not thrown", async () => {
+  const { host, updates } = buildWithRange([
+    { dataField: "Amount", caption: "Geniş", area: "available", role: "dimension", groupInterval: "range", groupSize: 100000 }
+  ]);
+  openSettings(host, "Amount:range50000");
+  const input = findByAction(settingsPanel(), "group-size");
+  input.value = "100000";
+  input.dispatch("input", {});
+  findByAction(settingsPanel(), "group-size-apply").dispatch("click", {});
+  await Promise.resolve();
+
+  assert.equal(updates.length, 0);
+  assert.equal(findByClassName(settingsPanel(), "pivot-value-settings__error").textContent,
+    "This field already has a level of ranges 100000 wide.");
+});
+
+test("only a range level has a width to change", () => {
+  const { host } = buildWithRange();
+  openSettings(host, "Region");
+  assert.equal(findByAction(settingsPanel(), "group-size"), null);
+  openSettings(host, "Amount");
+  assert.equal(findByAction(settingsPanel(), "group-size"), null);
+});
