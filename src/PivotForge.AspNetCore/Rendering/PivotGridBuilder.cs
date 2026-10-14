@@ -246,6 +246,12 @@ public sealed class PivotGridBuilder : IHtmlContent
             _ => "tabular"
         });
 
+    /// <summary>Sets whether a group's subtotal row is drawn above or below its rows.</summary>
+    /// <param name="position">Where the subtotal row goes.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder TotalsPosition(PivotTotalsPosition position) =>
+        SetRenderer("totalsPosition", position == PivotTotalsPosition.After ? "after" : "before");
+
     /// <summary>Shades the value cells on a colour scale, from the smallest value to the largest.</summary>
     /// <remarks>
     /// Each data field is its own scale; totals and subtotals are not shaded. A conditional

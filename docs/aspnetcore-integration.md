@@ -239,6 +239,7 @@ the renderer keeps its own default.
 | --- | --- | --- | --- |
 | `selection-mode` | `SelectionMode(PivotSelectionMode)` | `Single` | `Single` selects the clicked cell; `None` disables selection. |
 | `layout-mode` | `LayoutMode(PivotGridLayoutMode)` | `Tabular` | `Tabular` gives each row field its own column; `Compact` indents them into one; `Tree` draws that column as a tree, as DevExtreme's `rowHeaderLayout: "tree"` — each group row is the parent node, named for its group (`Ege`, not `Ege Total`) and carrying its totals, the header names the levels (`Bölge / Kategori`), and guide lines run down to the children. |
+| `totals-position` | `TotalsPosition(PivotTotalsPosition)` | `Before` | Where a group's subtotal row goes. `Before` draws it above the group's rows, as the group's own header with the toggle (DevExtreme's `showTotalsPrior: "rows"`). `After` draws it below them, as Excel lays a report out: a heading row with the toggle opens the group, its cells left blank, and the total row closes it. A collapsed group is its total row alone either way. Works in every layout. |
 | `heatmap` | `Heatmap(PivotHeatmapMode)` | `None` | Shades the value cells on a colour scale from the smallest value to the largest. `Table` draws one scale per data field, `Rows` one per row, `Columns` one per column. Totals and subtotals are not shaded, and a conditional formatting rule's colour wins on the cells it matches. The colour is the `--pt-heat-color` CSS variable (a `#rrggbb` value, so the Excel export can reproduce it). The shades go into the Excel export too. In large-data mode each page carries the whole result's value ranges, so a value is shaded the same on every page. |
 | `context-menu` | `ContextMenu(bool)` | `true` | The right-click cell menu. |
 | `subtotals` | `Subtotals(bool)` | `true` | Subtotal rows. |
@@ -255,10 +256,10 @@ the renderer keeps its own default.
 | `hide-empty-summary-cells` | `HideEmptySummaryCells(bool)` | `false` | Drops rows and columns holding no values at all. The column axis is the product of its levels, so sparse data leaves whole columns that never occurred; a row is empty when its values all aggregated to nothing. Dropped in the engine, so paging, Excel export and drill-down all agree on which rows exist. |
 | `locale` | `Locale(string)` | the request's UI culture | Name of the locale pack supplying every on-screen string. Must not be blank. `en` is the built-in English and loads nothing — see [Localization](#localization). |
 
-`selection-mode`, `layout-mode` and `heatmap` are non-nullable enums so Razor accepts the
+`selection-mode`, `layout-mode`, `heatmap` and `totals-position` are non-nullable enums so Razor accepts the
 unqualified member name; whether the attribute was written is recovered from
 `TagHelperContext.AllAttributes`, so an unwritten attribute is not mistaken for a
-deliberate `Single`/`Tabular`/`None`.
+deliberate `Single`/`Tabular`/`None`/`Before`.
 
 #### Initial state
 

@@ -280,7 +280,7 @@ Açık kalanlar:
 |---|---|
 | Tabular / Compact düzen | ✅ `layout-mode` |
 | Satır başlığı ağaç düzeni (`rowHeaderLayout: tree`) | ✅ `layout-mode="Tree"` |
-| `showTotalsPrior` — toplamları önde göster | ❌ |
+| `showTotalsPrior` — toplamları önde göster | ✅ varsayılan önde; `totals-position="After"` ile altta |
 | `showBorders` | ❌ |
 | Sütun genişliği sürükleme | ✅ |
 | Genişlet / daralt | ✅ motorda, ⚠️ bildirimi yok |
@@ -290,7 +290,7 @@ Açık kalanlar:
 | Isı haritası (PivotTable.js'teki heatmap renderer) | ✅ `heatmap="Table\|Rows\|Columns"` |
 
 - [x] Ağaç düzeni satır başlıkları — `layout-mode="Tree"`
-- [ ] `show-totals-prior`
+- [x] Toplamın konumu — `totals-position="Before|After"`
 - [x] Paketlenmiş yükleme göstergesi
 - [x] Isı haritası — `heatmap`, her ölçü kendi ölçeğinde, toplamlar boyanmıyor
 - [ ] RTL desteği

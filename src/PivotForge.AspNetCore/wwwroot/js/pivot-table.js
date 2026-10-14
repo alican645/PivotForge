@@ -324,6 +324,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       rowFieldExpanded: null,
       rowFieldSubtotals: null,
       subtotals: true,
+      // Where a group's subtotal row goes: "before" its rows, as the group's
+      // own header (the default), or "after" them, as Excel lays a report out
+      // by default -- a plain header row with the toggle opens the group, and
+      // the total closes it. A collapsed group is one row either way.
+      totalsPosition: "before",
       // The column axis' half of the two above: a subtotal column after each
       // column group, switched grid-wide or per column field (parallel to
       // columnFields; a false entry means that level produces no total).
@@ -1280,6 +1285,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       row.appendChild(totalCell);
     });
 
+    // The row opening a group whose total comes after it is a heading: its
+    // sums are on the total row below, so its cells stay blank rather than
+    // showing the empty-cell dash, which would read as a zero total.
+    if (rowInfo.opensTotal) {
+      row.querySelectorAll("td").forEach(cell => { cell.textContent = ""; });
+    }
+
     return row;
   }
 
@@ -1373,7 +1385,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       if (rowInfo.type === "subtotal" && rowLevel === rowInfo.level) {
         const label = `${this.displayValue(value, settings)} ${settings.totalText}`;
-        header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
+        // The toggle belongs to the row that opens the group; a total
+        // closing it has none.
+        if (!rowInfo.trailing) {
+          header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
+        }
         header.appendChild(document.createTextNode(label));
       } else if (rowInfo.type === "group" && rowLevel === rowInfo.level) {
         const label = this.displayValue(value, settings);
@@ -1410,10 +1426,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     if (rowInfo.type === "subtotal") {
       // In a tree the row is the parent node itself, already above its
       // children, so it is named for the group rather than as its total.
-      const label = settings.layoutMode === "tree"
+      // A trailing total is named as one even in a tree: the group's own
+      // name is already on the header row above its children.
+      const label = settings.layoutMode === "tree" && !rowInfo.trailing
         ? this.displayValue(value, settings)
         : `${this.displayValue(value, settings)} ${settings.totalText}`;
-      header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
+      if (!rowInfo.trailing) {
+        header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
+      }
       header.appendChild(document.createTextNode(label));
     } else if (rowInfo.type === "group") {
       const label = this.displayValue(value, settings);
@@ -1492,16 +1512,28 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     for (const group of this.groupItemsByLevel(items, level)) {
       const groupHeader = group.items[0].rowHeader.slice(0, level + 1);
-
-      plan.push({
+      const row = {
         type,
         key: this.createSubtotalKey(groupHeader),
         rowHeader: groupHeader,
         rowIndexes: group.items.map(item => item.rowIndex),
         level
-      });
+      };
+      // The total moves below the rows only while they are showing: a
+      // collapsed group is its total row alone, toggle and all, wherever the
+      // totals otherwise go.
+      const totalAfter = type === "subtotal" &&
+        settings.totalsPosition === "after" &&
+        !this.collapsedRows?.has(row.key);
 
+      // Both rows keep the group's key: the header so its toggle collapses
+      // the group, the total so it finds the group's sums.
+      plan.push(totalAfter ? { ...row, type: "group", opensTotal: true } : row);
       this.appendGroupRows(plan, group.items, level + 1, rowDepth, settings);
+
+      if (totalAfter) {
+        plan.push({ ...row, trailing: true });
+      }
     }
   }
 
@@ -1683,7 +1715,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   createRowSelection(rowInfo) {
     return {
       type: "row",
-      rowKey: this.createSelectionRowKey(rowInfo.rowHeader),
+      // A trailing total shares its group's header path with the group's
+      // header row, so it is told apart here or selecting one lights both.
+      rowKey: this.createSelectionRowKey(rowInfo.rowHeader) + (rowInfo.trailing ? ":total" : ""),
       rowType: rowInfo.type,
       rowHeader: [...rowInfo.rowHeader],
       rowIndexes: [...rowInfo.rowIndexes]
