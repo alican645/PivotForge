@@ -319,6 +319,19 @@
       );
     }
 
+    // Presentation, valid in every area like caption and format: a field keeps
+    // them wherever it is dragged, and the grid reads each where it applies.
+    for (const flag of ["allowSorting", "allowFiltering", "wordWrap"]) {
+      if (field[flag] !== undefined && field[flag] !== null && typeof field[flag] !== "boolean") {
+        throw new Error(`"${flag}" on field "${dataField}" must be true or false.`);
+      }
+    }
+
+    if (field.width !== undefined && field.width !== null &&
+      !(Number.isFinite(field.width) && field.width > 0)) {
+      throw new Error(`"width" on field "${dataField}" must be a number of pixels greater than zero.`);
+    }
+
     const aggregation = isData ? (expression !== null ? CALCULATED : field.aggregation ?? "sum") : null;
     if (isData && expression === null && !AGGREGATIONS.includes(aggregation)) {
       throw new Error(
@@ -449,6 +462,13 @@
       expanded: isRow ? field.expanded !== false : null,
       showTotals: isRow || isColumn ? field.showTotals !== false : null,
       showGrandTotals: holdsGrandTotals ? field.showGrandTotals !== false : null,
+      // Default true: the grid-wide allowSorting / allowFiltering still decide
+      // first, and a field can only take its own controls away.
+      allowSorting: field.allowSorting !== false,
+      allowFiltering: field.allowFiltering !== false,
+      // Null leaves the grid's own sizing and its no-wrap default alone.
+      width: field.width ?? null,
+      wordWrap: typeof field.wordWrap === "boolean" ? field.wordWrap : null,
       visible: field.visible !== false
     };
   }

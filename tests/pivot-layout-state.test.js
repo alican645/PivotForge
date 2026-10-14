@@ -1173,3 +1173,28 @@ test("a saved header sort is adopted with the layout, an unusable one skipped", 
 
   assert.deepEqual(restored.getState().sortOrders, { Year: "Descending" });
 });
+
+test("a field's presentation options travel with it into whatever area it is dragged to", () => {
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Region", caption: "Bölge", area: "row", allowSorting: false, width: 180, wordWrap: true },
+    { dataField: "Year", caption: "Yıl", area: "column", allowFiltering: false },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum", width: 120 }
+  ]);
+
+  state.move("Region", "column");
+  state.move("Year", "filter");
+  const fields = state.toFields();
+  const of = name => fields.find(field => field.dataField === name);
+
+  assert.equal(of("Region").area, "column");
+  assert.equal(of("Region").allowSorting, false);
+  assert.equal(of("Region").width, 180);
+  assert.equal(of("Region").wordWrap, true);
+  assert.equal(of("Year").allowFiltering, false);
+  assert.equal(of("Amount").width, 120);
+  // Only what was declared: nothing new on a field that declared none of it.
+  assert.equal("allowSorting" in of("Amount"), false);
+  assert.equal("wordWrap" in of("Year"), false);
+  // And the round trip is a request the builder accepts.
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(fields));
+});

@@ -1485,6 +1485,15 @@ select {
   cursor: pointer;
 }
 
+/* A field declared word-wrap: its labels break onto more lines instead of
+   ending in an ellipsis, and the row grows to hold them. */
+.pivot-table__table th.is-wrapping,
+.pivot-table__table th.is-wrapping .pivot-table__sort-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
 .pivot-table__table [data-selection-target]:focus-visible {
   outline: 2px solid var(--pt-selection-ring);
   outline-offset: -2px;

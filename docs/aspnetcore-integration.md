@@ -181,6 +181,10 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | `expanded` | `true` | Only on `row` fields. `false` collapses this level's groups at the grid's **first** render; after that the state belongs to the user, and a restored `state-storing` view wins. Declaring it on the deepest row field does nothing — that level's rows are the detail rows and have no groups. |
 | `showTotals` | `true` | Only on `row` and `column` fields. On a row field, `false` leaves the group header in place without its sums, which is the same shape the grid uses when `subtotals` is off entirely — so a deep hierarchy can total the levels worth totalling and nowhere else. On a column field, `false` drops the total column after each of its groups. The grid-wide `subtotals="false"` / `column-subtotals="false"` still win. |
 | `showGrandTotals` | `true` | Only on `data` fields (and on `available` fields whose `role` is `measure`). `false` removes this value's column from the grand total block on the right; the other values keep theirs. The grand total row along the bottom stays, because its cells total the grid's columns, until every value has opted out — then it goes too. This follows DevExtreme's `showGrandTotals`. The engine still computes the total, so `percentOfGrandTotal` is unaffected. The grid-wide `show-row-grand-totals="false"` / `show-column-grand-totals="false"` still win. |
+| `allowSorting` | `true` | Valid in every area, so the field keeps it wherever it is dragged. `false` takes away a row or column field's own sort arrow, and a data field's value-header sort (sorting rows by that measure). The grid-wide `allowSorting` still decides first: a field can only take its own controls away. |
+| `allowFiltering` | `true` | Valid in every area. `false` takes away the field's header funnel and the designer's filter control on its chip. A filter declared in the markup still applies. |
+| `width` | `null` | Pixels, greater than zero. A row field sizes its header column (in the compact and tree layouts, where the row fields share one column, the widest declaration sizes it); a data field sizes every column of its values, grand total column included. A column the reader resizes keeps the reader's width. |
+| `wordWrap` | `null` | `true` lets the field's labels wrap onto more lines instead of ending in an ellipsis: a row field's headers, a column field's headers, a data field's value headers. The row grows to hold them. |
 
 ### `PivotGridBuilder` (Razor)
 
@@ -404,7 +408,8 @@ Anything not listed here still needs `rendererOptions` through
 
 `<pivot-field>` attributes are `field` (the source column, required),
 `caption`, `area`, `role`, `aggregation`, `show-as`, the four `format-*`
-attributes, `visible`, `area-index`, `sort-order`, `group-interval`, and — on
+attributes, `visible`, `area-index`, `sort-order`, `group-interval`,
+`allow-sorting`, `allow-filtering`, `width`, `word-wrap`, and — on
 `Row` fields only — `expanded`, `show-totals` and `sort-by-value-key`, and — on `Data` fields only — `show-grand-totals`. `area` defaults to `Data`, matching
 `PivotFieldBuilder`.
 

@@ -536,11 +536,19 @@
         rowFieldLabels: rowFields.map(field => field.caption),
         rowFieldExpanded: rowFields.map(field => field.expanded),
         rowFieldSubtotals: rowFields.map(field => field.showTotals),
+        // Per field, parallel to rowFields / columnFields like the two above.
+        rowFieldAllowSorting: rowFields.map(field => field.allowSorting),
+        rowFieldAllowFiltering: rowFields.map(field => field.allowFiltering),
+        rowFieldWidths: rowFields.map(field => field.width),
+        rowFieldWordWrap: rowFields.map(field => field.wordWrap),
         // The column axis needs its field names spelled out before it can carry a
         // funnel: its headers show values, never the field they belong to.
         columnFields: columnFields.map(field => field.key),
         columnFieldLabels: columnFields.map(field => field.caption),
         columnFieldSubtotals: columnFields.map(field => field.showTotals),
+        columnFieldAllowSorting: columnFields.map(field => field.allowSorting),
+        columnFieldAllowFiltering: columnFields.map(field => field.allowFiltering),
+        columnFieldWordWrap: columnFields.map(field => field.wordWrap),
         // Read at construction only: a column sort changes the fields, and a
         // field change builds a new renderer.
         columnFieldSorts: columnFields.map(field => field.sortOrder ?? null),
@@ -666,7 +674,10 @@
           aggregation: field.aggregation,
           showAs: field.showAs,
           format: field.format,
-          showGrandTotals: field.showGrandTotals
+          showGrandTotals: field.showGrandTotals,
+          allowSorting: field.allowSorting,
+          width: field.width,
+          wordWrap: field.wordWrap
         }));
     }
 

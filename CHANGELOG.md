@@ -16,6 +16,20 @@ change will require a new major version.
 
 ### Added
 
+- Per-field presentation: `allow-sorting`, `allow-filtering`, `width` and
+  `word-wrap` on `<pivot-field>` / `AllowSorting()`, `AllowFiltering()`,
+  `Width()`, `WordWrap()` / `allowSorting`, `allowFiltering`, `width`,
+  `wordWrap`. Valid in every area, so a field keeps them wherever it is
+  dragged. `allowSorting: false` takes away a row or column field's own sort
+  arrow, and a data field's value-header sort; `allowFiltering: false` its
+  header funnel and its designer filter control — the grid-wide settings still
+  decide first. `width` sizes a row field's header column, or every column of
+  a data field's values; a column the reader resizes keeps the reader's width.
+  `wordWrap` lets a field's labels wrap instead of ending in an ellipsis.
+  (AspNetCore)
+
+### Added
+
 - Detail modal labels from the markup: `drill-down-label-{key}="..."` (the key
   in kebab-case, `drill-down-label-no-records`) / `DrillDownLabel(key, text)`
   renames one of the modal's texts over the locale pack's word. An unknown key

@@ -23,6 +23,39 @@ public class PivotFieldBuilderTests
     }
 
     [Fact]
+    public void PresentationOptionsAreWrittenOnlyWhenDeclaredAndInEveryArea()
+    {
+        var declared = new PivotFieldBuilder()
+            .DataField("bolge")
+            .Area(PivotArea.Filter)
+            .AllowSorting(false)
+            .AllowFiltering(false)
+            .Width(180)
+            .WordWrap(true)
+            .Build();
+
+        Assert.False((bool)declared["allowSorting"]!);
+        Assert.False((bool)declared["allowFiltering"]!);
+        Assert.Equal(180, declared["width"]);
+        Assert.True((bool)declared["wordWrap"]!);
+
+        var plain = new PivotFieldBuilder().DataField("bolge").Area(PivotArea.Row).Build();
+
+        Assert.False(plain.ContainsKey("allowSorting"));
+        Assert.False(plain.ContainsKey("allowFiltering"));
+        Assert.False(plain.ContainsKey("width"));
+        Assert.False(plain.ContainsKey("wordWrap"));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-40)]
+    public void AWidthMustBePositive(int width)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotFieldBuilder().Width(width));
+    }
+
+    [Fact]
     public void AreaDefaultsToData()
     {
         var field = new PivotFieldBuilder().DataField("tutar").Build();

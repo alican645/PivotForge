@@ -1056,3 +1056,25 @@ test("a trailing total is selected apart from the heading of its group", () => {
 
   assert.notEqual(heading.rowKey, total.rowKey);
 });
+
+test("a field's own allowSorting and allowFiltering decide its header controls", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const settings = {
+    rowFields: ["Region", "Category"],
+    rowFieldAllowSorting: [false, true],
+    rowFieldAllowFiltering: [true, false],
+    columnFields: ["Year"],
+    columnFieldAllowSorting: [false],
+    values: [{ key: "amount", allowSorting: false }, { key: "qty" }]
+  };
+
+  assert.equal(renderer.fieldAllowsSorting({ mode: "RowLabel", field: "Region" }, settings), false);
+  assert.equal(renderer.fieldAllowsSorting({ mode: "RowLabel", field: "Category" }, settings), true);
+  assert.equal(renderer.fieldAllowsSorting({ mode: "ColumnLabel", field: "Year" }, settings), false);
+  assert.equal(renderer.fieldAllowsSorting({ mode: "RowTotalValue", valueKey: "amount" }, settings), false);
+  assert.equal(renderer.fieldAllowsSorting({ mode: "RowTotalValue", valueKey: "qty" }, settings), true);
+  assert.equal(renderer.fieldOption(settings, "Region", "AllowFiltering"), true);
+  assert.equal(renderer.fieldOption(settings, "Category", "AllowFiltering"), false);
+  // A field on neither axis has no say, so the grid's own setting stands.
+  assert.equal(renderer.fieldOption(settings, "Other", "AllowFiltering"), undefined);
+});

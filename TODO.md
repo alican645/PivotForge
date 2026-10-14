@@ -98,9 +98,9 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `calculateCustomSummary` | ✅ | ✅ | `PivotForgeOptions.CustomAggregates`, formülden adıyla çağrılır; bkz. Bölüm 3 |
 | `calculateSummaryValue` | ✅ | ✅ | `expression` niteliği; özet sonrası formül, bkz. Bölüm 3 |
 | `runningTotal` + `allowCrossGroupCalculation` | ⚠️ | ⚠️ | `RunningTotal` showAs modu var, çapraz grup seçeneği yok |
-| `width`, `wordWrapEnabled` | ❌ | ❌ | |
+| `width`, `wordWrapEnabled` | ✅ | ✅ | `width` / `word-wrap` nitelikleri, `Width()` / `WordWrap()` |
 | `displayFolder` | ❌ | ❌ | Alan seçicide klasörleme |
-| `allowSorting`/`allowFiltering`/`allowExpandAll` (alan başına) | ❌ | ❌ | Yalnızca tablo geneli |
+| `allowSorting`/`allowFiltering`/`allowExpandAll` (alan başına) | ✅ | ✅ | `allow-sorting` / `allow-filtering`; `allowExpandAll` yok (araç çubuğu tümünü açıp kapatıyor) |
 
 ### Yapılacaklar
 
@@ -155,8 +155,8 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
       okunur, ay numarasına göre sıralanır. Filtre, drill-down ve değer seçici
       aynı gruplamadan geçiyor
 - [ ] `data-type` ve tür dönüşümü
-- [ ] `width`, `word-wrap`
-- [ ] Alan başına `allow-sorting` / `allow-filtering`
+- [x] `width`, `word-wrap` — satır alanı başlık sütununu, değer alanı tüm değer sütunlarını boyuyor; okuyucunun sürüklediği genişlik kazanıyor
+- [x] Alan başına `allow-sorting` / `allow-filtering` — her bölgede geçerli, alanla birlikte taşınıyor; değer alanında değer başlığı sıralamasını kapatıyor
 
 ---
 
