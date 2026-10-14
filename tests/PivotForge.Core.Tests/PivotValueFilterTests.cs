@@ -62,7 +62,7 @@ public sealed class PivotValueFilterTests
     [InlineData(PivotValueFilterOperator.NotEqual, 30, null, new[] { "Ege", "Marmara" })]
     [InlineData(PivotValueFilterOperator.Between, 200, 30, new[] { "Akdeniz", "Marmara" })]
     [InlineData(PivotValueFilterOperator.NotBetween, 30, 200, new[] { "Ege" })]
-    public void EachOperatorKeepsWhatItSays(PivotValueFilterOperator op, double value, double? value2, string[] kept)
+    public void EachOperatorKeepsWhatItSays(PivotValueFilterOperator op, int value, int? value2, string[] kept)
     {
         var result = Run([new PivotValueFilter("Region", op, (decimal)value, (decimal?)value2)]);
 
