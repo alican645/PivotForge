@@ -146,6 +146,13 @@
     return left.length === right.length && left.every((value, index) => value === right[index]);
   }
 
+  // The direction a row or column field's own level runs in, as the request
+  // builder sends it: a value sort declared without a direction ascends, and a
+  // field that declares neither is left to the axis default (null).
+  function fieldSortDirection(field) {
+    return field.sortOrder ?? (field.sortByValueKey ? "Ascending" : null);
+  }
+
   function normalizePrefix(prefix) {
     const trimmed = String(prefix ?? "").trim();
     const withLeading = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
@@ -548,6 +555,9 @@
         rowFieldAllowFiltering: rowFields.map(field => field.allowFiltering),
         rowFieldWidths: rowFields.map(field => field.width),
         rowFieldWordWrap: rowFields.map(field => field.wordWrap),
+        // The field's own order, set by a declaration or the designer's sort
+        // panel; a row sort picked in the grid stands in for all of them.
+        rowFieldSorts: rowFields.map(fieldSortDirection),
         // The column axis needs its field names spelled out before it can carry a
         // funnel: its headers show values, never the field they belong to.
         columnFields: columnFields.map(field => field.key),
@@ -558,7 +568,7 @@
         columnFieldWordWrap: columnFields.map(field => field.wordWrap),
         // Read at construction only: a column sort changes the fields, and a
         // field change builds a new renderer.
-        columnFieldSorts: columnFields.map(field => field.sortOrder ?? null),
+        columnFieldSorts: columnFields.map(fieldSortDirection),
         onSortRequested: this.options.allowSorting
           ? request => {
             // A column field's arrow orders that level's own values, which the
@@ -1423,12 +1433,25 @@
           ? current.field === request.field
           : current.valueKey === request.valueKey &&
             sameSortColumnPath(current.columnPath ?? null, request.columnPath ?? null));
+      // With no row sort in place, a row field's arrow shows the field's own
+      // order, so the first click turns that order around rather than
+      // repeating it.
+      const shown = sameTarget
+        ? current.direction
+        : !current && request.mode === "RowLabel"
+          ? this.rowFieldSortDirection(request.field)
+          : null;
       const initial = request.mode === "RowTotalValue" ? "Descending" : "Ascending";
-      const direction = sameTarget
-        ? (current.direction === "Descending" ? "Ascending" : "Descending")
+      const direction = shown
+        ? (shown === "Descending" ? "Ascending" : "Descending")
         : initial;
 
       return { ...request, direction };
+    }
+
+    rowFieldSortDirection(key) {
+      const field = this.fields.find(entry => entry.visible && entry.area === "row" && entry.key === key);
+      return field ? fieldSortDirection(field) : null;
     }
 
     // The column half of nextHeaderSort: the same row flips, any other starts
@@ -1484,7 +1507,8 @@
         throw new Error("Cannot sort because allowSorting is disabled.");
       }
 
-      const current = this.fields.find(entry => entry.key === field)?.sortOrder ?? null;
+      const declared = this.fields.find(entry => entry.key === field);
+      const current = declared ? fieldSortDirection(declared) : null;
       const next = direction ?? (current === "Ascending" ? "Descending" : "Ascending");
       // A label sort picked on a column field takes the columns back from a
       // value sort; left in place, the value sort would go on winning.

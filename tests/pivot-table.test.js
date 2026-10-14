@@ -751,6 +751,18 @@ test("a column field header reads its sort from the column levels, not the row s
     "Ascending");
 });
 
+test("a row field header shows the field's own order until a row sort takes over", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const settings = { rowFields: ["Region", "City"], rowFieldSorts: ["Descending", null] };
+
+  assert.equal(renderer.activeSortDirection({ mode: "RowLabel", field: "Region" }, settings), "Descending");
+  assert.equal(renderer.activeSortDirection({ mode: "RowLabel", field: "City" }, settings), null);
+
+  // A row sort replaces every field's own order, so only its own header is marked.
+  const sorted = { ...settings, sortState: { mode: "RowTotalValue", valueKey: "Amount_sum", direction: "Ascending" } };
+  assert.equal(renderer.activeSortDirection({ mode: "RowLabel", field: "Region" }, sorted), null);
+});
+
 test("the column plan closes each outer column group with a subtotal", () => {
   const renderer = new window.PivotForge.PivotTableRenderer({});
   const headers = [["2025", "Q1"], ["2025", "Q2"], ["2026", "Q1"]];

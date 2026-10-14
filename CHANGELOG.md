@@ -24,6 +24,16 @@ change will require a new major version.
   byValueKey })` and `valueKeys()` underneath; `getState().sortBys` carries it.
   Left out for a field or grid with `allowSorting: false`. In English and
   Turkish. (AspNetCore)
+- `show-borders` on `<pivot-grid>` / `ShowBorders(bool)` / `showBorders`:
+  `true` closes the grid with an outer frame, `false` takes the lines between
+  body cells away and keeps the header's. The lines go transparent rather
+  than away, so no cell changes size. Left unset, the grid keeps the lines it
+  always had. (AspNetCore)
+- A row field's header arrow now shows the field's own order — declared with
+  `sort-order` / `sort-by-value-key`, or picked in the designer's sort panel —
+  while no row sort is in place; the first click on it turns that order
+  around. A column field's arrow also shows a value sort declared without a
+  direction, which ascends. (AspNetCore)
 
 ### Added
 

@@ -251,6 +251,7 @@ the renderer keeps its own default.
 | `show-row-grand-totals` | `ShowRowGrandTotals(bool)` | `true` | The grand total row along the bottom. Named, as in DevExtreme, after the area its header sits in. `show-grand-total` / `ShowGrandTotal(bool)` is its earlier name and still works; setting both to different values is an error. |
 | `show-column-grand-totals` | `ShowColumnGrandTotals(bool)` | `true` | The grand total column on the right. Sorting by that column goes with it. |
 | `repeat-row-labels` | `RepeatRowLabels(bool)` | `false` | Repeats a row label on every row it spans instead of only the first. |
+| `show-borders` | `ShowBorders(bool)` | unset | `true` closes the grid with an outer frame; `false` takes the lines between body cells away and keeps the header's. Unset keeps the default lines between cells. |
 | `min-column-width` | `MinColumnWidth(int)` | `72` | Narrowest a column may be rendered or resized to, in pixels. Must be positive. |
 | `max-column-width` | `MaxColumnWidth(int)` | `420` | Widest a column may be, in pixels. Must be positive. |
 | `empty-text` | `EmptyText(string)` | `-` | Shown in a cell with no value. May be empty to render nothing. |

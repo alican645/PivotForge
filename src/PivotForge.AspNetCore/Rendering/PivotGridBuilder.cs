@@ -311,6 +311,14 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     public PivotGridBuilder RepeatRowLabels(bool repeat) => SetRenderer("repeatRowLabels", repeat);
 
+    /// <summary>
+    /// Sets the cell lines: true closes the grid with an outer frame, false takes the lines
+    /// between body cells away and keeps the header's. Left unset, the default grid lines stay.
+    /// </summary>
+    /// <param name="show">True for a framed grid; false for a grid without body lines.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ShowBorders(bool show) => SetRenderer("showBorders", show);
+
     /// <summary>Sets the narrowest a column may be rendered or resized to, in pixels.</summary>
     /// <param name="width">The minimum width. Must be greater than zero.</param>
     /// <returns>This builder.</returns>
