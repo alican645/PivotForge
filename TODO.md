@@ -81,7 +81,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | DevExpress | Motor | Bildirimsel | Not |
 |---|---|---|---|
 | `dataField`, `caption`, `area`, `visible` | ✅ | ✅ | |
-| `summaryType` (aggregation) | ✅ | ✅ | 5 tür: sum/count/average/min/max |
+| `summaryType` (aggregation) | ✅ | ✅ | 9 tür: sum/count/average/min/max + countDistinct/median/variance/standardDeviation |
 | `summaryDisplayMode` (`showAs`) | ✅ | ✅ | `show-as` niteliği ve `ShowAs()` metodu mevcut |
 | `format` / `precision` | ✅ | ✅ | `0.4.0-preview.1`'de eklendi |
 | `areaIndex` | ✅ | ✅ | `area-index` niteliği ve `AreaIndex()` metodu |

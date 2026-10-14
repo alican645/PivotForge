@@ -1,7 +1,7 @@
 (function (root) {
   const PivotForge = root.PivotForge ??= {};
 
-  const AGGREGATIONS = ["sum", "count", "average", "min", "max"];
+  const AGGREGATIONS = ["sum", "count", "average", "min", "max", "countDistinct", "median", "variance", "standardDeviation"];
 
   const DEFAULT_LABELS = {
     available: "Fields",
@@ -65,12 +65,16 @@
       count: "Count",
       average: "Average",
       min: "Minimum",
-      max: "Maksimum"
+      max: "Maximum",
+      countDistinct: "Distinct count",
+      median: "Median",
+      variance: "Variance",
+      standardDeviation: "Standard deviation"
     },
     calculatedField: "Calculated field",
     addCalculatedField: "Add calculated field",
     formula: "Formula",
-    formulaHint: "Use + - * / and parentheses. [Field] is the field's sum; Sum, Count, Avg, Min and Max summarize it another way. Example: [Revenue] - [Cost]",
+    formulaHint: "Use + - * / and parentheses. [Field] is the field's sum; Sum, Count, Avg, Min, Max, CountDistinct, Median, Var and StDev summarize it another way. Example: [Revenue] - [Cost]",
     insertField: "Insert field",
     save: "Save",
     cancel: "Cancel",
@@ -176,9 +180,16 @@
   ];
   // How a field in the builder is summarized, named by the aggregations the
   // designer already has words for, and written as the formula's functions.
-  const FORMULA_SUMMARIES = ["sum", "average", "count", "min", "max"];
-  const SUMMARY_FUNCTIONS = { sum: "Sum", average: "Avg", count: "Count", min: "Min", max: "Max" };
-  const FUNCTION_SUMMARIES = { sum: "sum", avg: "average", average: "average", count: "count", min: "min", max: "max" };
+  const FORMULA_SUMMARIES = ["sum", "average", "count", "min", "max", "countDistinct", "median", "variance", "standardDeviation"];
+  const SUMMARY_FUNCTIONS = {
+    sum: "Sum", average: "Avg", count: "Count", min: "Min", max: "Max",
+    countDistinct: "CountDistinct", median: "Median", variance: "Var", standardDeviation: "StDev"
+  };
+  const FUNCTION_SUMMARIES = {
+    sum: "sum", avg: "average", average: "average", count: "count", min: "min", max: "max",
+    countdistinct: "countDistinct", median: "median",
+    var: "variance", variance: "variance", stdev: "standardDeviation", stddev: "standardDeviation"
+  };
 
   function operatorToken(value) {
     if (value === "(") return { kind: "open" };

@@ -44,6 +44,27 @@ public sealed record PivotValueDefinition(string Field, PivotAggregation Aggrega
     /// <returns>A maximum definition.</returns>
     public static PivotValueDefinition Max(string field) => new(field, PivotAggregation.Max);
 
+    /// <summary>Creates a distinct count value definition.</summary>
+    /// <param name="field">The source field name.</param>
+    /// <returns>A distinct count definition.</returns>
+    public static PivotValueDefinition CountDistinct(string field) => new(field, PivotAggregation.CountDistinct);
+
+    /// <summary>Creates a median value definition.</summary>
+    /// <param name="field">The source field name.</param>
+    /// <returns>A median definition.</returns>
+    public static PivotValueDefinition Median(string field) => new(field, PivotAggregation.Median);
+
+    /// <summary>Creates a sample variance value definition.</summary>
+    /// <param name="field">The source field name.</param>
+    /// <returns>A variance definition.</returns>
+    public static PivotValueDefinition Variance(string field) => new(field, PivotAggregation.Variance);
+
+    /// <summary>Creates a sample standard deviation value definition.</summary>
+    /// <param name="field">The source field name.</param>
+    /// <returns>A standard deviation definition.</returns>
+    public static PivotValueDefinition StandardDeviation(string field) =>
+        new(field, PivotAggregation.StandardDeviation);
+
     /// <summary>Creates a calculated value definition.</summary>
     /// <param name="name">The calculated field's name, which its key is built from.</param>
     /// <param name="expression">The formula, such as <c>[Revenue] - [Cost]</c>.</param>

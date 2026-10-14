@@ -2133,15 +2133,31 @@ test("the typed formula is one button away and comes back as pieces", () => {
   assert.deepEqual(pieces(panel), ["(", "Tutar", "−", "Miktar", ")", "÷", "2"]);
 });
 
+test("the statistical summaries are formula pieces and are written back unchanged", () => {
+  const { designer } = buildCalculated();
+  designer.openFormula(null);
+  const panel = settingsPanel();
+  const input = findByAction(panel, "formula");
+
+  press(panel, "formula-advanced");
+  input.value = "Median([Amount]) / StDev([Quantity]) + CountDistinct([Amount]) - Var([Quantity])";
+  press(panel, "formula-advanced");
+  assert.equal(input.hidden, true);
+  assert.deepEqual(pieces(panel), ["Tutar", "÷", "Miktar", "+", "Tutar", "−", "Miktar"]);
+
+  press(panel, "formula-advanced");
+  assert.equal(input.value, "Median([Amount]) / StDev([Quantity]) + CountDistinct([Amount]) - Var([Quantity])");
+});
+
 test("a formula the pieces cannot show opens as text and stays there", () => {
   const { state, designer } = buildCalculated();
-  const name = state.addCalculatedField({ caption: "Medyan", expression: "Median([Amount])" });
+  const name = state.addCalculatedField({ caption: "Mod", expression: "Mode([Amount])" });
   designer.openFormula(name);
   const panel = settingsPanel();
   const input = findByAction(panel, "formula");
 
   assert.equal(input.hidden, false);
-  assert.equal(input.value, "Median([Amount])");
+  assert.equal(input.value, "Mode([Amount])");
 
   press(panel, "formula-advanced");
   assert.equal(input.hidden, false);

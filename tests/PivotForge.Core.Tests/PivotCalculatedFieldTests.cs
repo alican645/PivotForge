@@ -136,7 +136,8 @@ public sealed class PivotCalculatedFieldTests
         {
             CustomAggregates = new Dictionary<string, PivotCustomAggregate>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Median"] = values =>
+                // Not "Median": that name is built in now, and a built-in name never reaches a custom one.
+                ["MiddleValue"] = values =>
                 {
                     var sorted = values.Order().ToArray();
                     return sorted.Length % 2 == 1
@@ -148,7 +149,7 @@ public sealed class PivotCalculatedFieldTests
 
         var result = engine.Execute(Sales, new PivotRequest
         {
-            Values = [PivotValueDefinition.Calculated("MedianRevenue", "median([Revenue])")]
+            Values = [PivotValueDefinition.Calculated("MedianRevenue", "middlevalue([Revenue])")]
         });
 
         Assert.Equal(50m, result.GrandTotals["MedianRevenue_calculated"]);

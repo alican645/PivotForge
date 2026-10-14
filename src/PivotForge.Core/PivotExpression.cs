@@ -16,7 +16,9 @@ namespace PivotForge.Core;
 /// The grammar: numbers written with a dot as the decimal separator; <c>+ - * /</c> with the
 /// usual precedence; parentheses; unary minus; a field reference <c>[Name]</c>, which means
 /// <c>Sum([Name])</c>; and a summary <c>Function([Name])</c>, where the function is one of
-/// <c>Sum</c>, <c>Count</c>, <c>Avg</c> (or <c>Average</c>), <c>Min</c>, <c>Max</c>, or a
+/// <c>Sum</c>, <c>Count</c>, <c>Avg</c> (or <c>Average</c>), <c>Min</c>, <c>Max</c>,
+/// <c>CountDistinct</c>, <c>Median</c>, <c>Var</c> (or <c>Variance</c>), <c>StDev</c> (or
+/// <c>StdDev</c>), or a
 /// custom aggregate registered with the engine. Names are matched without regard to case.
 /// </para>
 /// <para>

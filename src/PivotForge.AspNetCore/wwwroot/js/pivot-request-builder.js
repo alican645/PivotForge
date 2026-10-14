@@ -3,13 +3,16 @@
 
   const AREAS = ["row", "column", "data", "filter", "available"];
   const ROLES = ["dimension", "measure"];
-  const AGGREGATIONS = ["sum", "count", "average", "min", "max"];
+  const AGGREGATIONS = ["sum", "count", "average", "min", "max", "countDistinct", "median", "variance", "standardDeviation"];
   // Not among the choices above: a calculated field's formula is its aggregation,
   // so this one is never picked, only implied by an expression.
   const CALCULATED = "calculated";
   // The summaries a formula may call without the server registering anything.
   // Anything else is a custom aggregate, which only the server can resolve.
-  const FORMULA_FUNCTIONS = ["Sum", "Count", "Avg", "Average", "Min", "Max"];
+  const FORMULA_FUNCTIONS = [
+    "Sum", "Count", "Avg", "Average", "Min", "Max",
+    "CountDistinct", "Median", "Var", "Variance", "StDev", "StdDev"
+  ];
   const FORMAT_TYPES = ["number", "currency", "percent"];
   const SORT_ORDERS = ["Ascending", "Descending"];
   const FILTER_MODES = ["Include", "Exclude"];
