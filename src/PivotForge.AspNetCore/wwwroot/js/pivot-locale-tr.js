@@ -34,7 +34,13 @@
         sortActive: "{0} sıralaması aktif",
         filterField: "{0} alanını filtrele",
         filterActive: "{0} filtresi etkin",
-        loading: "Yükleniyor..."
+        loading: "Yükleniyor...",
+        toolbar: "Pivot tablo araçları",
+        toolbarExcel: "Excel",
+        toolbarCsv: "CSV",
+        toolbarPrint: "Yazdır",
+        toolbarExpandAll: "Tümünü aç",
+        toolbarCollapseAll: "Tümünü kapat"
       }
     },
     designer: {

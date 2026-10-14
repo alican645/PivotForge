@@ -49,6 +49,15 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("load-panel")]
     public bool? LoadPanel { get; set; }
 
+    /// <summary>Gets or sets whether a toolbar with every button the grid can offer is shown above it.</summary>
+    [HtmlAttributeName("toolbar")]
+    public bool? Toolbar { get; set; }
+
+    /// <summary>Gets or sets the toolbar's buttons, comma-separated and in order, such as <c>Excel,Print</c>.</summary>
+    /// <remarks>Implies a toolbar; see <see cref="PivotToolbarItem"/> for the names.</remarks>
+    [HtmlAttributeName("toolbar-items")]
+    public string? ToolbarItems { get; set; }
+
     /// <summary>Gets or sets whether the grid loads data as soon as it is created.</summary>
     [HtmlAttributeName("auto-load")]
     public bool? AutoLoad { get; set; }
@@ -305,6 +314,21 @@ public sealed class PivotGridTagHelper : TagHelper
             builder.LoadPanel(loadPanel);
         }
 
+        if (ToolbarItems is not null)
+        {
+            if (Toolbar == false)
+            {
+                throw new InvalidOperationException(
+                    "pivot-grid sets toolbar=\"false\" and lists toolbar-items. Drop one of them.");
+            }
+
+            builder.Toolbar(ParseToolbarItems(ToolbarItems));
+        }
+        else if (Toolbar is { } toolbar)
+        {
+            builder.Toolbar(toolbar);
+        }
+
         if (AutoLoad is { } autoLoad)
         {
             builder.AutoLoad(autoLoad);
@@ -518,4 +542,17 @@ public sealed class PivotGridTagHelper : TagHelper
         output.TagName = null;
         output.Content.SetHtmlContent(writer.ToString());
     }
+
+    // Names as the enum spells them, without regard to case. A name that is not one is
+    // reported with the list, rather than dropped: a misspelt button silently missing
+    // from the toolbar is harder to find than an error.
+    private static PivotToolbarItem[] ParseToolbarItems(string value) => value
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(name => Enum.TryParse<PivotToolbarItem>(name, ignoreCase: true, out var item)
+                && Enum.IsDefined(item)
+            ? item
+            : throw new InvalidOperationException(
+                $"pivot-grid toolbar-items names '{name}', which is not a toolbar item. " +
+                $"Expected any of: {string.Join(", ", Enum.GetNames<PivotToolbarItem>())}."))
+        .ToArray();
 }

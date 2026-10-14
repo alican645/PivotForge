@@ -16,6 +16,17 @@ change will require a new major version.
 
 ### Added
 
+- Toolbar: `toolbar="true"` / `Toolbar(true)` / `toolbar: true` puts a strip
+  of buttons above the grid — Excel (when export is allowed), CSV, Print,
+  Expand all and Collapse all. `toolbar-items="Excel,Print"` /
+  `Toolbar(params PivotToolbarItem[])` / `toolbar: ["excel", "print"]` picks
+  the buttons and their order. Excel and Print are titled with the grid's
+  `aria-label`; a failure is raised as the `error` event. The texts are
+  renderer texts (`toolbarExcel`, `toolbarPrint`, ...), translated in the `tr`
+  locale. (AspNetCore)
+
+### Added
+
 - Tree row header layout: `layout-mode="Tree"` / `LayoutMode(PivotGridLayoutMode.Tree)`
   / `layoutMode: "tree"`, DevExtreme's `rowHeaderLayout: "tree"`. It is the
   compact column drawn as a tree: each group row is the parent node, named for

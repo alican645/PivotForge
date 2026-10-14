@@ -335,6 +335,7 @@ DevExpress'in alan menüsüne yaklaştı.
       ayrışamıyor; birleşik hücreler açılıyor ve her satır en genişe göre
       dolduruluyor. `delimiter` ve `values: "raw"` seçenekleri var.
 - [ ] Dışa aktarma öncesi hücre özelleştirme kancası
+- [x] Araç çubuğu — `toolbar="true"` / `toolbar-items`: Excel, CSV, Yazdır, Tümünü aç/kapat
 - [x] Yazdırma görünümü — `widget.print({ title, subtitle })`, `PivotForge.print(element)`
 
 ---
