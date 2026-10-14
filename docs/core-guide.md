@@ -54,7 +54,7 @@ var request = new PivotRequest
 };
 ```
 
-Available aggregations are `Sum`, `Count`, `Average`, `Min`, and `Max`. A value key is generated from the field and aggregation, such as `Amount_sum`.
+Available aggregations are `Sum`, `Count`, `Average`, `Min`, `Max`, `CountDistinct`, `Median`, `Variance`, and `StandardDeviation`. `CountDistinct` counts distinct non-empty values of any type, as `Count` does; the rest need numbers. `Variance` and `StandardDeviation` are the sample statistics (divided by n − 1, like Excel's `VAR.S` and `STDEV.S`) and stay empty below two values. Every subtotal and grand total is computed from the records behind it, so a median or a distinct count is exact at every level rather than a combination of the cells above it. A value key is generated from the field and aggregation, such as `Amount_sum`.
 
 Filters are applied before grouping. Multiple filters use AND semantics; the values inside one filter use OR semantics.
 
@@ -113,7 +113,7 @@ The formula runs after each cell, row total, column total, subtotal and grand to
 
 The grammar:
 
-- `[Field]` is the sum of a source field; `Sum`, `Count`, `Avg` (or `Average`), `Min` and `Max` summarize it another way: `Count([OrderId])`.
+- `[Field]` is the sum of a source field; `Sum`, `Count`, `Avg` (or `Average`), `Min`, `Max`, `CountDistinct`, `Median`, `Var` (or `Variance`) and `StDev` (or `StdDev`) summarize it another way: `Count([OrderId])`, `[Revenue] / CountDistinct([CustomerId])`.
 - `+ - * /`, parentheses and unary minus, with the usual precedence.
 - Numbers are written with a dot as the decimal separator, whatever the culture.
 - Function and field names are matched without regard to case.
@@ -130,16 +130,11 @@ var engine = new PivotEngine
 {
     CustomAggregates = new Dictionary<string, PivotCustomAggregate>(StringComparer.OrdinalIgnoreCase)
     {
-        ["Median"] = values =>
-        {
-            var sorted = values.Order().ToArray();
-            var middle = sorted.Length / 2;
-            return sorted.Length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-        }
+        ["Range"] = values => values.Max() - values.Min()
     }
 };
 
-var value = PivotValueDefinition.Calculated("MedianAmount", "Median([Amount])");
+var value = PivotValueDefinition.Calculated("AmountRange", "Range([Amount])");
 ```
 
 The function receives a cell's non-null values and is not called for a cell that has none. The built-in names always mean the built-in summaries.

@@ -16,6 +16,25 @@ change will require a new major version.
 
 ### Added
 
+- Printing: `widget.print({ title, subtitle })` prints the grid alone, and
+  `PivotForge.print(element, options)` does the same for any element. The
+  stylesheet's `@media print` lays out the whole table instead of its scroll
+  window, repeats the column headers on every sheet, tightens the rows, drops
+  the controls and the selection, and keeps heatmap and conditional colours —
+  so a plain Ctrl+P prints a clean table too, and the browser's "Save as PDF"
+  gives a PDF. (AspNetCore)
+
+- Four aggregations: `CountDistinct`, `Median`, `Variance` and
+  `StandardDeviation` (`countDistinct`, `median`, `variance`,
+  `standardDeviation` in the browser), with `PivotValueDefinition` factories of
+  the same names. A distinct count works on any field, as `Count` does; the
+  variance and standard deviation are the sample statistics (n − 1, like
+  Excel's `VAR.S` / `STDEV.S`) and are empty below two values. Every subtotal
+  and grand total is computed from its own records, so a median or a distinct
+  count is exact at every level. Formulas can call them as `CountDistinct`,
+  `Median`, `Var` / `Variance` and `StDev` / `StdDev`. The field designer
+  offers them, in English and Turkish. (Core, AspNetCore)
+
 - Heatmap: `heatmap="Table|Rows|Columns"` / `Heatmap(PivotHeatmapMode)` /
   `heatmap: "table" | "rows" | "columns"` shades the value cells on a colour
   scale from the smallest value to the largest — across every cell of a data
@@ -32,6 +51,13 @@ change will require a new major version.
   definition, over the whole result and per column. `PivotResultPaginator`
   fills it on every page, so a page can be shaded on the whole result's
   scale. (Core)
+
+### Changed
+
+- A custom aggregate registered as `CountDistinct`, `Median`, `Var`,
+  `Variance`, `StDev` or `StdDev` is no longer called: those names are built
+  in now, and a built-in name always means the built-in summary. A custom
+  median written as in the old documentation gives the same numbers. (Core)
 
 ## [0.6.0-preview.6] — 2026-10-02
 

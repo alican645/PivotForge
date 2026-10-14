@@ -1251,6 +1251,20 @@
       };
     }
 
+    // Prints this grid and nothing else on the page: the whole table, headers
+    // repeated on each sheet, heatmap and conditional colours kept. The
+    // browser's own "Save as PDF" makes the same into a PDF. In large-data
+    // mode it is the page of rows loaded, which is what the grid holds.
+    print(options = {}) {
+      this.assertNotDisposed();
+
+      if (!this.result) {
+        throw new Error("Cannot print because no pivot table has been rendered yet.");
+      }
+
+      PivotForge.print(this.container, options);
+    }
+
     cancel() {
       // Invalidate the token as well, so a response already in flight cannot render.
       this.requestToken++;

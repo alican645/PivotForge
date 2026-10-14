@@ -52,12 +52,21 @@ test("supports every aggregation and showAs value", () => {
     { dataField: "c", area: "data", aggregation: "min" },
     { dataField: "d", area: "data", aggregation: "max" },
     { dataField: "e", area: "data", aggregation: "sum", showAs: "percentOfRowTotal" },
-    { dataField: "f", area: "data", aggregation: "sum", showAs: "runningTotal" }
+    { dataField: "f", area: "data", aggregation: "sum", showAs: "runningTotal" },
+    { dataField: "g", area: "data", aggregation: "countDistinct" },
+    { dataField: "h", area: "data", aggregation: "median" },
+    { dataField: "i", area: "data", aggregation: "variance" },
+    { dataField: "j", area: "data", aggregation: "standardDeviation" }
   ]);
 
   assert.deepEqual(request.values.map(value => value.aggregation), [
-    "count", "average", "min", "max", "sum", "sum"
+    "count", "average", "min", "max", "sum", "sum",
+    "countDistinct", "median", "variance", "standardDeviation"
   ]);
+  // The server lower-cases the enum name the same way.
+  assert.equal(PivotRequestBuilder.valueKey({ dataField: "g", aggregation: "countDistinct" }), "g_countdistinct");
+  assert.equal(
+    PivotRequestBuilder.valueKey({ dataField: "j", aggregation: "standardDeviation" }), "j_standarddeviation");
   assert.equal(request.values[4].showAs, "percentOfRowTotal");
   assert.equal(request.values[5].showAs, "runningTotal");
 });
@@ -137,9 +146,9 @@ test("rejects an aggregation on a non-data field", () => {
 test("rejects an unknown aggregation", () => {
   assert.throws(
     () => PivotRequestBuilder.normalizeFields([
-      { dataField: "tutar", area: "data", aggregation: "median" }
+      { dataField: "tutar", area: "data", aggregation: "mode" }
     ]),
-    /Unknown aggregation "median"/
+    /Unknown aggregation "mode"/
   );
 });
 

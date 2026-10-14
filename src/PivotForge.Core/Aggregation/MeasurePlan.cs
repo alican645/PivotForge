@@ -136,6 +136,10 @@ internal sealed class MeasurePlan
         "AVG" or "AVERAGE" => PivotAggregation.Average,
         "MIN" => PivotAggregation.Min,
         "MAX" => PivotAggregation.Max,
+        "COUNTDISTINCT" => PivotAggregation.CountDistinct,
+        "MEDIAN" => PivotAggregation.Median,
+        "VAR" or "VARIANCE" => PivotAggregation.Variance,
+        "STDEV" or "STDDEV" => PivotAggregation.StandardDeviation,
         _ => null
     };
 }

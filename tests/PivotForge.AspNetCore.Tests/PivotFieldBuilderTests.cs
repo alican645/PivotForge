@@ -56,6 +56,10 @@ public class PivotFieldBuilderTests
     [InlineData(PivotAggregation.Average, "average")]
     [InlineData(PivotAggregation.Min, "min")]
     [InlineData(PivotAggregation.Max, "max")]
+    [InlineData(PivotAggregation.CountDistinct, "countDistinct")]
+    [InlineData(PivotAggregation.Median, "median")]
+    [InlineData(PivotAggregation.Variance, "variance")]
+    [InlineData(PivotAggregation.StandardDeviation, "standardDeviation")]
     public void EveryAggregationSerializesAsLowerCamelCase(PivotAggregation aggregation, string expected)
     {
         var field = new PivotFieldBuilder()

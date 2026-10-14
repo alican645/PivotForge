@@ -95,12 +95,16 @@
         count: "Sayım",
         average: "Ortalama",
         min: "Minimum",
-        max: "Maksimum"
+        max: "Maksimum",
+        countDistinct: "Benzersiz sayısı",
+        median: "Medyan",
+        variance: "Varyans",
+        standardDeviation: "Standart sapma"
       },
       calculatedField: "Hesaplanan alan",
       addCalculatedField: "Hesaplanan alan ekle",
       formula: "Formül",
-      formulaHint: "+ - * / ve parantez kullanın. [Alan] alanın toplamıdır; Sum, Count, Avg, Min ve Max onu başka türlü özetler. Örnek: [Gelir] - [Gider]",
+      formulaHint: "+ - * / ve parantez kullanın. [Alan] alanın toplamıdır; Sum, Count, Avg, Min, Max, CountDistinct, Median, Var ve StDev onu başka türlü özetler. Örnek: [Gelir] - [Gider]",
       insertField: "Alan ekle",
       save: "Kaydet",
       cancel: "Vazgeç",

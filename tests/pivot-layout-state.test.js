@@ -260,7 +260,7 @@ test("setAggregation on a field outside the data area throws", () => {
 });
 
 test("setAggregation rejects an unknown aggregation", () => {
-  assert.throws(() => create().setAggregation("Amount", "median"), /Unknown aggregation/);
+  assert.throws(() => create().setAggregation("Amount", "mode"), /Unknown aggregation/);
 });
 
 test("getState returns a copy that cannot mutate the state", () => {
@@ -402,10 +402,10 @@ test("an explicit layout with an unknown aggregation is rejected at construction
     () => new PivotForge.PivotLayoutState(catalog, {
       rows: [],
       columns: [],
-      values: [{ field: "Amount", aggregation: "median", showAs: "normal" }],
+      values: [{ field: "Amount", aggregation: "mode", showAs: "normal" }],
       filters: []
     }),
-    /unknown aggregation "median"/
+    /unknown aggregation "mode"/
   );
 });
 
