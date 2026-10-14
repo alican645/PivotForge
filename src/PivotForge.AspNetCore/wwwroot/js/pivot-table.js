@@ -41,6 +41,71 @@ const CONDITIONAL_OPERATORS = [
 
 const CONDITIONAL_COLORS = ["green", "amber", "red", "blue"];
 
+// What a heatmap scale is drawn across: every value cell of a measure, or one
+// row or one column of it. "none" draws nothing.
+const HEATMAP_MODES = ["none", "table", "rows", "columns"];
+
+// What the Excel export falls back to when --pt-heat-color is not a hex colour,
+// and how much of it the hottest cell gets. Both mirror pivotforge.css.
+const HEATMAP_COLOR = "#f97316";
+const HEATMAP_STRENGTH = 0.55;
+
+function parseHexColor(text) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(String(text ?? "").trim());
+  return match ? [0, 2, 4].map(start => Number.parseInt(match[1].slice(start, start + 2), 16)) : null;
+}
+
+// Where each value sits on its heatmap scale, from 0 (the smallest in its group)
+// to 1 (the largest). Each measure is its own scale -- an amount and a count
+// share no units, so one cannot shade the other -- and "rows" / "columns" split
+// it further by row or column. A non-number gets null, and so does every value
+// of a group whose values are all equal: there is no hotter or colder there.
+//
+// ranges, when given, are the server's valueRanges ({ valueKey, column, min,
+// max }; column null for the whole table): a large-data page holds only some
+// rows, and a scale drawn from those alone would shade one value differently on
+// every page. A row is always whole on a page, so "rows" needs none.
+PivotForge.heatmapLevels = function heatmapLevels(entries, mode, ranges = []) {
+  if (!HEATMAP_MODES.includes(mode) || mode === "none") {
+    return entries.map(() => null);
+  }
+
+  const groupOf = entry => JSON.stringify([
+    entry.valueKey ?? null,
+    mode === "rows" ? entry.rowKey ?? null : null,
+    mode === "columns" ? entry.columnIndex ?? null : null
+  ]);
+  const groups = new Map();
+  const widen = (key, min, max) => {
+    const range = groups.get(key);
+    groups.set(key, range
+      ? { min: Math.min(range.min, min), max: Math.max(range.max, max) }
+      : { min, max });
+  };
+
+  if (mode !== "rows" && Array.isArray(ranges)) {
+    ranges
+      .filter(range => Number.isFinite(range?.min) && Number.isFinite(range?.max) &&
+        (mode === "table" ? range.column == null : Number.isInteger(range.column)))
+      .forEach(range => widen(
+        groupOf({ valueKey: range.valueKey, columnIndex: range.column }), range.min, range.max));
+  }
+
+  entries.forEach(entry => {
+    if (Number.isFinite(entry.value)) {
+      widen(groupOf(entry), entry.value, entry.value);
+    }
+  });
+
+  return entries.map(entry => {
+    const range = Number.isFinite(entry.value) ? groups.get(groupOf(entry)) : null;
+
+    return range && range.max > range.min
+      ? (entry.value - range.min) / (range.max - range.min)
+      : null;
+  });
+};
+
 // Turns an export model into comma-separated text. Takes the same model the
 // Excel endpoint is sent, so the two exports can never disagree about what the
 // grid says -- and it inherits the model's cleaning, which drops the sort
@@ -197,6 +262,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       selectionMode: "single",
       contextMenu: true,
       conditionalRules: [],
+      // A colour scale over the value cells: "table", "rows", "columns" or
+      // "none". Totals and subtotals are left out -- they would always be the
+      // hottest cells and flatten the scale for everything else. A conditional
+      // rule's colour wins over the scale on the cells it matches.
+      heatmap: "none",
       // DevExtreme names a grand total after the area its header sits in, and
       // so does this: showGrandTotal is the total *row* along the bottom (the
       // row grand total), showColumnGrandTotals the total *column* on the right.
@@ -291,6 +361,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.wireSubtotalToggles(table, result, options);
     this.wireSelection(table, settings);
     this.applySelectionState(table);
+    this.applyHeatmap(table, settings);
     this.applyConditionalFormatting(table, settings);
     this.applyColumnWidths(table);
     this.wireColumnResize(table, settings);
@@ -405,8 +476,32 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       width: Math.round(cell.getBoundingClientRect?.().width || cell.offsetWidth || 118),
       numberFormat: typeof selection?.value === "number" ? this.getExcelNumberFormat(valueDefinition) : null,
       role: this.getExcelCellRole(cell, row),
-      highlight: this.getExcelCellHighlight(cell)
+      highlight: this.getExcelCellHighlight(cell),
+      fillColor: this.getExcelCellFillColor(cell)
     };
+  }
+
+  // The heatmap shade, mixed the way the stylesheet mixes it but over white:
+  // the sheet has no panel colour. A conditional highlight wins, as on screen,
+  // and the exporter applies that rule too.
+  getExcelCellFillColor(cell) {
+    if (!cell.classList.contains("is-heat") || this.getExcelCellHighlight(cell) !== "None") {
+      return null;
+    }
+
+    const level = Number.parseFloat(cell.style?.getPropertyValue?.("--pt-heat"));
+    const style = typeof getComputedStyle === "function" ? getComputedStyle(cell) : null;
+    const heat = parseHexColor(style?.getPropertyValue("--pt-heat-color")) ?? parseHexColor(HEATMAP_COLOR);
+
+    if (!Number.isFinite(level)) {
+      return null;
+    }
+
+    const share = Math.max(0, Math.min(1, level)) * HEATMAP_STRENGTH;
+    return "#" + heat
+      .map(channel => Math.round(channel * share + 255 * (1 - share)).toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase();
   }
 
   getExportCellText(cell) {
@@ -1889,6 +1984,38 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       cell.classList.add(`is-conditional-${rule.color}`);
       cell.dataset.conditionalRule = rule.id ?? "rule";
+    });
+  }
+
+  // Only the plain value cells: a subtotal or total cell carries other classes.
+  // A large-data page brings the whole result's ranges with it, so the scale is
+  // the same on every page.
+  applyHeatmap(table, settings = this.lastSettings) {
+    const cells = Array.from(
+      table?.querySelectorAll("td.pivot-table__value:not(.pivot-table__column-subtotal)") ?? []);
+    const entries = cells.map(cell => {
+      const selection = this.selectionMetadata.get(cell);
+
+      return {
+        value: selection?.value,
+        valueKey: selection?.valueKey,
+        rowKey: selection?.rowKey,
+        columnIndex: selection?.columnIndex
+      };
+    });
+    const levels = PivotForge.heatmapLevels(
+      entries, settings?.heatmap ?? "none", this.lastResult?.valueRanges ?? []);
+
+    cells.forEach((cell, index) => {
+      const level = levels[index];
+      cell.classList.toggle("is-heat", level !== null);
+
+      if (level === null) {
+        cell.style.removeProperty("--pt-heat");
+      } else {
+        // Rounded so the attribute stays readable in the inspector.
+        cell.style.setProperty("--pt-heat", String(Math.round(level * 1000) / 1000));
+      }
     });
   }
 

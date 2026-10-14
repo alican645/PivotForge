@@ -77,16 +77,13 @@ public sealed class PivotExcelExporter
     {
         var keys = new List<StyleKey>
         {
-            new("title", null, PivotExcelHighlight.None),
-            new("metadata", null, PivotExcelHighlight.None)
+            new("title", null, PivotExcelHighlight.None, null),
+            new("metadata", null, PivotExcelHighlight.None, null)
         };
 
         foreach (var placement in placements)
         {
-            var key = new StyleKey(
-                placement.Cell.Role.ToString(),
-                placement.Cell.Number is null ? null : placement.Cell.NumberFormat ?? "#,##0.00",
-                placement.Cell.Highlight);
+            var key = StyleKeyOf(placement.Cell);
 
             if (!keys.Contains(key))
             {
@@ -101,7 +98,31 @@ public sealed class PivotExcelExporter
             .Select((format, index) => (Format: format!, Id: 164 + index))
             .ToDictionary(item => item.Format, item => item.Id, StringComparer.Ordinal);
 
-        return new StyleCatalog(keys, numberFormats);
+        // Appended after the fixed fills, so the ids ResolveFillId hands out for those stay put.
+        var customFills = keys
+            .Select(key => key.Fill)
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .Select((fill, index) => (Fill: fill, Id: FixedFillColors.Length + index))
+            .ToDictionary(item => item.Fill, item => item.Id, StringComparer.Ordinal);
+
+        return new StyleCatalog(keys, numberFormats, customFills);
+    }
+
+    private static StyleKey StyleKeyOf(PivotExcelCell cell) => new(
+        cell.Role.ToString(),
+        cell.Number is null ? null : cell.NumberFormat ?? "#,##0.00",
+        cell.Highlight,
+        cell.Highlight == PivotExcelHighlight.None ? NormalizeFill(cell.FillColor) : null);
+
+    // Six hex digits, upper-cased so "#f97316" and "F97316" share one fill.
+    private static string? NormalizeFill(string? color)
+    {
+        var digits = color?.Trim().TrimStart('#');
+
+        return digits is { Length: 6 } && digits.All(Uri.IsHexDigit)
+            ? digits.ToUpperInvariant()
+            : null;
     }
 
     private static void WriteWorksheet(
@@ -137,8 +158,8 @@ public sealed class PivotExcelExporter
         writer.WriteEndElement();
         WriteColumns(writer, layout);
         writer.WriteStartElement("sheetData");
-        WriteTextRow(writer, 1, document.Title, styles.IndexOf(new("title", null, PivotExcelHighlight.None)));
-        WriteTextRow(writer, 2, $"{document.FilterLabel}: {document.FilterSummary}", styles.IndexOf(new("metadata", null, PivotExcelHighlight.None)));
+        WriteTextRow(writer, 1, document.Title, styles.IndexOf(new("title", null, PivotExcelHighlight.None, null)));
+        WriteTextRow(writer, 2, $"{document.FilterLabel}: {document.FilterSummary}", styles.IndexOf(new("metadata", null, PivotExcelHighlight.None, null)));
 
         foreach (var rowGroup in layout.Placements.GroupBy(placement => placement.Row).OrderBy(group => group.Key))
         {
@@ -211,10 +232,7 @@ public sealed class PivotExcelExporter
     private static void WriteCell(XmlWriter writer, int row, CellPlacement placement, StyleCatalog styles)
     {
         var cell = placement.Cell;
-        var key = new StyleKey(
-            cell.Role.ToString(),
-            cell.Number is null ? null : cell.NumberFormat ?? "#,##0.00",
-            cell.Highlight);
+        var key = StyleKeyOf(cell);
 
         writer.WriteStartElement("c");
         writer.WriteAttributeString("r", $"{ColumnName(placement.Column)}{row}");
@@ -272,7 +290,7 @@ public sealed class PivotExcelExporter
         writer.WriteEndElement();
 
         WriteFonts(writer);
-        WriteFills(writer);
+        WriteFills(writer, catalog.CustomFills);
         WriteBorders(writer);
 
         writer.WriteStartElement("cellStyleXfs");
@@ -286,7 +304,7 @@ public sealed class PivotExcelExporter
         {
             var role = key.Role;
             var fontId = role is "title" or nameof(PivotExcelCellRole.Header) or nameof(PivotExcelCellRole.RowHeader) or nameof(PivotExcelCellRole.Subtotal) or nameof(PivotExcelCellRole.Total) or nameof(PivotExcelCellRole.GrandTotal) ? 1 : 0;
-            var fillId = ResolveFillId(key);
+            var fillId = key.Fill is { } fill ? catalog.CustomFills[fill] : ResolveFillId(key);
             var numberFormatId = key.NumberFormat is null ? 0 : catalog.NumberFormats[key.NumberFormat];
             var horizontal = role is nameof(PivotExcelCellRole.Value) or nameof(PivotExcelCellRole.Subtotal) or nameof(PivotExcelCellRole.Total) or nameof(PivotExcelCellRole.GrandTotal) ? "right" : "left";
             WriteXf(writer, numberFormatId, fontId, fillId, role is "title" or "metadata" ? 0 : 1, numberFormatId > 0, true, horizontal);
@@ -352,9 +370,15 @@ public sealed class PivotExcelExporter
         writer.WriteEndElement();
     }
 
-    private static void WriteFills(XmlWriter writer)
+    // Indexed by fill id: ResolveFillId names these positions.
+    private static readonly string?[] FixedFillColors =
+        [null, null, "E2E8F0", "F8FAFC", "EEF2F7", "EEFBF8", "F1F5F9", "DCFCE7", "FEF3C7", "FEE2E2", "DBEAFE"];
+
+    private static void WriteFills(XmlWriter writer, IReadOnlyDictionary<string, int> customFills)
     {
-        var colors = new string?[] { null, null, "E2E8F0", "F8FAFC", "EEF2F7", "EEFBF8", "F1F5F9", "DCFCE7", "FEF3C7", "FEE2E2", "DBEAFE" };
+        var colors = FixedFillColors
+            .Concat(customFills.OrderBy(item => item.Value).Select(item => (string?)item.Key))
+            .ToArray();
         writer.WriteStartElement("fills");
         writer.WriteAttributeString("count", colors.Length.ToString(CultureInfo.InvariantCulture));
 
@@ -544,8 +568,11 @@ public sealed class PivotExcelExporter
 
     private sealed record CellPlacement(int Row, int Column, int RowSpan, int ColumnSpan, PivotExcelCell Cell);
     private sealed record SheetLayout(IReadOnlyList<CellPlacement> Placements, int MaxColumn);
-    private sealed record StyleKey(string Role, string? NumberFormat, PivotExcelHighlight Highlight);
-    private sealed record StyleCatalog(IReadOnlyList<StyleKey> Keys, IReadOnlyDictionary<string, int> NumberFormats)
+    private sealed record StyleKey(string Role, string? NumberFormat, PivotExcelHighlight Highlight, string? Fill);
+    private sealed record StyleCatalog(
+        IReadOnlyList<StyleKey> Keys,
+        IReadOnlyDictionary<string, int> NumberFormats,
+        IReadOnlyDictionary<string, int> CustomFills)
     {
         public int IndexOf(StyleKey key)
         {

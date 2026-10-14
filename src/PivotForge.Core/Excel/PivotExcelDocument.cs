@@ -58,6 +58,13 @@ public sealed class PivotExcelCell
 
     /// <summary>Gets the optional highlight color.</summary>
     public PivotExcelHighlight Highlight { get; init; } = PivotExcelHighlight.None;
+
+    /// <summary>Gets an optional background colour as <c>#RRGGBB</c>, such as a heatmap shade.</summary>
+    /// <remarks>
+    /// <see cref="Highlight"/> wins when both are set, as a conditional rule wins over the heatmap on
+    /// screen. A value that is not six hexadecimal digits (with or without the <c>#</c>) is ignored.
+    /// </remarks>
+    public string? FillColor { get; init; }
 }
 
 /// <summary>Specifies the semantic role used to style an exported cell.</summary>

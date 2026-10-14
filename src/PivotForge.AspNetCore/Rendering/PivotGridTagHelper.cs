@@ -106,6 +106,11 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("layout-mode")]
     public PivotGridLayoutMode LayoutMode { get; set; }
 
+    /// <summary>Gets or sets what a heatmap colour scale over the value cells is drawn across.</summary>
+    /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
+    [HtmlAttributeName("heatmap")]
+    public PivotHeatmapMode Heatmap { get; set; }
+
     /// <summary>Gets or sets whether the cell context menu is available.</summary>
     [HtmlAttributeName("context-menu")]
     public bool? ContextMenu { get; set; }
@@ -328,6 +333,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (written.Contains("layout-mode"))
         {
             builder.LayoutMode(LayoutMode);
+        }
+
+        if (written.Contains("heatmap"))
+        {
+            builder.Heatmap(Heatmap);
         }
 
         if (ContextMenu is { } contextMenu)

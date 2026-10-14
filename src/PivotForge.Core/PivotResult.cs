@@ -29,6 +29,30 @@ public sealed class PivotResult
 
     /// <summary>Gets counts describing the generated result.</summary>
     public PivotMetadata Metadata { get; init; } = new();
+
+    /// <summary>Gets the smallest and largest cell value of each value definition across the whole result.</summary>
+    /// <remarks>
+    /// Filled only on a page cut by <see cref="PivotResultPaginator"/>: a page holds a slice of the
+    /// cells, and a colour scale drawn from the slice alone would shade the same value differently
+    /// on every page. Empty on a result that already holds every cell.
+    /// </remarks>
+    public IReadOnlyList<PivotValueRange> ValueRanges { get; init; } = [];
+}
+
+/// <summary>The span of one value definition's cell values, over the whole result or one column.</summary>
+public sealed class PivotValueRange
+{
+    /// <summary>Gets the value definition key.</summary>
+    public required string ValueKey { get; init; }
+
+    /// <summary>Gets the column-header index the range covers, or null for every column.</summary>
+    public int? Column { get; init; }
+
+    /// <summary>Gets the smallest value.</summary>
+    public decimal Min { get; init; }
+
+    /// <summary>Gets the largest value.</summary>
+    public decimal Max { get; init; }
 }
 
 /// <summary>Represents an aggregated pivot cell.</summary>

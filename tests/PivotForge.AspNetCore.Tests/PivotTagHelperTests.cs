@@ -608,6 +608,7 @@ public class PivotTagHelperTests
         Assert.False(renderer.TryGetProperty("columnSubtotals", out _));
         Assert.False(renderer.TryGetProperty("showColumnGrandTotals", out _));
         Assert.False(renderer.TryGetProperty("layoutMode", out _));
+        Assert.False(renderer.TryGetProperty("heatmap", out _));
     }
 
     [Theory]
@@ -648,6 +649,21 @@ public class PivotTagHelperTests
             new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
 
         Assert.Equal(expected, config.GetProperty("rendererOptions").GetProperty("layoutMode").GetString());
+    }
+
+    [Theory]
+    [InlineData(PivotHeatmapMode.None, "none")]
+    [InlineData(PivotHeatmapMode.Table, "table")]
+    [InlineData(PivotHeatmapMode.Rows, "rows")]
+    [InlineData(PivotHeatmapMode.Columns, "columns")]
+    public async Task WritesHeatmapWhenTheAttributeIsWritten(PivotHeatmapMode mode, string expected)
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", Heatmap = mode },
+            ["heatmap"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(expected, config.GetProperty("rendererOptions").GetProperty("heatmap").GetString());
     }
 
     [Fact]
