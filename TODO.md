@@ -288,11 +288,13 @@ Açık kalanlar:
 | `rtlEnabled` | ❌ |
 | Yükleme göstergesi (`loadPanel`) | ✅ `load-panel`, varsayılan açık |
 | Isı haritası (PivotTable.js'teki heatmap renderer) | ✅ `heatmap="Table\|Rows\|Columns"` |
+| Hücre içi çubuk grafik (PivotTable.js'teki table bar chart) | ✅ `value-bars="Table\|Rows\|Columns"` |
 
 - [x] Ağaç düzeni satır başlıkları — `layout-mode="Tree"`
 - [x] Toplamın konumu — `totals-position="Before|After"`
 - [x] Paketlenmiş yükleme göstergesi
 - [x] Isı haritası — `heatmap`, her ölçü kendi ölçeğinde, toplamlar boyanmıyor
+- [x] Hücre içi çubuklar — `value-bars`, sıfırda ortak eksen, negatifler ayrı renkte; Excel'e taşınmıyor
 - [x] Kenarlıklar — `show-borders`: `true` dış çerçeve, `false` gövdede çizgi yok
 - [x] `word-wrap` — alan başına, bkz. Bölüm 1
 - [x] Tam ekran — araç çubuğunda; sayfa içinde (Fullscreen API değil), Escape ile çıkılıyor

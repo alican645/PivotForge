@@ -1153,3 +1153,74 @@ test("the Excel number format carries parentheses and the zero text as format se
   // No locale-neutral Excel spelling for a short form, so the full figure stays.
   assert.equal(excel({ decimals: 0, compact: true }), "#,##0");
 });
+
+test("value bars share an axis at zero, per measure and per row or column", () => {
+  const { valueBarExtents } = window.PivotForge;
+  const round = bars => bars.map(bar => bar && {
+    start: Math.round(bar.start * 100) / 100,
+    width: Math.round(bar.width * 100) / 100,
+    negative: bar.negative
+  });
+  const entries = [
+    { valueKey: "amount", rowKey: "r1", columnIndex: 0, value: 50 },
+    { valueKey: "amount", rowKey: "r1", columnIndex: 1, value: 100 },
+    { valueKey: "amount", rowKey: "r2", columnIndex: 0, value: null },
+    { valueKey: "change", rowKey: "r1", columnIndex: 0, value: -25 },
+    { valueKey: "change", rowKey: "r2", columnIndex: 0, value: 75 }
+  ];
+
+  assert.deepEqual(round(valueBarExtents(entries, "table")), [
+    // All positive: from the left edge, the largest filling the cell.
+    { start: 0, width: 0.5, negative: false },
+    { start: 0, width: 1, negative: false },
+    null,
+    // -25 .. 75: zero sits a quarter of the way in, the negative bar to its left.
+    { start: 0, width: 0.25, negative: true },
+    { start: 0.25, width: 0.75, negative: false }
+  ]);
+
+  // Per column: column 1 holds 100 alone, which is still a full bar.
+  assert.deepEqual(round(valueBarExtents(entries, "columns"))[1], { start: 0, width: 1, negative: false });
+  assert.deepEqual(valueBarExtents(entries, "none"), entries.map(() => null));
+
+  // All negative: the bars grow from the right edge.
+  assert.deepEqual(round(valueBarExtents([
+    { valueKey: "a", value: -10 }, { valueKey: "a", value: -40 }
+  ], "table")), [
+    { start: 0.75, width: 0.25, negative: true },
+    { start: 0, width: 1, negative: true }
+  ]);
+
+  // Zeros have nothing to measure; a large-data page measures against the whole result.
+  assert.deepEqual(valueBarExtents([{ valueKey: "a", value: 0 }], "table"), [null]);
+  assert.deepEqual(
+    round(valueBarExtents([{ valueKey: "a", value: 25 }], "table", [{ valueKey: "a", column: null, min: 0, max: 100 }])),
+    [{ start: 0, width: 0.25, negative: false }]);
+});
+
+test("value bars are set on the value cells and cleared when switched off", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const makeCell = () => {
+    const classes = new Set();
+    const style = new Map();
+    return {
+      classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)), has: name => classes.has(name) },
+      style: { setProperty: (name, value) => style.set(name, value), removeProperty: name => style.delete(name) },
+      bar: () => [style.get("--pt-bar-start"), style.get("--pt-bar-end")]
+    };
+  };
+  const cells = [makeCell(), makeCell()];
+  const table = { querySelectorAll: () => cells };
+  [-10, 30].forEach((value, index) =>
+    renderer.selectionMetadata.set(cells[index], { valueKey: "amount", rowKey: "r", columnIndex: index, value }));
+
+  renderer.applyValueBars(table, { valueBars: "table" });
+  assert.deepEqual(cells.map(cell => cell.bar()), [["0%", "25%"], ["25%", "100%"]]);
+  assert.equal(cells[0].classList.has("is-negative-bar"), true);
+  assert.equal(cells[1].classList.has("is-negative-bar"), false);
+  assert.equal(cells.every(cell => cell.classList.has("has-value-bar")), true);
+
+  renderer.applyValueBars(table, { valueBars: "none" });
+  assert.deepEqual(cells.map(cell => cell.bar()), [[undefined, undefined], [undefined, undefined]]);
+  assert.equal(cells.some(cell => cell.classList.has("has-value-bar")), false);
+});

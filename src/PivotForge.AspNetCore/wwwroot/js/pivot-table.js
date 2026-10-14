@@ -55,21 +55,16 @@ function parseHexColor(text) {
   return match ? [0, 2, 4].map(start => Number.parseInt(match[1].slice(start, start + 2), 16)) : null;
 }
 
-// Where each value sits on its heatmap scale, from 0 (the smallest in its group)
-// to 1 (the largest). Each measure is its own scale -- an amount and a count
-// share no units, so one cannot shade the other -- and "rows" / "columns" split
-// it further by row or column. A non-number gets null, and so does every value
-// of a group whose values are all equal: there is no hotter or colder there.
+// The range each value is measured against, or null for a non-number. Each
+// measure is its own range -- an amount and a count share no units -- and
+// "rows" / "columns" split it further by row or column. Shared by the heatmap
+// and the value bars, which read the same groups two ways.
 //
 // ranges, when given, are the server's valueRanges ({ valueKey, column, min,
 // max }; column null for the whole table): a large-data page holds only some
-// rows, and a scale drawn from those alone would shade one value differently on
+// rows, and a scale drawn from those alone would draw one value differently on
 // every page. A row is always whole on a page, so "rows" needs none.
-PivotForge.heatmapLevels = function heatmapLevels(entries, mode, ranges = []) {
-  if (!HEATMAP_MODES.includes(mode) || mode === "none") {
-    return entries.map(() => null);
-  }
-
+function valueScaleRanges(entries, mode, ranges = []) {
   const groupOf = entry => JSON.stringify([
     entry.valueKey ?? null,
     mode === "rows" ? entry.rowKey ?? null : null,
@@ -97,12 +92,48 @@ PivotForge.heatmapLevels = function heatmapLevels(entries, mode, ranges = []) {
     }
   });
 
-  return entries.map(entry => {
-    const range = Number.isFinite(entry.value) ? groups.get(groupOf(entry)) : null;
+  return entries.map(entry => Number.isFinite(entry.value) ? groups.get(groupOf(entry)) : null);
+}
 
-    return range && range.max > range.min
-      ? (entry.value - range.min) / (range.max - range.min)
-      : null;
+// Where each value sits on its heatmap scale, from 0 (the smallest in its group)
+// to 1 (the largest). A non-number gets null, and so does every value of a
+// group whose values are all equal: there is no hotter or colder there.
+PivotForge.heatmapLevels = function heatmapLevels(entries, mode, ranges = []) {
+  if (!HEATMAP_MODES.includes(mode) || mode === "none") {
+    return entries.map(() => null);
+  }
+
+  return valueScaleRanges(entries, mode, ranges).map((range, index) =>
+    range && range.max > range.min
+      ? (entries[index].value - range.min) / (range.max - range.min)
+      : null);
+};
+
+// Each value's bar, as fractions of the cell's width: where it starts and how
+// wide it is. The bars of a group share one axis at zero, as a spreadsheet's
+// data bars do: all-positive values grow from the left edge, all-negative ones
+// from the right, and a group holding both puts zero where it falls between
+// them, negatives to its left. Unlike a heatmap, equal values still get bars --
+// equally long ones -- and only a group of zeros has nothing to draw.
+PivotForge.valueBarExtents = function valueBarExtents(entries, mode, ranges = []) {
+  if (!HEATMAP_MODES.includes(mode) || mode === "none") {
+    return entries.map(() => null);
+  }
+
+  return valueScaleRanges(entries, mode, ranges).map((range, index) => {
+    if (!range) {
+      return null;
+    }
+
+    const low = Math.min(0, range.min);
+    const high = Math.max(0, range.max);
+    if (high === low) {
+      return null;
+    }
+
+    const axis = (0 - low) / (high - low);
+    const end = (entries[index].value - low) / (high - low);
+    return { start: Math.min(axis, end), width: Math.abs(end - axis), negative: entries[index].value < 0 };
   });
 };
 
@@ -375,6 +406,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // hottest cells and flatten the scale for everything else. A conditional
       // rule's colour wins over the scale on the cells it matches.
       heatmap: "none",
+      // Bars behind the value cells, their length the value's share of its
+      // group's range; grouped like the heatmap.
+      valueBars: "none",
       // DevExtreme names a grand total after the area its header sits in, and
       // so does this: showGrandTotal is the total *row* along the bottom (the
       // row grand total), showColumnGrandTotals the total *column* on the right.
@@ -481,6 +515,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.wireSelection(table, settings);
     this.applySelectionState(table);
     this.applyHeatmap(table, settings);
+    this.applyValueBars(table, settings);
     this.applyConditionalFormatting(table, settings);
     this.applyDeclaredWidths(
       table, settings, rowDepth, Math.max(1, this.createColumnPlan(columnHeaders, settings).length), values);
@@ -2197,6 +2232,39 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       } else {
         // Rounded so the attribute stays readable in the inspector.
         cell.style.setProperty("--pt-heat", String(Math.round(level * 1000) / 1000));
+      }
+    });
+  }
+
+  // The same cells the heatmap shades, measured the same way, drawn as bars.
+  applyValueBars(table, settings = this.lastSettings) {
+    const cells = Array.from(
+      table?.querySelectorAll("td.pivot-table__value:not(.pivot-table__column-subtotal)") ?? []);
+    const entries = cells.map(cell => {
+      const selection = this.selectionMetadata.get(cell);
+
+      return {
+        value: selection?.value,
+        valueKey: selection?.valueKey,
+        rowKey: selection?.rowKey,
+        columnIndex: selection?.columnIndex
+      };
+    });
+    const bars = PivotForge.valueBarExtents(
+      entries, settings?.valueBars ?? "none", this.lastResult?.valueRanges ?? []);
+    const percent = fraction => `${Math.round(fraction * 1000) / 10}%`;
+
+    cells.forEach((cell, index) => {
+      const bar = bars[index];
+      cell.classList.toggle("has-value-bar", bar !== null);
+      cell.classList.toggle("is-negative-bar", bar?.negative === true);
+
+      if (bar === null) {
+        cell.style.removeProperty("--pt-bar-start");
+        cell.style.removeProperty("--pt-bar-end");
+      } else {
+        cell.style.setProperty("--pt-bar-start", percent(bar.start));
+        cell.style.setProperty("--pt-bar-end", percent(bar.start + bar.width));
       }
     });
   }

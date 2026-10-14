@@ -13,6 +13,8 @@
   --pt-cell-selected: #c4c9d1;
   --pt-selection-ring: #64748b;
   --pt-heat-color: #f97316;
+  --pt-bar-color: #0f766e;
+  --pt-bar-negative-color: #dc2626;
   --pt-row-header-width: 148px;
 }
 
@@ -1617,6 +1619,27 @@ select {
 
 .pivot-table__table tbody td.is-cell-copied {
   box-shadow: inset 0 0 0 2px #15803d;
+}
+
+/* Value bars: drawn as the cell's background image, so the cell keeps its own
+   colour beneath -- heatmap, conditional rule or selection -- and the number
+   stays on top. !important because those colours are set with the background
+   shorthand, which would otherwise take the image away. The bar is inset from
+   the cell's top and bottom so neighbouring bars do not merge into a block. */
+.pivot-table__table td.has-value-bar {
+  --pt-bar-fill: color-mix(in srgb, var(--pt-bar-color) 32%, transparent);
+  background-image: linear-gradient(to right,
+    transparent var(--pt-bar-start),
+    var(--pt-bar-fill) var(--pt-bar-start),
+    var(--pt-bar-fill) var(--pt-bar-end),
+    transparent var(--pt-bar-end)) !important;
+  background-size: 100% 64% !important;
+  background-position: 0 50% !important;
+  background-repeat: no-repeat !important;
+}
+
+.pivot-table__table td.has-value-bar.is-negative-bar {
+  --pt-bar-fill: color-mix(in srgb, var(--pt-bar-negative-color) 30%, transparent);
 }
 
 .pivot-cell-menu {

@@ -306,6 +306,26 @@ public sealed class PivotGridBuilder : IHtmlContent
             _ => "none"
         });
 
+    /// <summary>
+    /// Draws a bar behind each value cell, as long as the value's share of its scale: a
+    /// spreadsheet's data bars, or PivotTable.js' table bar chart.
+    /// </summary>
+    /// <remarks>
+    /// Each data field is its own scale, and the bars share an axis at zero, so negative values
+    /// grow the other way in their own colour. Totals and subtotals get no bar. They can be
+    /// combined with a heatmap and with conditional formatting; the Excel export leaves them out.
+    /// </remarks>
+    /// <param name="mode">What the scale is measured across.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ValueBars(PivotValueBarsMode mode) =>
+        SetRenderer("valueBars", mode switch
+        {
+            PivotValueBarsMode.Table => "table",
+            PivotValueBarsMode.Rows => "rows",
+            PivotValueBarsMode.Columns => "columns",
+            _ => "none"
+        });
+
     /// <summary>Repeats a row label on every row it spans instead of only the first.</summary>
     /// <param name="repeat">True to repeat row labels.</param>
     /// <returns>This builder.</returns>

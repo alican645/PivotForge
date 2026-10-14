@@ -16,6 +16,14 @@ change will require a new major version.
 
 ### Added
 
+- Value bars: `value-bars="Table|Rows|Columns"` / `ValueBars(PivotValueBarsMode)`
+  / `valueBars` draws a bar behind each value cell, as long as the value's
+  share of its scale, grouped as the heatmap is. The bars share an axis at
+  zero, so negative values grow the other way in their own colour
+  (`--pt-bar-color`, `--pt-bar-negative-color`). Totals get no bar; it
+  combines with the heatmap and conditional formatting and prints, but is not
+  exported to Excel. Large-data pages use the whole result's ranges.
+  (AspNetCore)
 - Three toolbar buttons, included in `toolbar="true"`: **Save report**
   downloads the view (layout, captions, filters, sorts, conditional rules) as
   a JSON file, **Open report** shows such a file's view, and **Full screen**
