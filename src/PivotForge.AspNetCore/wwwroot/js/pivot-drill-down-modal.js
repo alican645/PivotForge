@@ -411,6 +411,10 @@
     }
   }
 
+  // The label keys there are, for whatever names them from outside: the server's
+  // declarative surface checks a declared key against this list.
+  PivotDrillDownModal.defaultLabels = Object.freeze({ ...DEFAULT_LABELS });
+
   PivotForge.PivotDrillDownModal = PivotDrillDownModal;
 
   if (typeof module !== "undefined" && module.exports) {

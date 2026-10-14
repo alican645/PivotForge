@@ -501,6 +501,43 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task DrillDownLabelsAreWrittenUnderTheModalOptionsInCamelCase()
+    {
+        var grid = new PivotGridTagHelper { Id = "pivotGrid" };
+        grid.DrillDownLabels["title"] = "Satış kayıtları";
+        grid.DrillDownLabels["no-records"] = "Kayıt yok";
+
+        var config = ConfigOf(await RenderAsync(grid, new FieldSpec("Amount", PivotArea.Data)));
+        var labels = config.GetProperty("drillDownModalOptions").GetProperty("labels");
+
+        Assert.Equal("Satış kayıtları", labels.GetProperty("title").GetString());
+        Assert.Equal("Kayıt yok", labels.GetProperty("noRecords").GetString());
+    }
+
+    [Fact]
+    public async Task AGridWithoutDrillDownLabelsDeclaresNoModalOptions()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data)));
+
+        Assert.False(config.TryGetProperty("drillDownModalOptions", out _));
+    }
+
+    [Fact]
+    public async Task AnUnknownDrillDownLabelIsReportedWithTheChoices()
+    {
+        var grid = new PivotGridTagHelper { Id = "pivotGrid" };
+        grid.DrillDownLabels["heading"] = "Kayıtlar";
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
+            () => RenderAsync(grid, new FieldSpec("Amount", PivotArea.Data)));
+
+        Assert.Contains("'heading'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("noRecords", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AGridWithoutAnIdThrows()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(

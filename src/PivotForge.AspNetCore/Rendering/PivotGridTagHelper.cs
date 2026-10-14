@@ -58,6 +58,16 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("toolbar-items")]
     public string? ToolbarItems { get; set; }
 
+    /// <summary>Gets the detail modal's texts the page renames, one attribute each.</summary>
+    /// <remarks>
+    /// Written as <c>drill-down-label-title="Kaynak kayıtlar"</c>, the rest of the name being the
+    /// text's key in kebab-case (<c>drill-down-label-no-records</c>). Texts not named keep the
+    /// locale pack's words.
+    /// </remarks>
+    [HtmlAttributeName("drill-down-labels", DictionaryAttributePrefix = "drill-down-label-")]
+    public IDictionary<string, string> DrillDownLabels { get; set; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Gets or sets whether the grid loads data as soon as it is created.</summary>
     [HtmlAttributeName("auto-load")]
     public bool? AutoLoad { get; set; }
@@ -334,6 +344,11 @@ public sealed class PivotGridTagHelper : TagHelper
             builder.Toolbar(toolbar);
         }
 
+        foreach (var (name, text) in DrillDownLabels)
+        {
+            builder.DrillDownLabel(CamelCaseFromKebab(name), text);
+        }
+
         if (AutoLoad is { } autoLoad)
         {
             builder.AutoLoad(autoLoad);
@@ -551,6 +566,15 @@ public sealed class PivotGridTagHelper : TagHelper
 
         output.TagName = null;
         output.Content.SetHtmlContent(writer.ToString());
+    }
+
+    // "no-records" -> "noRecords": the attribute's suffix as the modal's key.
+    private static string CamelCaseFromKebab(string name)
+    {
+        var parts = name.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(parts.Select((part, index) => index == 0
+            ? part.ToLowerInvariant()
+            : char.ToUpperInvariant(part[0]) + part[1..].ToLowerInvariant()));
     }
 
     // Names as the enum spells them, without regard to case. A name that is not one is

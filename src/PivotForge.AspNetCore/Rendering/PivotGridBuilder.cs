@@ -31,6 +31,16 @@ public sealed class PivotGridBuilder : IHtmlContent
     private readonly List<Dictionary<string, object?>> _filters = [];
     private readonly List<Dictionary<string, object?>> _topN = [];
     private readonly List<Dictionary<string, object?>> _conditionalRules = [];
+    private readonly SortedDictionary<string, string> _drillDownLabels = new(StringComparer.Ordinal);
+
+    // The detail modal's label keys, as PivotDrillDownModal.defaultLabels names them in
+    // pivot-drill-down-modal.js. A browser test reads this list back from this file and
+    // compares it with that object, so the two cannot drift apart unnoticed.
+    private static readonly string[] DrillDownLabelKeys =
+    [
+        "title", "close", "search", "csv", "all", "empty", "loading", "noRecords", "noMatches",
+        "failed", "allRows", "allColumns", "truncated", "summary", "columnFilter"
+    ];
     private readonly PivotFieldCollectionBuilder _fields = new();
     private string? _id;
     private string? _cssClass;
@@ -136,6 +146,34 @@ public sealed class PivotGridBuilder : IHtmlContent
         return items.Length == 0
             ? Set("toolbar", false)
             : Set("toolbar", items.Distinct().Select(item => CamelCase(item.ToString())).ToArray());
+    }
+
+    /// <summary>Renames one of the detail modal's texts, over the locale pack's word for it.</summary>
+    /// <remarks>
+    /// The other texts keep the locale pack's words. <c>truncated</c> takes the record limit as
+    /// <c>{0}</c>, <c>summary</c> the visible and total counts as <c>{0}</c> and <c>{1}</c>, and
+    /// <c>columnFilter</c> the column's caption as <c>{0}</c>.
+    /// </remarks>
+    /// <param name="key">The text's key: <c>title</c>, <c>close</c>, <c>search</c>, <c>csv</c>,
+    /// <c>all</c>, <c>empty</c>, <c>loading</c>, <c>noRecords</c>, <c>noMatches</c>, <c>failed</c>,
+    /// <c>allRows</c>, <c>allColumns</c>, <c>truncated</c>, <c>summary</c> or <c>columnFilter</c>.</param>
+    /// <param name="text">The text to show.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentException">The key is not one of the modal's texts.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is null.</exception>
+    public PivotGridBuilder DrillDownLabel(string key, string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (!DrillDownLabelKeys.Contains(key, StringComparer.Ordinal))
+        {
+            throw new ArgumentException(
+                $"'{key}' is not a detail modal text. Expected one of: {string.Join(", ", DrillDownLabelKeys)}.",
+                nameof(key));
+        }
+
+        _drillDownLabels[key] = text;
+        return this;
     }
 
     /// <summary>Enables or disables the initial load performed when the grid is created.</summary>
@@ -716,6 +754,16 @@ public sealed class PivotGridBuilder : IHtmlContent
         if (_filters.Count > 0)
         {
             payload["filters"] = _filters;
+        }
+
+        // Only the labels: the modal's columns are formatter functions, which a
+        // configuration written as JSON cannot carry.
+        if (_drillDownLabels.Count > 0)
+        {
+            payload["drillDownModalOptions"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["labels"] = _drillDownLabels
+            };
         }
 
         if (_topN.Count > 0)

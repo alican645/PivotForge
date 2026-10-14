@@ -643,12 +643,12 @@
     // modal's DOM stays out of the document until it is actually needed.
     openDrillDown(selection) {
       this.drillDownModal ??= new PivotForge.PivotDrillDownModal({
-        widget: this,
-        labels: this.locale.drillDown,
         // Spread first, so a page that pins the modal's culture on purpose wins
         // over the renderer's — but by default the two cannot drift apart.
         culture: this.options.rendererOptions?.culture ?? null,
-        ...(this.options.drillDownModalOptions ?? {})
+        ...(this.options.drillDownModalOptions ?? {}),
+        widget: this,
+        labels: this.drillDownLabels()
       });
 
       return this.drillDownModal.open(selection);
@@ -720,6 +720,16 @@
         anchor,
         onApply: (values, mode, operator) => this.setFilter(field, values, mode, operator)
       });
+    }
+
+    // Merged key by key, as the panel's and the designer's are: a page renaming
+    // the title keeps the pack's words for the other fifteen labels. (Spreading
+    // the options over the pack replaced the whole set.)
+    drillDownLabels() {
+      return {
+        ...this.locale.drillDown,
+        ...(this.options.drillDownModalOptions?.labels ?? {})
+      };
     }
 
     conditionalPanelLabels() {

@@ -16,6 +16,19 @@ change will require a new major version.
 
 ### Added
 
+- Detail modal labels from the markup: `drill-down-label-{key}="..."` (the key
+  in kebab-case, `drill-down-label-no-records`) / `DrillDownLabel(key, text)`
+  renames one of the modal's texts over the locale pack's word. An unknown key
+  is an error listing the fifteen there are. (AspNetCore)
+
+### Fixed
+
+- `drillDownModalOptions.labels` replaced the locale pack's whole label set, so
+  renaming one text turned the other fourteen English. Labels now merge key by
+  key, as the designer's and the conditional panel's do. (AspNetCore)
+
+### Added
+
 - Subtotal position: `totals-position="Before|After"` /
   `TotalsPosition(PivotTotalsPosition)` / `totalsPosition: "before" | "after"`.
   `Before`, the default and the layout so far, draws a group's subtotal row
