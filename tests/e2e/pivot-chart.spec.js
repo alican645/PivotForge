@@ -135,7 +135,7 @@ test("the reader switches type and value, and the choice is kept with the view",
   await expect(page.getByRole("button", { name: "Çubuk" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".pivot-chart__svg")).toHaveAttribute("aria-label", "Grafik: Adet (Çubuk)");
   expect(await page.evaluate(() => window.chartWidget.snapshotState().chart))
-    .toEqual({ type: "bar", valueKey: "Quantity_sum" });
+    .toEqual({ type: "bar", valueKey: "Quantity_sum", visible: true });
   expect(page.errors).toEqual([]);
 });
 
