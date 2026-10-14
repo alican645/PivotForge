@@ -85,6 +85,9 @@ public sealed class PivotForgeFieldValuesRequest
     /// names rather than timestamps — because that is what the filter will compare against.</remarks>
     public PivotGroupInterval Interval { get; init; } = PivotGroupInterval.None;
 
+    /// <summary>Gets the range width when <see cref="Interval"/> is <see cref="PivotGroupInterval.Range"/>.</summary>
+    public decimal? BinSize { get; init; }
+
     /// <summary>Gets the source-row hint passed to the configured data provider.</summary>
     public int SourceRowCount { get; init; } = 100_000;
 }

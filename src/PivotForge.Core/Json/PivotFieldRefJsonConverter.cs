@@ -35,6 +35,7 @@ public sealed class PivotFieldRefJsonConverter : JsonConverter<PivotFieldRef>
 
         string? field = null;
         var interval = PivotGroupInterval.None;
+        decimal? binSize = null;
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
@@ -54,6 +55,10 @@ public sealed class PivotFieldRefJsonConverter : JsonConverter<PivotFieldRef>
             {
                 interval = ReadInterval(ref reader);
             }
+            else if (string.Equals(name, "binSize", StringComparison.OrdinalIgnoreCase))
+            {
+                binSize = reader.TokenType == JsonTokenType.Null ? null : reader.GetDecimal();
+            }
             else
             {
                 reader.Skip();
@@ -65,7 +70,7 @@ public sealed class PivotFieldRefJsonConverter : JsonConverter<PivotFieldRef>
             throw new JsonException("A pivot header level object requires a \"field\".");
         }
 
-        return new PivotFieldRef(field, interval);
+        return new PivotFieldRef(field, interval, binSize);
     }
 
     /// <summary>Writes a header level.</summary>
@@ -86,6 +91,11 @@ public sealed class PivotFieldRefJsonConverter : JsonConverter<PivotFieldRef>
         writer.WriteStartObject();
         writer.WriteString("field", value.Field);
         writer.WriteString("interval", value.Interval.ToString());
+        if (value.BinSize is { } binSize)
+        {
+            writer.WriteNumber("binSize", binSize);
+        }
+
         writer.WriteEndObject();
     }
 

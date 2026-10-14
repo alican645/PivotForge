@@ -1545,6 +1545,7 @@
       return await this.post("/field-values", {
         field: level?.dataField ?? field,
         ...(level?.groupInterval ? { interval: level.groupInterval } : {}),
+        ...(level?.groupSize ? { binSize: level.groupSize } : {}),
         sourceRowCount: this.options.sourceRowCount
       });
     }

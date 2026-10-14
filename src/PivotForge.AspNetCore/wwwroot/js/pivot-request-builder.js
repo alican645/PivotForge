@@ -59,7 +59,7 @@
   }
   // Date groupings. Spelled as the engine's enum reads them, lowercased, because
   // that spelling is also half of a grouped level's identity.
-  const GROUP_INTERVALS = ["year", "quarter", "month", "day", "dayOfWeek"];
+  const GROUP_INTERVALS = ["year", "quarter", "month", "day", "dayOfWeek", "range"];
 
   const TOP_N_MODES = ["Top", "Bottom"];
   // How a value filter compares a group's summary value. The two ranges read a
@@ -447,6 +447,17 @@
       );
     }
 
+    // A numeric range needs its width, and a width means nothing to a date
+    // interval, so each without the other is a mistake worth reporting.
+    const declaredSize = field.groupSize !== undefined && field.groupSize !== null;
+    const groupSize = groupInterval === "range" ? Number(field.groupSize) : null;
+    if (groupInterval === "range" && !(Number.isFinite(groupSize) && groupSize > 0)) {
+      throw new Error(`groupInterval "range" on field "${dataField}" requires a "groupSize" greater than zero.`);
+    }
+    if (groupInterval !== "range" && declaredSize) {
+      throw new Error(`"groupSize" on field "${dataField}" is only valid with groupInterval "range".`);
+    }
+
     const sortOrder = isDimensionAxis ? field.sortOrder ?? null : null;
     if (sortOrder !== null && !SORT_ORDERS.includes(sortOrder)) {
       throw new Error(
@@ -482,8 +493,13 @@
       // column grouped by year and again by month is two levels, and dataField
       // alone cannot tell them apart. A plain field is its own key, so nothing
       // that existed before grouping changes shape.
-      key: groupInterval === null ? dataField : `${dataField}:${groupInterval}`,
+      // A range carries its width, as the engine's key does: two widths of one
+      // column are two levels.
+      key: groupInterval === null
+        ? dataField
+        : `${dataField}:${groupInterval}${groupInterval === "range" ? String(groupSize) : ""}`,
       groupInterval,
+      groupSize,
       area,
       role,
       areaIndex: areaIndex ?? null,
@@ -619,7 +635,11 @@
     // twice.
     const level = field => field.groupInterval === null
       ? field.dataField
-      : { field: field.dataField, interval: field.groupInterval };
+      : {
+        field: field.dataField,
+        interval: field.groupInterval,
+        ...(field.groupSize !== null ? { binSize: field.groupSize } : {})
+      };
 
     return {
       rows: inArea("row").map(level),
@@ -642,7 +662,12 @@
           field => field.key === normalizedFilter.field && field.groupInterval !== null);
 
         return grouped
-          ? { ...normalizedFilter, field: grouped.dataField, interval: grouped.groupInterval }
+          ? {
+            ...normalizedFilter,
+            field: grouped.dataField,
+            interval: grouped.groupInterval,
+            ...(grouped.groupSize !== null ? { binSize: grouped.groupSize } : {})
+          }
           : normalizedFilter;
       }),
       rowSort: extras.rowSort ?? null,

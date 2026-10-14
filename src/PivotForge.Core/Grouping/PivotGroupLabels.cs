@@ -13,15 +13,24 @@ internal static class PivotGroupLabels
     /// <summary>Converts a raw source value into the header text for an interval.</summary>
     /// <param name="value">The raw source value.</param>
     /// <param name="interval">The interval to collapse it to.</param>
-    /// <param name="culture">The culture naming months and weekdays.</param>
-    /// <returns>The header text, or the value's own text when it is not a date.</returns>
-    public static string? Label(object? value, PivotGroupInterval interval, CultureInfo culture)
+    /// <param name="culture">The culture naming months and weekdays, and writing range bounds.</param>
+    /// <param name="binSize">The width of a <see cref="PivotGroupInterval.Range"/>.</param>
+    /// <returns>The header text, or the value's own text when it is not a date, or not a number
+    /// for a range.</returns>
+    public static string? Label(object? value, PivotGroupInterval interval, CultureInfo culture, decimal? binSize = null)
     {
         var text = Convert.ToString(value, CultureInfo.InvariantCulture);
 
         if (interval == PivotGroupInterval.None || string.IsNullOrEmpty(text))
         {
             return text;
+        }
+
+        if (interval == PivotGroupInterval.Range)
+        {
+            return binSize is > 0m && TryConvertToDecimal(value, out var number)
+                ? RangeLabel(number, binSize.Value, culture)
+                : text;
         }
 
         if (!TryConvertToDate(value, culture, out var date))
@@ -65,8 +74,62 @@ internal static class PivotGroupLabels
             PivotGroupInterval.Month => FromNames(
                 Enumerable.Range(1, 12).Select(culture.DateTimeFormat.GetMonthName), culture),
             PivotGroupInterval.DayOfWeek => FromNames(WeekdayNames(culture), culture),
+            // By where each range starts, which is the number before the dash.
+            PivotGroupInterval.Range => new NumberComparer(label => RangeStart(label, culture)),
             _ => null
         };
+    }
+
+    // The separator between a range's bounds: an en dash with a space either side,
+    // which a minus sign on either bound can never be mistaken for.
+    private const string RangeSeparator = " – ";
+
+    private static string RangeLabel(decimal value, decimal binSize, CultureInfo culture)
+    {
+        var start = Math.Floor(value / binSize) * binSize;
+        return $"{FormatBound(start, culture)}{RangeSeparator}{FormatBound(start + binSize, culture)}";
+    }
+
+    private static string FormatBound(decimal bound, CultureInfo culture) =>
+        bound.ToString("#,0.############", culture);
+
+    private static decimal? RangeStart(string? label, CultureInfo culture)
+    {
+        var separator = label?.IndexOf(RangeSeparator, StringComparison.Ordinal) ?? -1;
+
+        return separator > 0 &&
+            decimal.TryParse(label![..separator], NumberStyles.Number, culture, out var start)
+                ? start
+                : null;
+    }
+
+    private static bool TryConvertToDecimal(object? value, out decimal number)
+    {
+        switch (value)
+        {
+            case decimal typed:
+                number = typed;
+                return true;
+            // Past decimal's range a double has no decimal to be; it is left as its text.
+            case double typed when double.IsFinite(typed) && Math.Abs(typed) < 7.9e28:
+                number = (decimal)typed;
+                return true;
+            case float typed when float.IsFinite(typed) && Math.Abs(typed) < 7.9e28f:
+                number = (decimal)typed;
+                return true;
+            case double or float:
+                number = default;
+                return false;
+            case byte or sbyte or short or ushort or int or uint or long or ulong:
+                number = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+                return true;
+        }
+
+        return decimal.TryParse(
+            Convert.ToString(value, CultureInfo.InvariantCulture),
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out number);
     }
 
     /// <summary>The weekday names in the order the culture's week runs.</summary>
@@ -118,6 +181,28 @@ internal static class PivotGroupLabels
         // by a serializer reads.
         return DateTime.TryParse(text, culture, DateTimeStyles.None, out date) ||
             DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+    }
+
+    /// <summary>Orders labels by a decimal derived from each, leaving unknown labels last.</summary>
+    private sealed class NumberComparer(Func<string?, decimal?> numberOf) : IComparer<string?>
+    {
+        public int Compare(string? left, string? right)
+        {
+            var leftNumber = numberOf(left);
+            var rightNumber = numberOf(right);
+
+            if (leftNumber is { } first && rightNumber is { } second)
+            {
+                return first.CompareTo(second);
+            }
+
+            if (leftNumber is null && rightNumber is null)
+            {
+                return string.CompareOrdinal(left, right);
+            }
+
+            return leftNumber is null ? 1 : -1;
+        }
     }
 
     /// <summary>Orders labels by a number derived from each, leaving unknown labels last.</summary>

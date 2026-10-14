@@ -448,7 +448,9 @@ either direction, and equal values break on the label. Row fields only. A sort
 the reader picks from the cell menu still wins.
 
 `group-interval` (`Year`, `Quarter`, `Month`, `Day`, `DayOfWeek`) collapses a
-date column into header groups — see [Date grouping](#date-grouping).
+date column into header groups — see [Date grouping](#date-grouping) — and
+`group-interval="Range"` with `group-size` splits a numeric one into ranges — see
+[Numeric ranges](#numeric-ranges).
 
 `area`, `role`, `aggregation`, `show-as`, `sort-order`, and `group-interval`
 bind to the `PivotArea`, `PivotFieldRole`, `PivotAggregation`, `PivotShowAs`,
@@ -1123,6 +1125,36 @@ a mistake rather than silently blank. Text dates are parsed in the resolved
 culture first and invariant second, so a column loaded from CSV or JSON groups
 like one loaded as `DateTime`. `group-interval` is not valid on a `Data` field:
 a measure is aggregated rather than grouped.
+
+### Numeric ranges
+
+`group-interval="Range"` with `group-size` splits a numeric column into ranges
+of that width — "orders by size", "customers by age band":
+
+```html
+<pivot-field field="Amount" caption="Tutar aralığı" area="Row" group-interval="Range" group-size="50000" />
+```
+
+| | |
+|---|---|
+| Header reads | `0 – 50.000`, `50.000 – 100.000`, … with the bounds written in the resolved culture |
+| Ordered by | where each range starts, so `-50.000 – 0` comes before `0 – 50.000` |
+| Bounds | each range includes its start and excludes its end: 50,000 is in `50.000 – 100.000` |
+| Alignment | the ranges are aligned to zero |
+
+Like a date interval, the range is part of the level's identity — `Amount:range50000`
+— so a sort, a filter, a header funnel and a saved layout name it, and the same column
+can sit in two levels of different widths. Filters, drill-down and the header funnel's
+value list collapse values to the same ranges. A value that is not a number keeps its
+own text and sorts after every range; an empty one stays blank. `group-size` is
+required by `Range` and refused by every other interval.
+
+C#: `PivotFieldBuilder.GroupInterval(PivotGroupInterval.Range).GroupSize(50000m)`;
+JavaScript: `{ groupInterval: "range", groupSize: 50000 }`; Core:
+`new PivotFieldRef("Amount", PivotGroupInterval.Range, 50000m)`, with
+`PivotFilter.BinSize` and `PivotEngine.DistinctValues(records, field, interval, binSize)`
+for filters and value lists. The width is set where the field is declared; the
+designer does not change it.
 
 ### Localization
 

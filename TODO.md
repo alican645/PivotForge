@@ -92,7 +92,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
 | `showGrandTotals` (alan başına) | ✅ | ✅ | `show-grand-totals` niteliği ve `ShowGrandTotals()` metodu; grid düzeyinde `show-row-grand-totals` / `show-column-grand-totals` |
 | `dataType` | ❌ | ❌ | Tür dönüşümü yok |
-| `groupInterval` (yıl/çeyrek/ay/gün) | ✅ | ✅ | `group-interval` niteliği ve `GroupInterval()` metodu; aynı kolon birden fazla seviyede |
+| `groupInterval` (yıl/çeyrek/ay/gün, sayısal aralık) | ✅ | ✅ | `group-interval` niteliği ve `GroupInterval()` metodu; aynı kolon birden fazla seviyede; `Range` + `group-size` ile sayısal aralıklar |
 | `selector` / `sortingMethod` | ❌ | ❌ | Özel gruplama/sıralama fonksiyonu |
 | `customizeText` | ✅ | ✅ | `customize-text` ile sayfa fonksiyonu; hazır kalıplar `format-compact`, `format-zero-text`, `format-negative`. Yalnızca değer hücreleri; başlık etiketleri değil |
 | `calculateCustomSummary` | ✅ | ✅ | `PivotForgeOptions.CustomAggregates`, formülden adıyla çağrılır; bkz. Bölüm 3 |
@@ -147,6 +147,10 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
       çalışıyor). Sütun ekseninde ara toplamlar da artık var: her dış sütun
       grubunu bir toplam sütunu kapatıyor (`column-subtotals`), alan başına
       `show-totals` sütun alanlarında da geçerli
+- [x] Sayısal aralıklar — `group-interval="Range" group-size="50000"`: `0 – 50.000`,
+      `50.000 – 100.000`…, başlangıca göre sıralı, başlangıç dahil bitiş hariç, sıfıra hizalı.
+      Filtre, detaya inme ve başlık hunisi aynı aralıkları kullanıyor. Genişlik bildirimde;
+      tasarımcıdan değiştirilemiyor
 - [x] `group-interval` — tarih alanlarını yıl/çeyrek/ay/gün/haftanın-günü olarak
       gruplama. Gruplama başlığın okunduğu yerde olduğu için kaynakta ikinci bir
       kolon gerekmiyor ve **aynı kolon birden fazla seviyede** yer alabiliyor;

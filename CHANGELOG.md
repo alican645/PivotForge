@@ -16,6 +16,15 @@ change will require a new major version.
 
 ### Added
 
+- Numeric ranges: `group-interval="Range"` with `group-size="50000"` /
+  `GroupInterval(PivotGroupInterval.Range).GroupSize(50000m)` /
+  `{ groupInterval: "range", groupSize }` splits a numeric field into ranges —
+  `0 – 50.000`, `50.000 – 100.000` — ordered by their start, start included
+  and end excluded, aligned to zero. The level is keyed `Amount:range50000`;
+  filters (`PivotFilter.BinSize`), drill-down, the header funnel's value list
+  (`DistinctValues(..., binSize)`) and saved layouts use the same ranges. A
+  value that is not a number keeps its own text. In the engine:
+  `PivotGroupInterval.Range` and `PivotFieldRef.BinSize`. (Core, AspNetCore)
 - Value filters: keep the groups of a row level whose summary value meets a
   condition — "regions whose sales exceed 10,000". `PivotRequest.ValueFilters`
   / `PivotValueFilter` in the engine; `<pivot-value-filter field operator
