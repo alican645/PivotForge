@@ -328,14 +328,14 @@ DevExpress'in alan menüsüne yaklaştı.
 | Gerçek `.xlsx` (OOXML) | ✅ |
 | CSV dışa aktarma | ✅ |
 | Dışa aktarılan hücreyi özelleştirme (`onExporting`) | ❌ |
-| PDF / yazdırma | ❌ |
+| PDF / yazdırma | ✅ `widget.print()` + `@media print`; PDF tarayıcının "PDF olarak kaydet"i ile |
 
 - [x] CSV dışa aktarma — `widget.exportToCsv()` + `PivotForge.download()`.
       Excel'in gönderdiği aynı dışa aktarma modelinden üretiliyor, yani ikisi
       ayrışamıyor; birleşik hücreler açılıyor ve her satır en genişe göre
       dolduruluyor. `delimiter` ve `values: "raw"` seçenekleri var.
 - [ ] Dışa aktarma öncesi hücre özelleştirme kancası
-- [ ] Yazdırma görünümü
+- [x] Yazdırma görünümü — `widget.print({ title, subtitle })`, `PivotForge.print(element)`
 
 ---
 

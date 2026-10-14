@@ -3212,3 +3212,91 @@ select {
     flex: 1 1 100%;
   }
 }
+
+/* Printing. The grid on screen is a scroll box with sticky headers; on paper it
+   has to be the whole table, flowing over as many pages as it needs, with the
+   column headers repeated on each. The controls go -- nobody can click a sort
+   arrow on paper -- but the colours stay: a heatmap or a conditional highlight
+   printed grey says nothing. Applies to a plain Ctrl+P as much as to
+   PivotWidget.print(). */
+@media print {
+  .pivot-table,
+  .pivot-table.is-virtual {
+    overflow: visible;
+    max-height: none;
+    box-shadow: none;
+  }
+
+  .pivot-table__table {
+    width: auto;
+    font-size: 9pt;
+  }
+
+  /* Screen rows are tall enough to tap; paper does not need that. */
+  .pivot-table__table th,
+  .pivot-table__table td {
+    position: static !important;
+    height: auto;
+    padding: 3pt 6pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .pivot-table__table thead {
+    display: table-header-group;
+  }
+
+  .pivot-table__table tr {
+    break-inside: avoid;
+  }
+
+  .pivot-table__resize-handle,
+  .pivot-table__filter-button,
+  .pivot-table__sort-indicator,
+  .pivot-table__toggle,
+  .pivot-table__virtual-spacer,
+  .pivot-load-panel,
+  .pivot-cell-menu {
+    display: none !important;
+  }
+
+  .pivot-is-loading > :not(.pivot-load-panel) {
+    opacity: 1;
+  }
+
+  .pivot-table__table .is-cell-selected,
+  .pivot-table__table tr.is-row-selected > th,
+  .pivot-table__table tr.is-row-selected > td {
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
+  /* What PivotForge.print() hides: everything on the page but the one grid. */
+  [data-pivot-print-hidden] {
+    display: none !important;
+  }
+
+  .pivot-print-header {
+    display: block;
+    margin: 0 0 8pt;
+  }
+
+  .pivot-print-header__title {
+    margin: 0;
+    font-size: 14pt;
+    font-weight: 800;
+  }
+
+  .pivot-print-header__subtitle {
+    margin: 2pt 0 0;
+    font-size: 9pt;
+    color: #475569;
+  }
+}
+
+/* Only ever inserted for the length of a print. */
+@media screen {
+  .pivot-print-header {
+    display: none;
+  }
+}

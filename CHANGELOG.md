@@ -16,6 +16,14 @@ change will require a new major version.
 
 ### Added
 
+- Printing: `widget.print({ title, subtitle })` prints the grid alone, and
+  `PivotForge.print(element, options)` does the same for any element. The
+  stylesheet's `@media print` lays out the whole table instead of its scroll
+  window, repeats the column headers on every sheet, tightens the rows, drops
+  the controls and the selection, and keeps heatmap and conditional colours —
+  so a plain Ctrl+P prints a clean table too, and the browser's "Save as PDF"
+  gives a PDF. (AspNetCore)
+
 - Four aggregations: `CountDistinct`, `Median`, `Variance` and
   `StandardDeviation` (`countDistinct`, `median`, `variance`,
   `standardDeviation` in the browser), with `PivotValueDefinition` factories of

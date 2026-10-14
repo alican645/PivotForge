@@ -162,6 +162,91 @@ PivotForge.toCsv = function toCsv(model, options = {}) {
     .join("\r\n");
 };
 
+// Prints one element on its own. Everything else on the page is hidden for the
+// length of the print -- every sibling of the element and of each of its
+// ancestors, so the page's own layout around the grid is not a concern -- and
+// put back afterwards. The stylesheet's @media print does the rest: the whole
+// table rather than its scroll window, headers repeated on every page, colours
+// kept. A title and a subtitle, when given, are printed above it.
+//
+// The selection is a screen affordance, not part of the report, so it is
+// lifted for the print as well.
+PivotForge.print = function print(element, options = {}) {
+  const view = element?.ownerDocument?.defaultView;
+
+  if (!element || typeof view?.print !== "function") {
+    throw new Error("PivotForge.print requires an element in a document that can print.");
+  }
+
+  const hidden = [];
+  for (let node = element; node.parentElement; node = node.parentElement) {
+    for (const sibling of node.parentElement.children) {
+      if (sibling !== node && !sibling.hasAttribute("data-pivot-print-hidden")) {
+        sibling.setAttribute("data-pivot-print-hidden", "");
+        hidden.push(sibling);
+      }
+    }
+  }
+
+  const selected = [];
+  for (const name of ["is-row-selected", "is-cell-selected"]) {
+    for (const node of element.querySelectorAll(`.${name}`)) {
+      node.classList.remove(name);
+      selected.push([node, name]);
+    }
+  }
+
+  let header = null;
+  if (options.title || options.subtitle) {
+    const document = element.ownerDocument;
+    header = document.createElement("div");
+    header.className = "pivot-print-header";
+    for (const [text, className, tag] of [
+      [options.title, "pivot-print-header__title", "h1"],
+      [options.subtitle, "pivot-print-header__subtitle", "p"]
+    ]) {
+      if (text) {
+        const line = document.createElement(tag);
+        line.className = className;
+        line.textContent = String(text);
+        header.appendChild(line);
+      }
+    }
+    element.prepend(header);
+  }
+
+  let restored = false;
+  const restore = () => {
+    if (restored) {
+      return;
+    }
+
+    restored = true;
+    view.removeEventListener?.("afterprint", restore);
+    hidden.forEach(node => node.removeAttribute("data-pivot-print-hidden"));
+    selected.forEach(([node, name]) => node.classList.add(name));
+    header?.remove();
+  };
+
+  // Put back on afterprint, not when print() returns: not every browser
+  // blocks in print(), and one that does not would snapshot the page already
+  // restored. A browser without the event gets the page back a moment later.
+  if ("onafterprint" in view) {
+    view.addEventListener("afterprint", restore);
+  }
+
+  try {
+    view.print();
+  } catch (error) {
+    restore();
+    throw error;
+  }
+
+  if (!("onafterprint" in view)) {
+    view.setTimeout(restore, 1000);
+  }
+};
+
 // Always a string, never undefined: an undefined entry in the grid is how the
 // search above tells an unoccupied position from a filled one, so a cell with
 // no text has to still occupy its place.

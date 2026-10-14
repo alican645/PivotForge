@@ -921,3 +921,97 @@ test("excel export carries the heatmap shade unless a conditional rule highlight
   assert.equal(renderer.getExcelCellFillColor(cellWith(["is-heat", "is-conditional-red"], "1")), null);
   assert.equal(renderer.getExcelCellFillColor(cellWith([], "1")), null);
 });
+
+// Just enough of a DOM for PivotForge.print: a tree with attributes and classes.
+function printDom() {
+  const listeners = {};
+  const view = {
+    onafterprint: null,
+    printed: null,
+    addEventListener(type, handler) { listeners[type] = handler; },
+    removeEventListener(type) { delete listeners[type]; },
+    print() { this.printed = snapshot(); },
+    fire(type) { listeners[type]?.(); }
+  };
+  const document = { defaultView: view, createElement: tag => node(tag) };
+  const all = [];
+
+  function node(tag, id, classes = []) {
+    const element = {
+      tag, id, textContent: "", children: [], parentElement: null, ownerDocument: document,
+      attributes: new Set(), classes: new Set(classes),
+      classList: {
+        add: name => element.classes.add(name),
+        remove: name => element.classes.delete(name),
+        contains: name => element.classes.has(name)
+      },
+      setAttribute: name => element.attributes.add(name),
+      removeAttribute: name => element.attributes.delete(name),
+      hasAttribute: name => element.attributes.has(name),
+      appendChild(child) { child.parentElement = element; element.children.push(child); return child; },
+      prepend(child) { child.parentElement = element; element.children.unshift(child); },
+      remove() {
+        const siblings = element.parentElement.children;
+        siblings.splice(siblings.indexOf(element), 1);
+        element.parentElement = null;
+      },
+      querySelectorAll(selector) {
+        const name = selector.slice(1);
+        const found = [];
+        const walk = parent => parent.children.forEach(child => {
+          if (child.classes.has(name)) found.push(child);
+          walk(child);
+        });
+        walk(element);
+        return found;
+      }
+    };
+    all.push(element);
+    return element;
+  }
+
+  function snapshot() {
+    return {
+      hidden: all.filter(element => element.attributes.has("data-pivot-print-hidden")).map(element => element.id),
+      selected: all.filter(element => element.classes.has("is-cell-selected")).length,
+      header: grid.children[0]?.className === "pivot-print-header"
+        ? grid.children[0].children.map(line => line.textContent)
+        : null
+    };
+  }
+
+  const body = node("body", "body");
+  const top = body.appendChild(node("header", "top"));
+  const main = body.appendChild(node("main", "main"));
+  const side = main.appendChild(node("aside", "side"));
+  const grid = main.appendChild(node("div", "grid"));
+  const cell = grid.appendChild(node("td", "cell", ["is-cell-selected"]));
+  const footer = body.appendChild(node("footer", "footer"));
+
+  return { view, grid, snapshot, top, side, cell, footer };
+}
+
+test("print hides everything but the grid, and puts it all back after printing", () => {
+  const { view, grid, snapshot } = printDom();
+
+  window.PivotForge.print(grid, { title: "Satış raporu", subtitle: "Filtre yok" });
+
+  assert.deepEqual(view.printed.hidden.sort(), ["footer", "side", "top"]);
+  assert.equal(view.printed.selected, 0);
+  assert.deepEqual(view.printed.header, ["Satış raporu", "Filtre yok"]);
+
+  // Still hidden until the browser says the print is over.
+  assert.equal(snapshot().hidden.length, 3);
+  view.fire("afterprint");
+  assert.deepEqual(snapshot(), { hidden: [], selected: 1, header: null });
+});
+
+test("print adds no header without a title and refuses an element that cannot print", () => {
+  const { view, grid } = printDom();
+
+  window.PivotForge.print(grid);
+  assert.equal(view.printed.header, null);
+  view.fire("afterprint");
+
+  assert.throws(() => window.PivotForge.print(null), /requires an element/);
+});

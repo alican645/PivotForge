@@ -135,6 +135,7 @@
                     <button type="button" id="resetLayoutButton">Yerleşimi sıfırla</button>
                     <button type="button" id="exportExcelButton">Excel</button>
                     <button type="button" id="exportCsvButton">CSV</button>
+                    <button type="button" id="printButton">Yazdır</button>
                     <button type="button" id="toolbarJsonButton">JSON</button>
                     <button type="button" id="fullscreenButton">Tam ekran</button>
                 </div>
@@ -243,6 +244,7 @@
             resetLayoutButton: document.getElementById("resetLayoutButton"),
             exportExcelButton: document.getElementById("exportExcelButton"),
             exportCsvButton: document.getElementById("exportCsvButton"),
+            printButton: document.getElementById("printButton"),
             toolbarJsonButton: document.getElementById("toolbarJsonButton"),
             fullscreenButton: document.getElementById("fullscreenButton"),
             viewModeButtons: document.querySelectorAll("[data-view-mode]"),
@@ -423,6 +425,7 @@
         elements.resetLayoutButton.addEventListener("click", resetLayout);
         elements.exportExcelButton.addEventListener("click", exportExcel);
         elements.exportCsvButton.addEventListener("click", exportVisibleTableCsv);
+        elements.printButton.addEventListener("click", printTable);
         elements.fullscreenButton.addEventListener("click", toggleFullscreen);
         elements.viewModeButtons.forEach(button => {
             button.addEventListener("click", () => {
@@ -1247,6 +1250,14 @@
                 setStatus("CSV dosyası indirildi", false);
             } catch (error) {
                 setStatus(error.message || "CSV dosyası oluşturulamadı", true);
+            }
+        }
+
+        function printTable() {
+            try {
+                widget.print({ title: "Pivot Tablo", subtitle: createExcelFilterSummary() });
+            } catch (error) {
+                setStatus(error.message || "Tablo yazdırılamadı", true);
             }
         }
 

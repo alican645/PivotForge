@@ -1154,3 +1154,24 @@ test("moving a field rebuilds the renderer with the new levels", async () => {
     widget.dispose();
   });
 });
+
+test("print hands the widget's own container to PivotForge.print, once something is rendered", async () => {
+  const { widget, container } = createWidget();
+  const original = PivotForge.print;
+  const calls = [];
+  PivotForge.print = (element, options) => calls.push({ element, options });
+
+  try {
+    assert.throws(() => widget.print(), /no pivot table has been rendered/);
+
+    await widget.refresh();
+    widget.print({ title: "Satışlar" });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].element, container);
+    assert.deepEqual(calls[0].options, { title: "Satışlar" });
+  } finally {
+    PivotForge.print = original;
+    widget.dispose();
+  }
+});
