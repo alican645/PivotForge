@@ -15,6 +15,16 @@
   --pt-heat-color: #f97316;
   --pt-bar-color: #0f766e;
   --pt-bar-negative-color: #dc2626;
+  /* The chart's series, in the order they are handed out. Checked together for
+     colour-blind separation against the white panel; replace them as a set. */
+  --pt-series-1: #2a78d6;
+  --pt-series-2: #eb6834;
+  --pt-series-3: #1baf7a;
+  --pt-series-4: #eda100;
+  --pt-series-5: #e87ba4;
+  --pt-series-6: #008300;
+  --pt-series-7: #6250d6;
+  --pt-series-8: #e34948;
   --pt-row-header-width: 148px;
 }
 
@@ -3380,6 +3390,214 @@ select {
    arrow on paper -- but the colours stay: a heatmap or a conditional highlight
    printed grey says nothing. Applies to a plain Ctrl+P as much as to
    PivotWidget.print(). */
+/* Pivot chart (pivot-chart.js). */
+.pivot-chart {
+  margin: 8px 0;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--pt-border);
+  border-radius: 8px;
+  background: var(--pt-panel);
+  color: var(--pt-text);
+}
+
+.pivot-chart__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pivot-chart__title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pivot-chart__measure {
+  min-height: 30px;
+  padding: 2px 8px;
+  border: 1px solid var(--pt-border);
+  border-radius: 6px;
+  background: var(--pt-panel);
+  color: var(--pt-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pivot-chart__types {
+  display: inline-flex;
+  border: 1px solid var(--pt-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pivot-chart__type {
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 0;
+  border-left: 1px solid var(--pt-border);
+  background: var(--pt-panel);
+  color: var(--pt-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pivot-chart__type:first-child {
+  border-left: 0;
+}
+
+.pivot-chart__type[aria-pressed="true"] {
+  background: var(--pt-panel-soft);
+  color: var(--pt-text);
+  box-shadow: inset 0 -2px 0 var(--pt-accent);
+}
+
+.pivot-chart__type:focus-visible,
+.pivot-chart__measure:focus-visible,
+.pivot-chart__scroller:focus-visible {
+  outline: 2px solid var(--pt-selection-ring);
+  outline-offset: 1px;
+}
+
+.pivot-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--pt-muted);
+  font-size: 12px;
+}
+
+.pivot-chart__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pivot-chart__swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--pivot-series);
+}
+
+.pivot-chart__note {
+  margin: 6px 0 0;
+  color: var(--pt-muted);
+  font-size: 12px;
+}
+
+.pivot-chart__plot {
+  position: relative;
+  margin-top: 6px;
+}
+
+.pivot-chart__scroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 4px;
+}
+
+.pivot-chart__svg {
+  display: block;
+  font-size: 11px;
+}
+
+.pivot-chart__grid line {
+  stroke: var(--pt-border);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.pivot-chart__grid .pivot-chart__baseline {
+  stroke: var(--pt-muted);
+}
+
+.pivot-chart__grid text,
+.pivot-chart__categories text {
+  fill: var(--pt-muted);
+}
+
+.pivot-chart__categories text {
+  fill: var(--pt-text);
+}
+
+.pivot-chart__band {
+  fill: var(--pt-panel-soft);
+}
+
+.pivot-chart__line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.pivot-chart__marker {
+  stroke: var(--pt-panel);
+  stroke-width: 2;
+}
+
+.pivot-chart__empty {
+  padding: 32px 0;
+  color: var(--pt-muted);
+  text-align: center;
+}
+
+.pivot-chart__tooltip {
+  position: absolute;
+  z-index: 2;
+  min-width: 140px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid var(--pt-border);
+  border-radius: 6px;
+  background: var(--pt-panel);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: var(--pt-text);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.pivot-chart__tooltip[hidden] {
+  display: none;
+}
+
+.pivot-chart__tooltip-title {
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.pivot-chart__tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.6;
+}
+
+.pivot-chart__tooltip-label {
+  flex: 1;
+  color: var(--pt-muted);
+}
+
+.pivot-chart__tooltip-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* Forced colours drop fills: the marks keep their shape and the legend its
+   text, which is what the grid below is for anyway. */
+@media (forced-colors: active) {
+  .pivot-chart__bar,
+  .pivot-chart__marker {
+    forced-color-adjust: none;
+  }
+}
+
 @media print {
   .pivot-table,
   .pivot-table.is-virtual {

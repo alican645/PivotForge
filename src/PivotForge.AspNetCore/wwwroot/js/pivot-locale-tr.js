@@ -6,7 +6,7 @@
   // for the locale by name, so a page with two pivots in two languages is a
   // matter of two options rather than two builds.
   //
-  // The four sections match the four components that put text on screen. Each
+  // Each section matches one component that puts text on screen. Each
   // is merged over that component's English defaults, so a key added upstream
   // and not translated yet degrades to English rather than to nothing.
   locales.tr = {
@@ -246,6 +246,20 @@
       },
       clear: "Ölçü kurallarını temizle",
       apply: "Kuralı ekle"
+    },
+    chart: {
+      chart: "Grafik",
+      chartType: "Grafik türü",
+      column: "Sütun",
+      stackedColumn: "Yığılmış",
+      bar: "Çubuk",
+      line: "Çizgi",
+      measure: "Değer",
+      noData: "Grafikte gösterilecek veri yok",
+      blank: "(Boş)",
+      total: "Toplam",
+      seriesCapped: "{1} serinin ilk {0} tanesi gösteriliyor.",
+      keyboardHint: "Kategoriler arasında ok tuşlarıyla gezinin."
     },
     drillDown: {
       title: "Kaynak Kayıtlar",

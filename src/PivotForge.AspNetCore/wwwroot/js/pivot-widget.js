@@ -26,6 +26,11 @@
     // offer, or a list naming which and in what order. Off unless asked for, so
     // a page that draws its own buttons keeps drawing them alone.
     toolbar: false,
+    // A chart of the pivot beside the grid (pivot-chart.js): true, a type name
+    // ("column", "stackedColumn", "bar", "line") or
+    // { type, position: "top" | "bottom", height, valueKey }. The reader can
+    // switch its type and value; both are kept with the rest of the view.
+    chart: null,
     largeData: false,
     pageSize: 40,
     sourceRowCount: 100000,
@@ -272,6 +277,16 @@
 
       this.toolbarNode = this.createToolbar();
 
+      // After the toolbar, so a chart above the grid sits between the two.
+      this.chartOptions = this.resolveChartOptions();
+      this.chartState = this.chartOptions
+        ? {
+          type: restored?.chart?.type ?? this.chartOptions.type,
+          valueKey: restored?.chart?.valueKey ?? this.chartOptions.valueKey
+        }
+        : null;
+      this.chart = this.createChart();
+
       this.layoutState = null;
       this.designer = null;
       this.drillDownModal = null;
@@ -439,7 +454,22 @@
         // behaviour they saved.
         conditionalRules: Array.isArray(payload.conditionalRules)
           ? payload.conditionalRules.filter(isConditionalRule)
-          : null
+          : null,
+        chart: this.parseChartState(payload.chart)
+      };
+    }
+
+    // A type this build does not draw is dropped rather than thrown on, and
+    // takes the value key with it only when that is malformed too.
+    parseChartState(chart) {
+      if (!chart || typeof chart !== "object") {
+        return null;
+      }
+
+      const types = PivotForge.PivotChart?.TYPES ?? [];
+      return {
+        type: types.includes(chart.type) ? chart.type : undefined,
+        valueKey: typeof chart.valueKey === "string" ? chart.valueKey : undefined
       };
     }
 
@@ -489,7 +519,8 @@
         rowSort: this.rowSort,
         columnSort: this.columnSort,
         valueFilters: this.valueFilters,
-        conditionalRules: this.conditionalRules
+        conditionalRules: this.conditionalRules,
+        ...(this.chartState ? { chart: { ...this.chartState } } : {})
       };
     }
 
@@ -560,6 +591,14 @@
       this.syncRendererSortState();
       if (report.conditionalRules) {
         this.conditionalRules = report.conditionalRules;
+      }
+
+      if (report.chart && this.chartState) {
+        this.chartState = {
+          type: report.chart.type ?? this.chartState.type,
+          valueKey: report.chart.valueKey ?? this.chartState.valueKey
+        };
+        this.chart?.setState(this.chartState);
       }
 
       this.saveState();
@@ -1142,6 +1181,7 @@
     render(result) {
       if (this.options.renderImpl) {
         this.options.renderImpl(result);
+        this.renderChart(result);
         return;
       }
 
@@ -1155,11 +1195,100 @@
         conditionalRules: this.conditionalRules
       });
 
+      this.renderChart(result);
+
       // A redraw while a request is still out (a conditional rule added
       // mid-load) replaces the container's children, the panel among them.
       if (this.loadPanelShown) {
         this.showLoadPanel();
       }
+    }
+
+    // The chart's options, checked here so a misspelt type fails at creation
+    // like every other declaration does.
+    resolveChartOptions() {
+      if (this.options.chart === null || this.options.chart === undefined || this.options.chart === false) {
+        return null;
+      }
+
+      if (!PivotForge.PivotChart) {
+        throw new Error("chart requires pivot-chart.js to be loaded.");
+      }
+
+      return PivotForge.PivotChart.normalize(this.options.chart);
+    }
+
+    // Beside the container rather than in it, as the toolbar is: the renderer
+    // replaces the container's children on every draw.
+    createChart() {
+      const document = root.document;
+      if (!this.chartOptions || !document) {
+        return null;
+      }
+
+      const host = document.createElement("div");
+      const top = this.chartOptions.position === "top";
+      if (top ? typeof this.container.before !== "function" : typeof this.container.after !== "function") {
+        return null;
+      }
+
+      if (top) {
+        this.container.before(host);
+      } else {
+        this.container.after(host);
+      }
+      this.chartNode = host;
+
+      return new PivotForge.PivotChart(host, {
+        ...this.chartState,
+        height: this.chartOptions.height,
+        texts: this.locale.chart,
+        culture: this.options.rendererOptions?.culture ?? this.locale.table?.culture ?? null,
+        // The grid's own text for a value, so a tooltip and a cell never
+        // disagree about what a number says.
+        formatValue: (value, definition) => this.renderer
+          ? this.renderer.formatValue(value, this.renderer.lastSettings ?? this.renderer.options, definition)
+          : String(value),
+        onChange: state => {
+          this.chartState = state;
+          this.saveState();
+        }
+      });
+    }
+
+    renderChart(result) {
+      if (!this.chart) {
+        return;
+      }
+
+      const columns = this.fields.filter(field => field.visible && field.area === "column");
+      this.chart.render(result, {
+        values: this.valueDefinitions(),
+        scope: columns.map(field => field.key).join("|")
+      });
+      this.chartState = { ...this.chart.state };
+    }
+
+    // Switches the chart's type or value from code, as the reader's own
+    // buttons do.
+    setChart(state = {}) {
+      this.assertNotDisposed();
+      if (!this.chart) {
+        throw new Error("Cannot set the chart because the grid has no chart.");
+      }
+
+      const type = state.type === undefined ? undefined : PivotForge.PivotChart.normalize(state.type)?.type;
+      if (state.type !== undefined && !type) {
+        throw new Error("setChart needs a chart type; remove the chart option to have none.");
+      }
+
+      this.chartState = {
+        type: type ?? this.chartState.type,
+        valueKey: state.valueKey ?? this.chartState.valueKey
+      };
+      this.chart.setState(this.chartState);
+      this.chartState = { ...this.chart.state };
+      this.saveState();
     }
 
     // Waits before showing, and a newer refresh restarts the wait without
@@ -1823,6 +1952,10 @@
       }
       this.toolbarNode?.remove();
       this.toolbarNode = null;
+      this.chart?.dispose();
+      this.chart = null;
+      this.chartNode?.remove();
+      this.chartNode = null;
       this.container.replaceChildren();
       this.container.classList.remove("pivot-table");
     }

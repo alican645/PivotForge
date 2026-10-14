@@ -909,6 +909,45 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task ChartWritesTheChartWithItsPositionAndHeight()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                Chart = PivotChartType.StackedColumn,
+                ChartPosition = PivotChartPosition.Bottom,
+                ChartHeight = 280
+            },
+            ["chart", "chart-position", "chart-height"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var chart = config.GetProperty("chart");
+        Assert.Equal("stackedColumn", chart.GetProperty("type").GetString());
+        Assert.Equal("bottom", chart.GetProperty("position").GetString());
+        Assert.Equal(280, chart.GetProperty("height").GetInt32());
+    }
+
+    [Fact]
+    public async Task AGridWithoutTheChartAttributeDeclaresNoChart()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.TryGetProperty("chart", out _));
+    }
+
+    [Fact]
+    public async Task ChartPositionWithoutAChartIsReported()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ChartPosition = PivotChartPosition.Bottom },
+            ["chart-position"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+    }
+
+    [Fact]
     public async Task PresentationOptionsMatchTheEquivalentBuilderConfiguration()
     {
         var fromTagHelper = await RenderAsync(

@@ -125,6 +125,20 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("layout-mode")]
     public PivotGridLayoutMode LayoutMode { get; set; }
 
+    /// <summary>Gets or sets the type of the chart drawn beside the grid; see <see cref="PivotGridBuilder.Chart"/>.</summary>
+    /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
+    [HtmlAttributeName("chart")]
+    public PivotChartType Chart { get; set; }
+
+    /// <summary>Gets or sets whether the chart sits above the grid (the default) or below it.</summary>
+    /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
+    [HtmlAttributeName("chart-position")]
+    public PivotChartPosition ChartPosition { get; set; }
+
+    /// <summary>Gets or sets the chart's height in pixels, at least 120.</summary>
+    [HtmlAttributeName("chart-height")]
+    public int? ChartHeight { get; set; }
+
     /// <summary>Gets or sets what a heatmap colour scale over the value cells is drawn across.</summary>
     /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
     [HtmlAttributeName("heatmap")]
@@ -392,6 +406,16 @@ public sealed class PivotGridTagHelper : TagHelper
         if (written.Contains("layout-mode"))
         {
             builder.LayoutMode(LayoutMode);
+        }
+
+        if (written.Contains("chart"))
+        {
+            builder.Chart(Chart, ChartPosition, ChartHeight);
+        }
+        else if (written.Contains("chart-position") || ChartHeight is not null)
+        {
+            throw new InvalidOperationException(
+                "pivot-grid sets chart-position or chart-height without chart. Add chart=\"Column\" (or another type).");
         }
 
         if (written.Contains("heatmap"))

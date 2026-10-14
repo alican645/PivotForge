@@ -149,6 +149,51 @@ public sealed class PivotGridBuilder : IHtmlContent
             : Set("toolbar", items.Distinct().Select(item => CamelCase(item.ToString())).ToArray());
     }
 
+    /// <summary>Draws a chart of the pivot beside the grid.</summary>
+    /// <remarks>
+    /// Needs <c>pivot-chart.js</c>. The chart plots one data field at a time -- the first, unless
+    /// the reader picks another from its header, where they can switch the chart type too; both
+    /// choices are kept with the rest of the view. Its categories are the outermost row groups,
+    /// its series the outermost column groups (at most eight), and every number is the one the
+    /// grid shows for that group, in the data field's own format.
+    /// </remarks>
+    /// <param name="type">The chart type; <see cref="PivotChartType.None"/> draws no chart.</param>
+    /// <param name="position">Whether the chart sits above or below the grid.</param>
+    /// <param name="height">The plot's height in pixels, at least 120; 320 when not given.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="height"/> is less than 120.
+    /// </exception>
+    public PivotGridBuilder Chart(
+        PivotChartType type,
+        PivotChartPosition position = PivotChartPosition.Top,
+        int? height = null)
+    {
+        if (height is { } requested)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(requested, 120, nameof(height));
+        }
+
+        if (type == PivotChartType.None)
+        {
+            _options.Remove("chart");
+            return this;
+        }
+
+        var chart = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["type"] = CamelCase(type.ToString()),
+            ["position"] = CamelCase(position.ToString())
+        };
+
+        if (height is { } pixels)
+        {
+            chart["height"] = pixels;
+        }
+
+        return Set("chart", chart);
+    }
+
     /// <summary>Renames one of the detail modal's texts, over the locale pack's word for it.</summary>
     /// <remarks>
     /// The other texts keep the locale pack's words. <c>truncated</c> takes the record limit as
