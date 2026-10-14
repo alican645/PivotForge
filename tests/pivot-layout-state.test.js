@@ -1239,3 +1239,32 @@ test("a value picked over a declared sort drops the declared summary path, and a
   const restored = new PivotForge.PivotLayoutState(declared, { ...saved });
   assert.equal(restored.toFields().find(field => field.dataField === "Region").sortByValueKey, "Quantity_sum");
 });
+
+test("toFields carries a display folder everywhere and a measure's text and group options in the data area", () => {
+  const fn = () => "x";
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Region", caption: "Bölge", area: "row", displayFolder: "Müşteri" },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum",
+      showAs: "runningTotal", allowCrossGroupCalculation: false, customizeText: fn },
+    { dataField: "Quantity", caption: "Miktar", area: "available", role: "measure", displayFolder: "Satış" }
+  ]);
+
+  const [region, amount] = state.toFields();
+  assert.equal(region.displayFolder, "Müşteri");
+  assert.equal(amount.allowCrossGroupCalculation, false);
+  assert.equal(amount.customizeText, fn);
+  assert.equal(state.field("Quantity").displayFolder, "Satış");
+  assert.equal("customizeText" in region, false);
+  assert.doesNotThrow(() => PivotForge.PivotRequestBuilder.buildRequest(state.toFields()));
+});
+
+test("a format's zero text, negative style and compact switch are checked", () => {
+  const state = create();
+
+  state.setFormat("Amount", { compact: true, zeroText: "—", negative: "parentheses" });
+  assert.deepEqual(state.getState().values[0].format, { compact: true, zeroText: "—", negative: "parentheses" });
+
+  assert.throws(() => state.setFormat("Amount", { compact: "yes" }), /compact .* must be a boolean/);
+  assert.throws(() => state.setFormat("Amount", { zeroText: 0 }), /zeroText .* must be a string/);
+  assert.throws(() => state.setFormat("Amount", { negative: "red" }), /Unknown format negative "red"/);
+});

@@ -639,7 +639,7 @@ test("each data field reaches the renderer as a value definition", async () => {
     assert.deepEqual(renders.at(-1).values, [
       {
         key: "tutar_sum", label: "Tutar", aggregation: "sum", showAs: "normal", format: null, showGrandTotals: true,
-        allowSorting: true, width: null, wordWrap: null
+        allowSorting: true, width: null, wordWrap: null, customizeText: null
       }
     ]);
 

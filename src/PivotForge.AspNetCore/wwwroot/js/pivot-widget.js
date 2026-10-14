@@ -694,7 +694,8 @@
           showGrandTotals: field.showGrandTotals,
           allowSorting: field.allowSorting,
           width: field.width,
-          wordWrap: field.wordWrap
+          wordWrap: field.wordWrap,
+          customizeText: field.customizeText
         }));
     }
 

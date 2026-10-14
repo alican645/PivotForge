@@ -498,7 +498,7 @@ public sealed class PivotEngine
             columnHeaders);
         var transformed = TransformValues(
             rowIndex.Headers.Count,
-            columnHeaders.Count,
+            columnHeaders,
             request.Values,
             rawCells,
             rawRowTotals,
@@ -820,7 +820,7 @@ public sealed class PivotEngine
 
     private static TransformedResult TransformValues(
         int rowCount,
-        int columnCount,
+        IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
         IReadOnlyList<PivotValueDefinition> definitions,
         IReadOnlyList<PivotCell> rawCells,
         IReadOnlyList<PivotTotal> rawRowTotals,
@@ -829,12 +829,15 @@ public sealed class PivotEngine
         IReadOnlyList<PivotColumnSubtotal> rawColumnSubtotals,
         IReadOnlyDictionary<string, decimal?> rawGrandTotals)
     {
+        var columnCount = columnHeaders.Count;
+        var groupStarts = GroupStarts(columnHeaders);
         var rowTotalLookup = rawRowTotals.ToDictionary(total => total.Index, total => total.Values);
         var columnTotalLookup = rawColumnTotals.ToDictionary(total => total.Index, total => total.Values);
         var cellLookup = rawCells.ToDictionary(cell => new CellKey(cell.Row, cell.Column), cell => cell.Values);
         var transformedCells = TransformCellMatrix(
             rowCount,
             columnCount,
+            groupStarts,
             definitions,
             cellLookup,
             rowTotalLookup,
@@ -849,6 +852,7 @@ public sealed class PivotEngine
             .ToArray();
         var transformedColumnTotals = TransformColumnTotals(
             columnCount,
+            groupStarts,
             definitions,
             columnTotalLookup,
             rawGrandTotals);
@@ -859,6 +863,7 @@ public sealed class PivotEngine
             .Select(subtotal => TransformSubtotal(
                 subtotal,
                 columnCount,
+                groupStarts,
                 definitions,
                 columnTotalLookup,
                 columnSubtotalTotals,
@@ -907,6 +912,7 @@ public sealed class PivotEngine
     private static IReadOnlyList<PivotCell> TransformCellMatrix(
         int rowCount,
         int columnCount,
+        IReadOnlyList<bool> groupStarts,
         IReadOnlyList<PivotValueDefinition> definitions,
         IReadOnlyDictionary<CellKey, IReadOnlyDictionary<string, decimal?>> rawCells,
         IReadOnlyDictionary<int, IReadOnlyDictionary<string, decimal?>> rawRowTotals,
@@ -927,6 +933,13 @@ public sealed class PivotEngine
 
                 for (var column = 0; column < columnCount; column++)
                 {
+                    if (StartsAfresh(definition, groupStarts, column))
+                    {
+                        runningTotal = 0m;
+                        hasRunningTotal = false;
+                        previous = null;
+                    }
+
                     var key = new CellKey(row, column);
                     var raw = rawCells.TryGetValue(key, out var cellValues)
                         ? GetValue(cellValues, definition.Key)
@@ -994,6 +1007,7 @@ public sealed class PivotEngine
 
     private static IReadOnlyList<PivotTotal> TransformColumnTotals(
         int columnCount,
+        IReadOnlyList<bool> groupStarts,
         IReadOnlyList<PivotValueDefinition> definitions,
         IReadOnlyDictionary<int, IReadOnlyDictionary<string, decimal?>> rawColumnTotals,
         IReadOnlyDictionary<string, decimal?> rawGrandTotals)
@@ -1009,6 +1023,13 @@ public sealed class PivotEngine
 
             for (var column = 0; column < columnCount; column++)
             {
+                if (StartsAfresh(definition, groupStarts, column))
+                {
+                    runningTotal = 0m;
+                    hasRunningTotal = false;
+                    previous = null;
+                }
+
                 var raw = GetValue(rawColumnTotals.GetValueOrDefault(column), definition.Key);
 
                 if (raw is not null)
@@ -1036,6 +1057,7 @@ public sealed class PivotEngine
     private static PivotSubtotal TransformSubtotal(
         PivotSubtotal subtotal,
         int columnCount,
+        IReadOnlyList<bool> groupStarts,
         IReadOnlyList<PivotValueDefinition> definitions,
         IReadOnlyDictionary<int, IReadOnlyDictionary<string, decimal?>> rawColumnTotals,
         IReadOnlyDictionary<HeaderKey, IReadOnlyDictionary<string, decimal?>> rawColumnSubtotalTotals,
@@ -1046,6 +1068,7 @@ public sealed class PivotEngine
         var cells = TransformCellMatrix(
             1,
             columnCount,
+            groupStarts,
             definitions,
             subtotalCellLookup,
             subtotalTotalLookup,
@@ -1201,6 +1224,27 @@ public sealed class PivotEngine
             _ => throw new ArgumentOutOfRangeException(nameof(showAs), showAs, "Unsupported show-as calculation.")
         };
     }
+
+    // Where a column starts a new outer group: the column before it sits under a different
+    // parent. A single column level is one group, so it never starts afresh.
+    private static bool[] GroupStarts(IReadOnlyList<IReadOnlyList<string?>> columnHeaders)
+    {
+        var starts = new bool[columnHeaders.Count];
+
+        for (var column = 1; column < columnHeaders.Count; column++)
+        {
+            var header = columnHeaders[column];
+            var parent = header.Take(Math.Max(0, header.Count - 1)).ToArray();
+            starts[column] = !StartsWith(columnHeaders[column - 1], parent);
+        }
+
+        return starts;
+    }
+
+    // A running total and a comparison with the previous column walk the whole row unless
+    // the value keeps them inside each outer column group.
+    private static bool StartsAfresh(PivotValueDefinition definition, IReadOnlyList<bool> groupStarts, int column) =>
+        !definition.AllowCrossGroupCalculation && column < groupStarts.Count && groupStarts[column];
 
     private static decimal? Difference(decimal? current, decimal? previous) =>
         current is null || previous is null ? null : current.Value - previous.Value;

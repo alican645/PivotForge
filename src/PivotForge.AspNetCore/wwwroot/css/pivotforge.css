@@ -383,6 +383,37 @@ select {
   background: #ffffff;
 }
 
+/* A display-folder heading in the field list: a button that opens and closes
+   the fields under it, which are indented to read as its contents. */
+.pivot-field-folder {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pivot-field-folder:hover {
+  background: #f1f5f9;
+}
+
+.pivot-field-folder:focus-visible {
+  outline: 2px solid var(--pt-accent);
+  outline-offset: -2px;
+}
+
+.pivot-field-list > .is-in-folder {
+  margin-left: 14px;
+}
+
 .pivot-field-help {
   margin: -2px 0 10px;
   color: var(--pt-muted);

@@ -674,16 +674,30 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const decimalPart = decimals > 0 ? `.${"0".repeat(decimals)}` : "";
     const numberPattern = `${format.useGrouping === false ? "0" : "#,##0"}${decimalPart}`;
 
+    let positive = numberPattern;
+
     if (format.type === "percent") {
-      return `${numberPattern}%`;
-    }
-
-    if (format.type === "currency") {
+      positive = `${numberPattern}%`;
+    } else if (format.type === "currency") {
       const symbol = { TRY: "₺", USD: "$", EUR: "€", GBP: "£" }[format.currency ?? "TRY"] ?? format.currency ?? "";
-      return `${symbol}${numberPattern}`;
+      positive = `${symbol}${numberPattern}`;
     }
 
-    return numberPattern;
+    // Excel's own sections -- positive;negative;zero -- carry the parentheses and
+    // the zero text, so the workbook keeps real numbers and still reads like the
+    // grid. A compact number has no locale-neutral Excel spelling, so the
+    // workbook keeps the full figure.
+    const parentheses = format.negative === "parentheses";
+    const zeroText = typeof format.zeroText === "string" ? format.zeroText : null;
+
+    if (!parentheses && zeroText === null) {
+      return positive;
+    }
+
+    const negative = parentheses ? `(${positive})` : `-${positive}`;
+    return zeroText === null
+      ? `${positive};${negative}`
+      : `${positive};${negative};"${zeroText.replace(/"/g, '""')}"`;
   }
 
   applyViewState(state, options = {}) {
@@ -739,7 +753,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         showGrandTotals: value.showGrandTotals !== false,
         allowSorting: value.allowSorting !== false,
         width: value.width ?? null,
-        wordWrap: value.wordWrap === true
+        wordWrap: value.wordWrap === true,
+        customizeText: value.customizeText ?? null
       }));
     }
 
@@ -2917,17 +2932,40 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       return String(value);
     }
 
+    return this.customizeText(value, this.formatNumber(value, settings, valueDefinition), valueDefinition);
+  }
+
+  formatNumber(value, settings, valueDefinition) {
     const format = valueDefinition?.format;
 
-    if (!format) {
+    // The zero text stands in for the number entirely, whatever else is declared.
+    if (value === 0 && typeof format?.zeroText === "string") {
+      return format.zeroText;
+    }
+
+    // Parentheses replace the sign rather than adding to it, so the number
+    // inside them is written as a positive one.
+    if (value < 0 && format?.negative === "parentheses") {
+      return `(${this.formatNumber(-value, settings, valueDefinition)})`;
+    }
+
+    // A format that only asks for a zero text or parentheses leaves the number
+    // itself to the grid's default, as a field with no format at all does.
+    const shapesNumber = format && ["type", "decimals", "useGrouping", "currency", "compact"]
+      .some(member => format[member] !== undefined);
+
+    if (!shapesNumber) {
       return settings.formatter.format(value);
     }
 
     const decimals = Number.isInteger(format.decimals) ? format.decimals : 2;
     const options = {
-      minimumFractionDigits: decimals,
+      // A compact number drops the trailing zeros it does not need: "1,25 Mn",
+      // "3 B", never "3,00 B".
+      minimumFractionDigits: format.compact === true ? 0 : decimals,
       maximumFractionDigits: decimals,
-      useGrouping: format.useGrouping !== false
+      useGrouping: format.useGrouping !== false,
+      ...(format.compact === true ? { notation: "compact", compactDisplay: "short" } : {})
     };
 
     if (format.type === "currency") {
@@ -2943,6 +2981,28 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }
 
     return new Intl.NumberFormat(settings.culture ?? undefined, options).format(value);
+  }
+
+  // The last word on a value's text: a function the page supplies, or the name
+  // of one on the page, handed the number and the text formatted so far. What
+  // it returns is shown; null or undefined keeps the formatted text.
+  customizeText(value, valueText, valueDefinition) {
+    const customize = valueDefinition?.customizeText;
+    if (!customize) {
+      return valueText;
+    }
+
+    const fn = typeof customize === "function"
+      ? customize
+      : String(customize).split(".").filter(Boolean)
+        .reduce((scope, part) => (scope == null ? undefined : scope[part]), globalThis);
+
+    if (typeof fn !== "function") {
+      throw new Error(`PivotForge customizeText "${customize}" for "${valueDefinition.key}" is not a function on the page.`);
+    }
+
+    const text = fn({ value, valueText, valueKey: valueDefinition.key });
+    return text === null || text === undefined ? valueText : String(text);
   }
 
   summarizeValues(values, valueDefinition) {

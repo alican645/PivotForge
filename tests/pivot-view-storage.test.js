@@ -137,3 +137,17 @@ test("a stored view keeps a tree layout and falls back to tabular for one it doe
   assert.equal(layoutOf("compact"), "compact");
   assert.equal(layoutOf("outline"), "tabular");
 });
+
+test("a stored format keeps its zero text, negative style and compact switch", () => {
+  const store = createStore();
+  const state = createState();
+  state.layout.values[0].format = { decimals: 0, compact: true, zeroText: "—", negative: "parentheses" };
+
+  store.saveLastState(state);
+  assert.deepEqual(store.loadLastState().layout.values[0].format,
+    { type: "number", decimals: 0, useGrouping: true, compact: true, zeroText: "—", negative: "parentheses" });
+
+  state.layout.values[0].format = { compact: "yes", zeroText: 0, negative: "red" };
+  store.saveLastState(state);
+  assert.deepEqual(store.loadLastState().layout.values[0].format, { type: "number", decimals: 2, useGrouping: true });
+});

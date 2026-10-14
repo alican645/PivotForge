@@ -94,12 +94,12 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `dataType` | ❌ | ❌ | Tür dönüşümü yok |
 | `groupInterval` (yıl/çeyrek/ay/gün) | ✅ | ✅ | `group-interval` niteliği ve `GroupInterval()` metodu; aynı kolon birden fazla seviyede |
 | `selector` / `sortingMethod` | ❌ | ❌ | Özel gruplama/sıralama fonksiyonu |
-| `customizeText` | ❌ | ❌ | Hücre metnini özelleştirme |
+| `customizeText` | ✅ | ✅ | `customize-text` ile sayfa fonksiyonu; hazır kalıplar `format-compact`, `format-zero-text`, `format-negative`. Yalnızca değer hücreleri; başlık etiketleri değil |
 | `calculateCustomSummary` | ✅ | ✅ | `PivotForgeOptions.CustomAggregates`, formülden adıyla çağrılır; bkz. Bölüm 3 |
 | `calculateSummaryValue` | ✅ | ✅ | `expression` niteliği; özet sonrası formül, bkz. Bölüm 3 |
-| `runningTotal` + `allowCrossGroupCalculation` | ⚠️ | ⚠️ | `RunningTotal` showAs modu var, çapraz grup seçeneği yok |
+| `runningTotal` + `allowCrossGroupCalculation` | ✅ | ✅ | Varsayılan gruplar arasında devam (DevExtreme'in tersi); `allow-cross-group-calculation="false"` her dış sütun grubunda sıfırdan başlatır, "öncekinden fark" modları da uyar. Yalnızca sütunlar boyunca (soldan sağa); satırlar boyunca birikme yok |
 | `width`, `wordWrapEnabled` | ✅ | ✅ | `width` / `word-wrap` nitelikleri, `Width()` / `WordWrap()` |
-| `displayFolder` | ❌ | ❌ | Alan seçicide klasörleme |
+| `displayFolder` | ✅ | ✅ | `display-folder`; tek seviye, açılır kapanır klasör başlıkları |
 | `allowSorting`/`allowFiltering`/`allowExpandAll` (alan başına) | ✅ | ✅ | `allow-sorting` / `allow-filtering`; `allowExpandAll` yok (araç çubuğu tümünü açıp kapatıyor) |
 
 ### Yapılacaklar
@@ -311,13 +311,13 @@ DevExpress'in alan menüsüne yaklaştı.
 | Alanlar listesine geri sürükleme | ✅ |
 | Alan arama | ✅ |
 | Ayarlar modali (ad, konum, özet, showAs, biçim, kaldır) | ✅ |
-| Alan seçicide klasörleme (`displayFolder`) | ❌ |
+| Alan seçicide klasörleme (`displayFolder`) | ✅ |
 | Bağımsız (standalone) alan seçici | ❌ |
 | Tasarımcıdan sıralama paneli | ✅ | çip ayarlarında "Sıralama yönü" ve "Sıralama ölçütü" |
 | Tasarımcıdan filtre seçimi | ✅ | çipteki `▼` düğmesi `PivotFilterPicker`'ı açar |
 
 - [x] Sıralama paneli — tasarımcıdan `sortBy` sürmek: satır/sütun çipinin ayarlarında yön ve ölçüt (kendi etiketleri ya da bir değer); seçim başlık sıralamasını geri alıyor, kayıtlı görünümde saklanıyor
-- [ ] `display-folder` ile alan gruplama
+- [x] `display-folder` ile alan gruplama — tek seviye; arama bütün klasörleri açıyor
 - [ ] Alan seçiciyi ayrı bileşen olarak kullanabilme
 
 ---

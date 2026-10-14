@@ -8,6 +8,17 @@ public sealed record PivotValueDefinition(string Field, PivotAggregation Aggrega
     /// <summary>Gets the secondary calculation applied to the aggregated value.</summary>
     public PivotShowAs ShowAs { get; init; } = PivotShowAs.Normal;
 
+    /// <summary>
+    /// Gets whether <see cref="PivotShowAs.RunningTotal"/> and the comparisons with the previous
+    /// column carry on across outer column groups (the default) or start afresh in each one.
+    /// </summary>
+    /// <remarks>
+    /// With Year and Month on the columns, <see langword="true"/> runs one total from the first
+    /// month to the last; <see langword="false"/> starts it again every January, and gives each
+    /// January no previous month to compare with. A single column level is one group either way.
+    /// </remarks>
+    public bool AllowCrossGroupCalculation { get; init; } = true;
+
     /// <summary>Gets the formula of a calculated value.</summary>
     /// <remarks>
     /// Set exactly when <see cref="Aggregation"/> is <see cref="PivotAggregation.Calculated"/>, and

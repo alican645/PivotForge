@@ -16,6 +16,27 @@ change will require a new major version.
 
 ### Added
 
+- Value text: three format members — `compact` (the culture's short form,
+  `1,25 Mn`), `zeroText` (shown in place of an exact zero, `"—"`) and
+  `negative: "parentheses"` (`(1.250)`) — as `format-compact`,
+  `format-zero-text`, `format-negative` / `FormatCompact()`,
+  `FormatZeroText()`, `FormatNegative(PivotNegativeFormat)`; and
+  `customize-text` / `CustomizeText()` / `customizeText`, a page function (or
+  its name) handed `{ value, valueText, valueKey }` that has the last word on
+  a value's text. The Excel export writes the zero text and parentheses as
+  number-format sections and keeps the full figure for a short form; the
+  detail modal formats the same way; the designer's format section offers
+  short numbers and parentheses as switches; a saved view keeps them.
+  (AspNetCore)
+- `display-folder` / `DisplayFolder()` / `displayFolder`: the designer's field
+  list groups fields under folder headings that open and close; fields
+  without a folder come first, and a search opens every folder. (AspNetCore)
+- `PivotValueDefinition.AllowCrossGroupCalculation` (default `true`, the
+  behaviour so far) and `allow-cross-group-calculation` /
+  `AllowCrossGroupCalculation()` / `allowCrossGroupCalculation`: `false`
+  starts a running total, and the two "previous" comparisons, afresh in each
+  outer column group — every year with Year and Quarter on the columns.
+  Sent on the request only when `false`. (Core, AspNetCore)
 - A sort panel in the field designer: a row or column chip's settings now
   offer **Sort order** (ascending / descending) and **Sort by** (the field's
   own labels, or any value on the grid — "regions by sales, highest first").

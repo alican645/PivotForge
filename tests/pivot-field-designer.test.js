@@ -2288,3 +2288,78 @@ test("no sort panel on a data field, on a field that opted out, or on a grid wit
   openSettings(gridOff, "Region");
   assert.equal(allByAction(settingsPanel(), "sort-order").length, 0);
 });
+
+test("the short-number and parentheses buttons switch their format members on and off", async () => {
+  const { host, state } = buildWithFormat();
+  openSettings(host);
+
+  findByAction(settingsPanel(), "format-compact").dispatch("click", {});
+  await Promise.resolve();
+  findByAction(settingsPanel(), "format-negative").dispatch("click", {});
+  await Promise.resolve();
+  assert.equal(state.getState().values[0].format.compact, true);
+  assert.equal(state.getState().values[0].format.negative, "parentheses");
+  // The rest of the declared format rides along.
+  assert.equal(state.getState().values[0].format.currency, "TRY");
+  assert.equal(findByAction(settingsPanel(), "format-compact").dataset.selected, "true");
+
+  findByAction(settingsPanel(), "format-compact").dispatch("click", {});
+  await Promise.resolve();
+  findByAction(settingsPanel(), "format-negative").dispatch("click", {});
+  await Promise.resolve();
+  assert.equal(state.getState().values[0].format.compact, false);
+  assert.equal(state.getState().values[0].format.negative, "minus");
+});
+
+const folderCatalog = [
+  { dataField: "Region", caption: "Bölge", area: "row" },
+  { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" },
+  { dataField: "Note", caption: "Not", area: "available", role: "dimension" },
+  { dataField: "Quantity", caption: "Miktar", area: "available", role: "measure", displayFolder: "Satış" },
+  { dataField: "City", caption: "Şehir", area: "available", role: "dimension", displayFolder: "Müşteri" },
+  { dataField: "Discount", caption: "İskonto", area: "available", role: "measure", displayFolder: "Satış" }
+];
+
+function buildWithFolders() {
+  const widget = { update: async () => {} };
+  const state = new PivotForge.PivotLayoutState(folderCatalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget });
+  return { designer, state, host };
+}
+
+// The field list in order: a folder heading as "[name]", a chip as its field.
+const fieldList = host => Array.from(zone(host, "available").children)
+  .find(child => child.className === "pivot-field-list").children;
+const listed = host => Array.from(fieldList(host)).map(node =>
+  node.dataset.action === "folder" ? `[${node.dataset.folder}]` : node.dataset.field);
+
+test("the field list groups fields under their display folders, loose fields first", () => {
+  const { host } = buildWithFolders();
+
+  assert.deepEqual(listed(host), ["Note", "[Satış]", "Quantity", "Discount", "[Müşteri]", "City"]);
+  const heading = Array.from(fieldList(host)).find(node => node.dataset.folder === "Satış");
+  assert.equal(heading.attributes["aria-expanded"], "true");
+});
+
+test("a folder closes and opens, and a search opens every folder", () => {
+  const { host, designer } = buildWithFolders();
+  const heading = () => Array.from(fieldList(host)).find(node => node.dataset.folder === "Satış");
+
+  heading().dispatch("click", {});
+  assert.deepEqual(listed(host), ["Note", "[Satış]", "[Müşteri]", "City"]);
+  assert.equal(heading().attributes["aria-expanded"], "false");
+
+  // A re-render keeps the folder closed.
+  designer.render();
+  assert.deepEqual(listed(host), ["Note", "[Satış]", "[Müşteri]", "City"]);
+
+  designer.searchTerm = "kont";
+  designer.render();
+  assert.deepEqual(listed(host), ["[Satış]", "Discount"]);
+
+  designer.searchTerm = "";
+  designer.render();
+  heading().dispatch("click", {});
+  assert.deepEqual(listed(host), ["Note", "[Satış]", "Quantity", "Discount", "[Müşteri]", "City"]);
+});

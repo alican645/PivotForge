@@ -11,6 +11,8 @@
     filter: "Filters",
     remove: "Remove",
     search: "Search fields...",
+    // {0} is the folder's name; read out on its open/close button.
+    folderToggle: "Folder {0}",
     format: "Format",
     settings: "Field settings",
     filterValues: "Filter values",
@@ -59,6 +61,8 @@
       runningTotal: "Running total"
     },
     formatGrouping: "Thousands separator",
+    formatCompact: "Short numbers (1.2M)",
+    formatParentheses: "Negatives in parentheses",
     formatTypes: {
       number: "Number",
       currency: "Currency",
@@ -316,6 +320,9 @@
       // Filters the available-field list only; never touched by mutations, and
       // must survive the re-renders they trigger, so it lives on the instance.
       this.searchTerm = "";
+      // The field-list folders the reader closed, by name. Like the search term
+      // it is a view of the list, so it outlives every re-render.
+      this.collapsedFolders = new Set();
       // Which data field the settings modal is showing, or null. The modal
       // lives outside the host, so it survives the re-render every edit
       // triggers and does not need to be rebuilt by render().
@@ -847,7 +854,7 @@
         return false;
       }
 
-      const chips = Array.from(body.children);
+      const chips = this.chipsIn(body);
       const next = chips[chips.findIndex(chip => chip.dataset.field === name) + step];
       next?.focus?.();
       return Boolean(next);
@@ -858,10 +865,16 @@
     // a tab stop per field.
     refreshTabStops() {
       this.zones.forEach(({ body }) => {
-        const chips = Array.from(body.children);
+        const chips = this.chipsIn(body);
         const stop = chips.find(chip => chip.dataset.field === this.focusField) ?? chips[0];
         chips.forEach(chip => { chip.tabIndex = chip === stop ? 0 : -1; });
       });
+    }
+
+    // A zone's chips. The field list also holds folder headings, which are
+    // buttons of their own rather than fields to step through.
+    chipsIn(body) {
+      return Array.from(body.children).filter(child => child.dataset?.field !== undefined);
     }
 
     canPickFilterValues() {
@@ -1279,17 +1292,24 @@
         // --- Formatting ---------------------------------------------------
         const formatting = this.settingsSection(this.labels.formatting);
 
-        const grouping = document.createElement("button");
-        grouping.className = "pivot-value-settings__choice";
-        grouping.setAttribute("type", "button");
-        grouping.dataset.action = "format-grouping";
-        grouping.dataset.selected = String(format.useGrouping);
-        grouping.textContent =
-          `${this.labels.formatGrouping}${format.useGrouping ? " ✓" : ""}`;
-        grouping.addEventListener("click", () => {
-          this.setFormatMember(name, "useGrouping", !format.useGrouping);
-        });
-        formatting.appendChild(grouping);
+        // On/off switches, each writing one format member.
+        const toggle = (action, label, on, write) => {
+          const button = document.createElement("button");
+          button.className = "pivot-value-settings__choice";
+          button.setAttribute("type", "button");
+          button.dataset.action = action;
+          button.dataset.selected = String(on);
+          button.textContent = `${label}${on ? " ✓" : ""}`;
+          button.addEventListener("click", write);
+          formatting.appendChild(button);
+        };
+
+        toggle("format-grouping", this.labels.formatGrouping, format.useGrouping,
+          () => this.setFormatMember(name, "useGrouping", !format.useGrouping));
+        toggle("format-compact", this.labels.formatCompact, format.compact === true,
+          () => this.setFormatMember(name, "compact", format.compact !== true));
+        toggle("format-negative", this.labels.formatParentheses, format.negative === "parentheses",
+          () => this.setFormatMember(name, "negative", format.negative === "parentheses" ? "minus" : "parentheses"));
 
         this.settingsChoices(
           formatting,
@@ -2026,7 +2046,52 @@
         return caption.toLowerCase().includes(term);
       });
 
-      body.replaceChildren(...names.map(name => this.createChip(name, "available")));
+      // Fields with no folder first, then each folder in the order the catalog
+      // first names it. A search opens every folder, so a match is never hidden.
+      const folderOf = name => this.state.field(name).displayFolder ?? null;
+      const folders = [...new Set(names.map(folderOf).filter(Boolean))];
+      const nodes = names.filter(name => !folderOf(name)).map(name => this.createChip(name, "available"));
+
+      folders.forEach(folder => {
+        const open = term !== "" || !this.collapsedFolders.has(folder);
+        nodes.push(this.createFolderHeading(body, folder, open));
+
+        if (open) {
+          nodes.push(...names.filter(name => folderOf(name) === folder).map(name => {
+            const chip = this.createChip(name, "available");
+            chip.classList.add("is-in-folder");
+            return chip;
+          }));
+        }
+      });
+
+      body.replaceChildren(...nodes);
+    }
+
+    createFolderHeading(body, folder, open) {
+      const heading = root.document.createElement("button");
+      heading.className = "pivot-field-folder";
+      heading.setAttribute("type", "button");
+      heading.dataset.action = "folder";
+      heading.dataset.folder = folder;
+      heading.setAttribute("aria-expanded", String(open));
+      heading.setAttribute("aria-label", format(this.labels.folderToggle, folder));
+      heading.textContent = `${open ? "▾" : "▸"} ${folder}`;
+      heading.addEventListener("click", () => {
+        if (this.collapsedFolders.has(folder)) {
+          this.collapsedFolders.delete(folder);
+        } else {
+          this.collapsedFolders.add(folder);
+        }
+
+        this.renderAvailableChips(body);
+        this.refreshTabStops();
+        Array.from(body.children)
+          .find(child => child.dataset?.action === "folder" && child.dataset.folder === folder)
+          ?.focus?.();
+      });
+
+      return heading;
     }
 
     // Which slot a release at `clientY` targets: the first chip whose midpoint

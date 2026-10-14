@@ -15,6 +15,12 @@ public sealed class PivotFieldBuilder
     private int? _formatDecimals;
     private bool? _formatGrouping;
     private string? _formatCurrency;
+    private bool? _formatCompact;
+    private string? _formatZeroText;
+    private PivotNegativeFormat? _formatNegative;
+    private string? _customizeText;
+    private bool? _allowCrossGroupCalculation;
+    private string? _displayFolder;
     private bool _visible = true;
     private bool? _expanded;
     private bool? _showTotals;
@@ -153,6 +159,87 @@ public sealed class PivotFieldBuilder
         }
 
         _formatCurrency = currency;
+        return this;
+    }
+
+    /// <summary>Sets whether this field's values are shortened to a compact form, such as 1,25 Mn.</summary>
+    /// <param name="compact">True to write values in the culture's short form.</param>
+    /// <returns>The same builder.</returns>
+    /// <remarks>The Excel export keeps the full figure: a short form has no culture-neutral Excel pattern.</remarks>
+    public PivotFieldBuilder FormatCompact(bool compact)
+    {
+        _formatCompact = compact;
+        return this;
+    }
+
+    /// <summary>Sets the text shown in place of a value that is exactly zero, such as "—".</summary>
+    /// <param name="text">The text; an empty string shows nothing.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentNullException">The text is null.</exception>
+    public PivotFieldBuilder FormatZeroText(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        _formatZeroText = text;
+        return this;
+    }
+
+    /// <summary>Sets how this field writes a negative number.</summary>
+    /// <param name="negative">A minus sign, or parentheses.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder FormatNegative(PivotNegativeFormat negative)
+    {
+        _formatNegative = negative;
+        return this;
+    }
+
+    /// <summary>
+    /// Names a function on the page that has the last word on each value's text, such as
+    /// <c>"app.pivot.amountText"</c>.
+    /// </summary>
+    /// <param name="functionName">The function's name, with dots for a namespace.</param>
+    /// <returns>The same builder.</returns>
+    /// <remarks>
+    /// Called with <c>{ value, valueText, valueKey }</c> when a cell is drawn, after the format;
+    /// what it returns is shown, and <c>null</c> keeps the formatted text. Resolved when a cell is
+    /// drawn, so the function may be defined further down the page. The Excel export keeps the
+    /// number and its format, not this text.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The name is null or blank.</exception>
+    public PivotFieldBuilder CustomizeText(string functionName)
+    {
+        if (string.IsNullOrWhiteSpace(functionName))
+        {
+            throw new ArgumentException("CustomizeText requires a function name.", nameof(functionName));
+        }
+
+        _customizeText = functionName;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets whether a running total and the comparisons with the previous column carry on across
+    /// outer column groups (the default) or start afresh in each one.
+    /// </summary>
+    /// <param name="allow">False to start again in every outer column group, such as every year.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder AllowCrossGroupCalculation(bool allow)
+    {
+        _allowCrossGroupCalculation = allow;
+        return this;
+    }
+
+    /// <summary>Sets the folder this field is listed under in the field designer, such as "Sales".</summary>
+    /// <param name="folder">The folder's name.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentException">The name is null or blank.</exception>
+    public PivotFieldBuilder DisplayFolder(string folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            throw new ArgumentException("DisplayFolder requires a folder name.", nameof(folder));
+        }
+
+        _displayFolder = folder;
         return this;
     }
 
@@ -488,6 +575,15 @@ public sealed class PivotFieldBuilder
         // the field list may carry one, which is applied when it is dragged into the data
         // area -- the same allowance ShowGrandTotals makes, and the only way a calculated
         // field offered in the list can arrive formatted.
+        // Both act on the numbers a measure produces, so the same allowance as a format.
+        if (!holdsGrandTotals && (_customizeText is not null || _allowCrossGroupCalculation is not null))
+        {
+            var option = _customizeText is not null ? "CustomizeText" : "AllowCrossGroupCalculation";
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets {option}, but its Area is \"{_area}\". " +
+                $"{option} is only valid on fields whose Area is Data, or Available with the Measure role.");
+        }
+
         if (!holdsGrandTotals && HasFormat)
         {
             throw new InvalidOperationException(
@@ -607,7 +703,37 @@ public sealed class PivotFieldBuilder
                 format["currency"] = currency;
             }
 
+            if (_formatCompact is { } compact)
+            {
+                format["compact"] = compact;
+            }
+
+            if (_formatZeroText is { } zeroText)
+            {
+                format["zeroText"] = zeroText;
+            }
+
+            if (_formatNegative is { } negative)
+            {
+                format["negative"] = ToCamelCase(negative.ToString());
+            }
+
             field["format"] = format;
+        }
+
+        if (_customizeText is { } customizeText)
+        {
+            field["customizeText"] = customizeText;
+        }
+
+        if (_allowCrossGroupCalculation is { } allowCrossGroupCalculation)
+        {
+            field["allowCrossGroupCalculation"] = allowCrossGroupCalculation;
+        }
+
+        if (_displayFolder is { } displayFolder)
+        {
+            field["displayFolder"] = displayFolder;
         }
 
         if (!_visible)
@@ -620,7 +746,8 @@ public sealed class PivotFieldBuilder
 
     private bool HasFormat =>
         _formatType is not null || _formatDecimals is not null ||
-        _formatGrouping is not null || _formatCurrency is not null;
+        _formatGrouping is not null || _formatCurrency is not null ||
+        _formatCompact is not null || _formatZeroText is not null || _formatNegative is not null;
 
     private static string ToCamelCase(string value) =>
         string.Concat(char.ToLowerInvariant(value[0]), value[1..]);

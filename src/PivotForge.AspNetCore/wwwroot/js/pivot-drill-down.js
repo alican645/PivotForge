@@ -56,9 +56,10 @@
 
       const decimals = Number.isInteger(format.decimals) ? format.decimals : 2;
       const options = {
-        minimumFractionDigits: decimals,
+        minimumFractionDigits: format.compact === true ? 0 : decimals,
         maximumFractionDigits: decimals,
-        useGrouping: format.useGrouping !== false
+        useGrouping: format.useGrouping !== false,
+        ...(format.compact === true ? { notation: "compact", compactDisplay: "short" } : {})
       };
 
       if (format.type === "currency") {
@@ -69,6 +70,9 @@
       }
 
       const formatter = new Intl.NumberFormat(culture ?? undefined, options);
+      // A percent format states the value in whole percents, the same
+      // assumption the renderer makes for a cell with no showAs transform.
+      const write = value => formatter.format(format.type === "percent" ? value / 100 : value);
 
       return value => {
         if (value === null || value === undefined) {
@@ -79,9 +83,11 @@
           return String(value);
         }
 
-        // A percent format states the value in whole percents, the same
-        // assumption the renderer makes for a cell with no showAs transform.
-        return formatter.format(format.type === "percent" ? value / 100 : value);
+        if (value === 0 && typeof format.zeroText === "string") {
+          return format.zeroText;
+        }
+
+        return value < 0 && format.negative === "parentheses" ? `(${write(-value)})` : write(value);
       };
     },
 

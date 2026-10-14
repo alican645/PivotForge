@@ -33,7 +33,13 @@ public class PivotTagHelperTests
         PivotGroupInterval? GroupInterval = null,
         string? SortByValueKey = null,
         string? Expression = null,
-        string? SortBySummaryPath = null);
+        string? SortBySummaryPath = null,
+        bool? FormatCompact = null,
+        string? FormatZeroText = null,
+        PivotNegativeFormat? FormatNegative = null,
+        string? CustomizeText = null,
+        bool? AllowCrossGroupCalculation = null,
+        string? DisplayFolder = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -153,6 +159,42 @@ public class PivotTagHelperTests
         {
             helper.Expression = spec.Expression;
             attributes.Add(new TagHelperAttribute("expression", spec.Expression));
+        }
+
+        if (spec.FormatCompact is { } formatCompact)
+        {
+            helper.FormatCompact = formatCompact;
+            attributes.Add(new TagHelperAttribute("format-compact", formatCompact));
+        }
+
+        if (spec.FormatZeroText is not null)
+        {
+            helper.FormatZeroText = spec.FormatZeroText;
+            attributes.Add(new TagHelperAttribute("format-zero-text", spec.FormatZeroText));
+        }
+
+        if (spec.FormatNegative is { } formatNegative)
+        {
+            helper.FormatNegative = formatNegative;
+            attributes.Add(new TagHelperAttribute("format-negative", formatNegative.ToString()));
+        }
+
+        if (spec.CustomizeText is not null)
+        {
+            helper.CustomizeText = spec.CustomizeText;
+            attributes.Add(new TagHelperAttribute("customize-text", spec.CustomizeText));
+        }
+
+        if (spec.AllowCrossGroupCalculation is { } allowCrossGroupCalculation)
+        {
+            helper.AllowCrossGroupCalculation = allowCrossGroupCalculation;
+            attributes.Add(new TagHelperAttribute("allow-cross-group-calculation", allowCrossGroupCalculation));
+        }
+
+        if (spec.DisplayFolder is not null)
+        {
+            helper.DisplayFolder = spec.DisplayFolder;
+            attributes.Add(new TagHelperAttribute("display-folder", spec.DisplayFolder));
         }
 
         return (helper, attributes);
@@ -612,6 +654,51 @@ public class PivotTagHelperTests
         Assert.Equal(0, format.GetProperty("decimals").GetInt32());
         Assert.True(format.GetProperty("useGrouping").GetBoolean());
         Assert.Equal("TRY", format.GetProperty("currency").GetString());
+    }
+
+    [Fact]
+    public async Task TextFormatCustomizeTextCrossGroupAndFolderAttributesAreEmitted()
+    {
+        var html = await RenderAsync(
+            new PivotGridTagHelper { Id = "grid" },
+            new FieldSpec("bolge", PivotArea.Row, DisplayFolder: "Müşteri"),
+            new FieldSpec(
+                "tutar",
+                PivotArea.Data,
+                ShowAs: PivotShowAs.RunningTotal,
+                FormatCompact: true,
+                FormatZeroText: "—",
+                FormatNegative: PivotNegativeFormat.Parentheses,
+                CustomizeText: "app.amountText",
+                AllowCrossGroupCalculation: false,
+                DisplayFolder: "Satış"));
+
+        var fields = ConfigOf(html).GetProperty("fields");
+        var amount = fields[1];
+        var format = amount.GetProperty("format");
+
+        Assert.Equal("Müşteri", fields[0].GetProperty("displayFolder").GetString());
+        Assert.True(format.GetProperty("compact").GetBoolean());
+        Assert.Equal("—", format.GetProperty("zeroText").GetString());
+        Assert.Equal("parentheses", format.GetProperty("negative").GetString());
+        Assert.Equal("app.amountText", amount.GetProperty("customizeText").GetString());
+        Assert.False(amount.GetProperty("allowCrossGroupCalculation").GetBoolean());
+        Assert.Equal("Satış", amount.GetProperty("displayFolder").GetString());
+    }
+
+    // Minus is the enum's default, so only a written attribute emits it.
+    [Fact]
+    public async Task FormatNegativeIsEmittedOnlyWhenWritten()
+    {
+        var html = await RenderAsync(
+            new PivotGridTagHelper { Id = "grid" },
+            new FieldSpec("tutar", PivotArea.Data),
+            new FieldSpec("adet", PivotArea.Data, FormatNegative: PivotNegativeFormat.Minus));
+
+        var fields = ConfigOf(html).GetProperty("fields");
+
+        Assert.False(fields[0].TryGetProperty("format", out _));
+        Assert.Equal("minus", fields[1].GetProperty("format").GetProperty("negative").GetString());
     }
 
     // format-type is non-nullable, so "not written" and "written as Number" are
