@@ -216,7 +216,12 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <param name="mode">The layout mode.</param>
     /// <returns>This builder.</returns>
     public PivotGridBuilder LayoutMode(PivotGridLayoutMode mode) =>
-        SetRenderer("layoutMode", mode == PivotGridLayoutMode.Compact ? "compact" : "tabular");
+        SetRenderer("layoutMode", mode switch
+        {
+            PivotGridLayoutMode.Compact => "compact",
+            PivotGridLayoutMode.Tree => "tree",
+            _ => "tabular"
+        });
 
     /// <summary>Shades the value cells on a colour scale, from the smallest value to the largest.</summary>
     /// <remarks>

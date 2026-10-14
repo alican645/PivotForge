@@ -640,6 +640,7 @@ public class PivotTagHelperTests
     [Theory]
     [InlineData(PivotGridLayoutMode.Tabular, "tabular")]
     [InlineData(PivotGridLayoutMode.Compact, "compact")]
+    [InlineData(PivotGridLayoutMode.Tree, "tree")]
     public async Task WritesLayoutModeWhenTheAttributeIsWritten(
         PivotGridLayoutMode mode, string expected)
     {

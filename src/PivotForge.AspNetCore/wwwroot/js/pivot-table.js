@@ -287,6 +287,11 @@ PivotForge.isConditionalRule = function isConditionalRule(rule) {
   return rule.operator !== "between" || Number.isFinite(rule.threshold2);
 };
 
+// Compact and tree both put every row field in one indented column.
+function isOneColumnLayout(settings) {
+  return settings?.layoutMode === "compact" || settings?.layoutMode === "tree";
+}
+
 function formatText(template, ...values) {
   return values.reduce(
     (result, value, index) => result.replaceAll(`{${index}}`, String(value)),
@@ -407,13 +412,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const measureDepth = values.length > 1 ? 1 : 0;
     const headerDepth = columnDepth + measureDepth;
     const actualRowDepth = Math.max(1, ...rowHeaders.map(header => header.length));
-    const rowDepth = settings.layoutMode === "compact" ? 1 : actualRowDepth;
+    const rowDepth = isOneColumnLayout(settings) ? 1 : actualRowDepth;
     const lookup = this.createCellLookup(cells);
     this.collapsedRows ??= new Set();
     this.applyInitialCollapse(rowHeaders, actualRowDepth, settings);
     this.selectionMetadata = new WeakMap();
     const table = document.createElement("table");
-    table.className = `pivot-table__table is-${settings.layoutMode}`;
+    // A tree is the compact layout drawn as a tree, so it carries both classes
+    // and inherits every compact rule.
+    table.className = settings.layoutMode === "tree"
+      ? "pivot-table__table is-compact is-tree"
+      : `pivot-table__table is-${settings.layoutMode}`;
     // The renderer already ships the whole grid keyboard contract — arrow keys,
     // Enter, Ctrl+C, a roving tabindex and cell selection. Declaring the role is
     // what makes that contract discoverable, and what makes the aria-selected
@@ -840,9 +849,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         const label = settings.rowFieldLabels[rowLevel] ?? (rowDepth === 1
           ? settings.texts.rowsHeading
           : formatText(settings.texts.rowHeading, rowLevel + 1));
-        const displayLabel = settings.layoutMode === "compact"
-          ? settings.texts.rowLabels
-          : label;
+        // One header over every row field. A tree names its levels, as its
+        // rows are those levels; compact keeps the spreadsheet's "Row Labels".
+        const treeLabel = (settings.rowFieldLabels ?? []).filter(Boolean).join(" / ");
+        const displayLabel = settings.layoutMode === "tree" && treeLabel
+          ? treeLabel
+          : isOneColumnLayout(settings)
+            ? settings.texts.rowLabels
+            : label;
         const corner = this.createCell("th", displayLabel, "pivot-table__corner");
         corner.rowSpan = namesColumnFields ? 1 : columnDepth + measureDepth;
         corner.dataset.stickyColumn = String(rowLevel);
@@ -1175,7 +1189,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }[rowInfo.type] ?? "pivot-table__detail-row";
     this.registerSelectionRow(row, rowSelection);
 
-    if (settings.layoutMode === "compact") {
+    if (isOneColumnLayout(settings)) {
       row.appendChild(this.createCompactRowHeader(rowInfo, settings, previousRowHeader, rowSelection));
     } else {
       this.appendTabularRowHeaders(row, rowInfo, rowDepth, settings, previousRowHeader, rowSelection);
@@ -1394,7 +1408,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     header.classList.add("is-compact");
 
     if (rowInfo.type === "subtotal") {
-      const label = `${this.displayValue(value, settings)} ${settings.totalText}`;
+      // In a tree the row is the parent node itself, already above its
+      // children, so it is named for the group rather than as its total.
+      const label = settings.layoutMode === "tree"
+        ? this.displayValue(value, settings)
+        : `${this.displayValue(value, settings)} ${settings.totalText}`;
       header.appendChild(this.createSubtotalToggle(rowInfo.key, label));
       header.appendChild(document.createTextNode(label));
     } else if (rowInfo.type === "group") {
