@@ -130,6 +130,11 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("heatmap")]
     public PivotHeatmapMode Heatmap { get; set; }
 
+    /// <summary>Gets or sets what the bars behind the value cells are measured across.</summary>
+    /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
+    [HtmlAttributeName("value-bars")]
+    public PivotValueBarsMode ValueBars { get; set; }
+
     /// <summary>Gets or sets whether a group's subtotal row is drawn above or below its rows.</summary>
     /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
     [HtmlAttributeName("totals-position")]
@@ -389,6 +394,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (written.Contains("heatmap"))
         {
             builder.Heatmap(Heatmap);
+        }
+
+        if (written.Contains("value-bars"))
+        {
+            builder.ValueBars(ValueBars);
         }
 
         if (written.Contains("totals-position"))

@@ -800,6 +800,7 @@ public class PivotTagHelperTests
         Assert.False(renderer.TryGetProperty("heatmap", out _));
         Assert.False(renderer.TryGetProperty("totalsPosition", out _));
         Assert.False(renderer.TryGetProperty("showBorders", out _));
+        Assert.False(renderer.TryGetProperty("valueBars", out _));
     }
 
     [Theory]
@@ -869,6 +870,21 @@ public class PivotTagHelperTests
             new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
 
         Assert.Equal(expected, config.GetProperty("rendererOptions").GetProperty("heatmap").GetString());
+    }
+
+    [Theory]
+    [InlineData(PivotValueBarsMode.None, "none")]
+    [InlineData(PivotValueBarsMode.Table, "table")]
+    [InlineData(PivotValueBarsMode.Rows, "rows")]
+    [InlineData(PivotValueBarsMode.Columns, "columns")]
+    public async Task WritesValueBarsWhenTheAttributeIsWritten(PivotValueBarsMode mode, string expected)
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ValueBars = mode },
+            ["value-bars"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(expected, config.GetProperty("rendererOptions").GetProperty("valueBars").GetString());
     }
 
     [Fact]
