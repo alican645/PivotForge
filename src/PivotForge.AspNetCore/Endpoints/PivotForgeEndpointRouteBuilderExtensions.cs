@@ -105,6 +105,7 @@ public static class PivotForgeEndpointRouteBuilderExtensions
                     // so two requests differing only here must not share a result.
                     request.FieldSorts,
                     request.TopN,
+                    request.ValueFilters,
                     request.HideEmptySummaryCells,
                     SourceRowCount = sourceRowCount,
                     RequestScope = CreateRequestScopeIdentity(httpContext)

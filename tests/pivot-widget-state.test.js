@@ -790,3 +790,48 @@ test("a file that is not a report, or does not fit the grid, is refused", async 
   assert.deepEqual(widget.layoutState.getState().rows, ["Region"]);
   widget.dispose();
 });
+
+// --- Value filters ------------------------------------------------------------
+
+test("a value filter is sent, stored, and waits while its field is not a row", async () => {
+  const { widget, store } = build({ designer: true });
+  const requests = [];
+  widget.options.fetchImpl = async (url, init) => {
+    requests.push(JSON.parse(init.body));
+    return { ok: true, status: 200, json: async () => ({ rowHeaders: [], columnHeaders: [], cells: [] }) };
+  };
+
+  await widget.setValueFilter("Region", { operator: "GreaterThan", value: 100 });
+  assert.deepEqual(requests.at(-1).valueFilters, [{ field: "Region", operator: "GreaterThan", value: 100 }]);
+  assert.deepEqual(saved(store).valueFilters, [{ field: "Region", operator: "GreaterThan", value: 100 }]);
+  assert.deepEqual(widget.filteredFields(), ["Region"]);
+
+  // Moved off the rows, the filter is kept but not sent: the engine would refuse it.
+  widget.layoutState.move("Region", "column");
+  await widget.update(widget.layoutState.toRequestState());
+  assert.equal("valueFilters" in requests.at(-1), false);
+  assert.equal(widget.valueFilters.length, 1);
+
+  await widget.setValueFilter("Region", null);
+  assert.deepEqual(widget.valueFilters, []);
+  widget.dispose();
+});
+
+test("a stored value filter comes back, and a broken one is dropped", () => {
+  const { widget } = build({
+    seed: seedWith({
+      valueFilters: [
+        { field: "Region", operator: "LessThan", value: 50 },
+        { field: "Region", operator: "Sideways", value: 1 }
+      ]
+    })
+  });
+
+  assert.deepEqual(widget.valueFilters, [{ field: "Region", operator: "LessThan", value: 50 }]);
+  widget.dispose();
+});
+
+test("declared value filters are checked where they are declared", () => {
+  assert.throws(() => build({ options: { valueFilters: [{ field: "Region", operator: "Between", value: 1 }] } }),
+    /requires a number "value2"/);
+});

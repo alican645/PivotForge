@@ -440,7 +440,7 @@ public sealed class PivotEngine
         // grand total carried over from the first pass would still be counting rows the
         // reader cannot see. The cost is one extra pass over records already in memory, and
         // only for a request that asked for a ranking.
-        if (request.TopN.Count > 0)
+        if (request.TopN.Count > 0 || request.ValueFilters.Count > 0)
         {
             var excluded = ExcludedGroups(scan, request, culture);
 
@@ -663,13 +663,34 @@ public sealed class PivotEngine
             sourceRowCount);
     }
 
-    /// <summary>The row groups a ranking leaves out, as header prefixes.</summary>
+    /// <summary>The row groups a value filter or a ranking leaves out, as header prefixes.</summary>
     private static IReadOnlySet<HeaderKey> ExcludedGroups(
         ScanResult scan,
         PivotRequest request,
         CultureInfo culture)
     {
         var excluded = new HashSet<HeaderKey>();
+
+        // The value filters first, so a ranking on the same level is taken among the groups
+        // they keep: "the top five regions over 10,000" rather than "those of the top five
+        // that happen to be over 10,000".
+        foreach (var filter in request.ValueFilters)
+        {
+            var level = LevelIndex(request.Rows, filter.Field);
+            var depth = level + 1;
+            var valueKey = filter.ValueKey ?? request.Values[0].Key;
+            var seen = new HashSet<HeaderKey>();
+
+            for (var row = 0; row < scan.RowIndex.Headers.Count; row++)
+            {
+                var group = new HeaderKey(scan.RowIndex.Headers[row].Take(depth).ToArray());
+
+                if (seen.Add(group) && !filter.Keeps(GroupValue(scan, request, row, depth, group, valueKey)))
+                {
+                    excluded.Add(group);
+                }
+            }
+        }
 
         foreach (var limit in request.TopN)
         {
@@ -693,7 +714,9 @@ public sealed class PivotEngine
                     ranked.Add(parent, siblings);
                 }
 
-                if (siblings.Any(sibling => sibling.Group.Equals(group)))
+                // A group a value filter dropped, or one under such a group, is not in the
+                // running, so it takes no place a kept group could have had.
+                if (siblings.Any(sibling => sibling.Group.Equals(group)) || IsExcluded(excluded, groupHeader))
                 {
                     continue;
                 }
@@ -1291,6 +1314,34 @@ public sealed class PivotEngine
             if (!reader.HasField(field))
             {
                 throw new PivotFieldNotFoundException(field);
+            }
+        }
+
+        foreach (var filter in request.ValueFilters)
+        {
+            if (LevelIndex(request.Rows, filter.Field) < 0)
+            {
+                throw new ArgumentException(
+                    "A pivot value filter must name a row header level.", nameof(request));
+            }
+
+            if (filter.ValueKey is { } valueKey &&
+                !request.Values.Any(value => string.Equals(value.Key, valueKey, StringComparison.Ordinal)))
+            {
+                throw new ArgumentException(
+                    "A pivot value filter must compare a declared value.", nameof(request));
+            }
+
+            if (filter.Operator is PivotValueFilterOperator.Between or PivotValueFilterOperator.NotBetween &&
+                filter.Value2 is null)
+            {
+                throw new ArgumentException(
+                    "A pivot value filter on a range needs both of its bounds.", nameof(request));
+            }
+
+            if (!Enum.IsDefined(filter.Operator))
+            {
+                throw new ArgumentException("A pivot value filter needs a known operator.", nameof(request));
             }
         }
 

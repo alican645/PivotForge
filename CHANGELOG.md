@@ -16,6 +16,17 @@ change will require a new major version.
 
 ### Added
 
+- Value filters: keep the groups of a row level whose summary value meets a
+  condition — "regions whose sales exceed 10,000". `PivotRequest.ValueFilters`
+  / `PivotValueFilter` in the engine; `<pivot-value-filter field operator
+  value value2 value-key>` / `ValueFilter(...)` / `valueFilters` on the grid;
+  `setValueFilter()` / `clearValueFilters()` in JavaScript; and a **Value
+  filter** section in a row field's designer settings. Eight operators
+  (greater / less than, or equal, equal, not equal, between, not between).
+  Like Top-N it runs after aggregation and drops the groups from the totals
+  too; a ranking on the same level is taken among the groups it keeps. Stored
+  with the view and in report files; a value-filtered field lights its header
+  funnel. In English and Turkish. (Core, AspNetCore)
 - Value bars: `value-bars="Table|Rows|Columns"` / `ValueBars(PivotValueBarsMode)`
   / `valueBars` draws a bar behind each value cell, as long as the value's
   share of its scale, grouped as the heatmap is. The bars share an axis at

@@ -62,6 +62,13 @@
   const GROUP_INTERVALS = ["year", "quarter", "month", "day", "dayOfWeek"];
 
   const TOP_N_MODES = ["Top", "Bottom"];
+  // How a value filter compares a group's summary value. The two ranges read a
+  // second bound; the rest read one.
+  const VALUE_FILTER_OPERATORS = [
+    "GreaterThan", "GreaterThanOrEqual", "LessThan", "LessThanOrEqual",
+    "Equal", "NotEqual", "Between", "NotBetween"
+  ];
+  const isRangeOperator = operator => operator === "Between" || operator === "NotBetween";
   const SHOW_AS = [
     "normal",
     "percentOfRowTotal",
@@ -648,6 +655,11 @@
       ...(normalizeRankings(extras.topN).length > 0
         ? { topN: normalizeRankings(extras.topN) }
         : {}),
+      // Sent only when there are any, so every request written before they existed
+      // is unchanged.
+      ...(normalizeValueFilters(extras.valueFilters).length > 0
+        ? { valueFilters: normalizeValueFilters(extras.valueFilters) }
+        : {}),
       // Named rather than positional so the list survives a field moving to
       // another area. A value sort declared without a direction takes the row
       // axis default; valueKey is sent only when declared, so a page that never
@@ -733,6 +745,46 @@
     });
   }
 
+  // A value filter is checked here, like a ranking, so a typo shows up where it
+  // was written. Bounds arrive as numbers or as the text an input holds.
+  function normalizeValueFilters(filters) {
+    return (filters ?? []).map((filter, index) => {
+      const field = String(filter?.field ?? "");
+      const operator = filter?.operator ?? "GreaterThan";
+      const value = Number(filter?.value);
+      const value2 = filter?.value2 === undefined || filter?.value2 === null || filter?.value2 === ""
+        ? null
+        : Number(filter.value2);
+
+      if (field === "") {
+        throw new Error(`Value filter at index ${index} requires a "field".`);
+      }
+
+      if (!VALUE_FILTER_OPERATORS.includes(operator)) {
+        throw new Error(
+          `Unknown value filter operator "${operator}" on "${field}". Expected one of: ${VALUE_FILTER_OPERATORS.join(", ")}.`);
+      }
+
+      if (filter?.value === "" || filter?.value === null || !Number.isFinite(value)) {
+        throw new Error(`Value filter on "${field}" requires a number "value".`);
+      }
+
+      if (isRangeOperator(operator) ? !Number.isFinite(value2) : value2 !== null) {
+        throw new Error(isRangeOperator(operator)
+          ? `Value filter "${operator}" on "${field}" requires a number "value2", its upper bound.`
+          : `Value filter "${operator}" on "${field}" compares one value; "value2" is only for Between and NotBetween.`);
+      }
+
+      return {
+        field,
+        operator,
+        value,
+        ...(value2 !== null ? { value2 } : {}),
+        ...(filter?.valueKey ? { valueKey: String(filter.valueKey) } : {})
+      };
+    });
+  }
+
   // Whether a filter entry actually restricts anything yet. The one rule the
   // renderer's funnel, the designer's chip and the request all consult, so a
   // blank-value condition is not mistaken for an empty filter.
@@ -742,9 +794,9 @@
 
   PivotForge.PivotRequestBuilder = {
     normalizeFields, normalizeFilter, buildRequest, valueKey, restricts,
-    normalizeRankings, comparisonType, parseExpression,
+    normalizeRankings, normalizeValueFilters, comparisonType, parseExpression,
     AGGREGATIONS, CALCULATED, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
-    FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS
+    FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS, VALUE_FILTER_OPERATORS
   };
 
   if (typeof module !== "undefined" && module.exports) {

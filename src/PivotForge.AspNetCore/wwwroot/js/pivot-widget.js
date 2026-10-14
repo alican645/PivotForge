@@ -33,6 +33,10 @@
     // export and drill-down all agree on which rows exist.
     hideEmptySummaryCells: false,
     topN: [],
+    // Row levels kept only where their summary value meets a condition:
+    // { field, operator, value, value2?, valueKey? }. Like topN they run after
+    // aggregation, in the engine; unlike topN the reader can change them.
+    valueFilters: [],
     rendererOptions: null,
     // A locale pack name ("tr") or an object shaped like one. It supplies the
     // language for every component that puts text on screen; anything the page
@@ -210,6 +214,7 @@
       this.controller = null;
       this.requestToken = 0;
       this.filters = [...(this.options.filters ?? [])];
+      this.valueFilters = PivotForge.PivotRequestBuilder.normalizeValueFilters(this.options.valueFilters);
       this.rowSort = this.options.rowSort ?? null;
       // The column axis' value sort, { valueKey, rowPath, direction }: "sort
       // columns by this row". Null leaves each column field's own order.
@@ -244,6 +249,10 @@
 
       if (restored?.columnSort !== undefined) {
         this.columnSort = restored.columnSort;
+      }
+
+      if (restored?.valueFilters) {
+        this.valueFilters = restored.valueFilters;
       }
 
       // Replaces the declared rules rather than adding to them, because that is
@@ -411,6 +420,17 @@
           : null,
         rowSort: payload.rowSort ?? null,
         columnSort: payload.columnSort ?? null,
+        // Each entry checked on its own, so one a newer or tampered-with client
+        // wrote is dropped rather than costing the reader the rest of the view.
+        valueFilters: Array.isArray(payload.valueFilters)
+          ? payload.valueFilters.flatMap(filter => {
+            try {
+              return PivotForge.PivotRequestBuilder.normalizeValueFilters([filter]);
+            } catch {
+              return [];
+            }
+          })
+          : null,
         // A rule the renderer could not act on is dropped rather than thrown
         // on, the same bargain the filters above make: a view stored by an
         // older or a tampered-with client should still open. A rule naming a
@@ -468,6 +488,7 @@
           : this.filters,
         rowSort: this.rowSort,
         columnSort: this.columnSort,
+        valueFilters: this.valueFilters,
         conditionalRules: this.conditionalRules
       };
     }
@@ -535,6 +556,7 @@
       this.filters = filters ?? (report.layout ? [] : this.filters);
       this.rowSort = report.rowSort;
       this.columnSort = report.columnSort;
+      this.valueFilters = report.valueFilters ?? [];
       this.syncRendererSortState();
       if (report.conditionalRules) {
         this.conditionalRules = report.conditionalRules;
@@ -810,8 +832,12 @@
     filteredFields() {
       // A blank condition carries no values and still restricts, so counting
       // values would leave its funnel looking inactive.
-      return this.filters.filter(PivotForge.PivotRequestBuilder.restricts)
-        .map(filter => filter.field);
+      // A value filter restricts its field's groups too, so it lights the
+      // same funnel a picked value would.
+      return [...new Set([
+        ...this.filters.filter(PivotForge.PivotRequestBuilder.restricts).map(filter => filter.field),
+        ...this.activeValueFilters().map(filter => filter.field)
+      ])];
     }
 
     // The row header's funnel and the designer's filter chip open one picker
@@ -1002,6 +1028,7 @@
         filters: [...this.filters],
         rowSort: this.rowSort,
         columnSort: this.columnSort,
+        valueFilters: [...this.valueFilters],
         conditionalRules: [...this.conditionalRules],
         sessionId: this.sessionId,
         totalRowCount: this.totalRowCount
@@ -1014,8 +1041,43 @@
         rowSort: this.rowSort,
         columnSort: this.columnSort,
         hideEmptySummaryCells: this.options.hideEmptySummaryCells,
-        topN: this.options.topN
+        topN: this.options.topN,
+        valueFilters: this.activeValueFilters()
       });
+    }
+
+    // The value filters the current layout can honour: one on a field that left
+    // the rows, or comparing a value no longer on the grid, waits -- kept, so it
+    // comes back with the field -- rather than failing the request.
+    activeValueFilters() {
+      const rows = new Set(this.fields.filter(field => field.visible && field.area === "row").map(field => field.key));
+      const values = new Set(this.valueDefinitions().map(value => value.key));
+
+      return this.valueFilters.filter(filter =>
+        rows.has(filter.field) && (!filter.valueKey || values.has(filter.valueKey)));
+    }
+
+    // Sets or, with null, removes the value filter on one row field.
+    async setValueFilter(field, filter) {
+      if (!this.options.allowFiltering) {
+        throw new Error("Cannot filter because allowFiltering is disabled.");
+      }
+
+      const others = this.valueFilters.filter(entry => entry.field !== field);
+      this.valueFilters = filter
+        ? [...others, ...PivotForge.PivotRequestBuilder.normalizeValueFilters([{ ...filter, field }])]
+        : others;
+
+      this.saveState();
+      this.designer?.render();
+      await this.refresh();
+    }
+
+    async clearValueFilters() {
+      this.valueFilters = [];
+      this.saveState();
+      this.designer?.render();
+      await this.refresh();
     }
 
     async post(route, body, signal) {
