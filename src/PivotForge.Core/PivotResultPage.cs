@@ -102,6 +102,7 @@ public static class PivotResultPaginator
                 Subtotals = subtotals,
                 ColumnSubtotals = columnSubtotals,
                 GrandTotals = source.GrandTotals,
+                ValueRanges = CreateValueRanges(source.Cells),
                 Metadata = new PivotMetadata
                 {
                     SourceRowCount = source.Metadata.SourceRowCount,
@@ -112,6 +113,47 @@ public static class PivotResultPaginator
             }
         };
     }
+
+    // Over the detail cells only: those are what a heatmap shades. One range per value key for
+    // the whole result, and one per value key and column.
+    private static PivotValueRange[] CreateValueRanges(IReadOnlyList<PivotCell> cells)
+    {
+        var ranges = new Dictionary<(string ValueKey, int? Column), (decimal Min, decimal Max)>();
+
+        foreach (var cell in cells)
+        {
+            foreach (var (valueKey, value) in cell.Values)
+            {
+                if (value is not { } number)
+                {
+                    continue;
+                }
+
+                Widen(ranges, (valueKey, null), number);
+                Widen(ranges, (valueKey, cell.Column), number);
+            }
+        }
+
+        return ranges
+            .OrderBy(entry => entry.Key.ValueKey, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Key.Column ?? -1)
+            .Select(entry => new PivotValueRange
+            {
+                ValueKey = entry.Key.ValueKey,
+                Column = entry.Key.Column,
+                Min = entry.Value.Min,
+                Max = entry.Value.Max
+            })
+            .ToArray();
+    }
+
+    private static void Widen(
+        Dictionary<(string ValueKey, int? Column), (decimal Min, decimal Max)> ranges,
+        (string ValueKey, int? Column) key,
+        decimal value) =>
+        ranges[key] = ranges.TryGetValue(key, out var range)
+            ? (Math.Min(range.Min, value), Math.Max(range.Max, value))
+            : (value, value);
 
     private static bool StartsWith(IReadOnlyList<string?> path, IReadOnlyList<string?> prefix)
     {

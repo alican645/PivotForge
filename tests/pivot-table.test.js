@@ -889,3 +889,35 @@ test("heatmap shades value cells and clears the shading when switched off", () =
   assert.deepEqual(cells.map(cell => cell.heat()), [undefined, undefined, undefined]);
   assert.equal(cells.some(cell => cell.classList.has("is-heat")), false);
 });
+
+test("heatmap levels follow the server's value ranges on a large-data page", () => {
+  const { heatmapLevels } = window.PivotForge;
+  // A page holding one row of a result whose amounts run from 0 to 100.
+  const entries = [
+    { valueKey: "amount", rowKey: "r5", columnIndex: 0, value: 25 },
+    { valueKey: "amount", rowKey: "r5", columnIndex: 1, value: 50 }
+  ];
+  const ranges = [
+    { valueKey: "amount", column: null, min: 0, max: 100 },
+    { valueKey: "amount", column: 0, min: 0, max: 50 },
+    { valueKey: "amount", column: 1, min: 50, max: 150 }
+  ];
+
+  assert.deepEqual(heatmapLevels(entries, "table", ranges), [0.25, 0.5]);
+  assert.deepEqual(heatmapLevels(entries, "columns", ranges), [0.5, 0]);
+  // A row is always whole on a page, so its own values decide.
+  assert.deepEqual(heatmapLevels(entries, "rows", ranges), [0, 1]);
+});
+
+test("excel export carries the heatmap shade unless a conditional rule highlights the cell", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const cellWith = (classes, heat) => ({
+    classList: { contains: name => classes.includes(name) },
+    style: { getPropertyValue: name => (name === "--pt-heat" ? heat : "") }
+  });
+
+  assert.equal(renderer.getExcelCellFillColor(cellWith(["is-heat"], "1")), "#FCB27F");
+  assert.equal(renderer.getExcelCellFillColor(cellWith(["is-heat"], "0")), "#FFFFFF");
+  assert.equal(renderer.getExcelCellFillColor(cellWith(["is-heat", "is-conditional-red"], "1")), null);
+  assert.equal(renderer.getExcelCellFillColor(cellWith([], "1")), null);
+});

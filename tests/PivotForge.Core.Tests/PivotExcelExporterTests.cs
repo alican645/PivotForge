@@ -76,6 +76,48 @@ public sealed class PivotExcelExporterTests
     }
 
     [Fact]
+    public void Export_WritesFillColorsAndLetsAHighlightWin()
+    {
+        var document = new PivotExcelDocument
+        {
+            Rows =
+            [
+                new PivotExcelRow
+                {
+                    Cells =
+                    [
+                        new PivotExcelCell { Number = 1, FillColor = "#fcb27f" },
+                        new PivotExcelCell { Number = 2, FillColor = "FCB27F" },
+                        new PivotExcelCell { Number = 3, FillColor = "#FFF5EF", Highlight = PivotExcelHighlight.Blue },
+                        new PivotExcelCell { Number = 4, FillColor = "orange" }
+                    ]
+                }
+            ]
+        };
+
+        using var archive = new ZipArchive(new MemoryStream(new PivotExcelExporter().Export(document)), ZipArchiveMode.Read);
+        var styles = ReadXml(archive, "xl/styles.xml");
+        var fills = styles.Descendants(Spreadsheet + "fill").ToArray();
+        var formats = styles.Descendants(Spreadsheet + "cellXfs").Single().Elements(Spreadsheet + "xf").ToArray();
+        var cells = ReadXml(archive, "xl/worksheets/sheet1.xml").Descendants(Spreadsheet + "c")
+            .Where(cell => cell.Element(Spreadsheet + "v") is not null)
+            .ToArray();
+
+        string? FillOf(XElement cell)
+        {
+            var format = formats[int.Parse(cell.Attribute("s")!.Value)];
+            var fill = fills[int.Parse(format.Attribute("fillId")!.Value)];
+            return fill.Descendants(Spreadsheet + "fgColor").SingleOrDefault()?.Attribute("rgb")?.Value;
+        }
+
+        Assert.Equal(fills.Length, int.Parse(styles.Descendants(Spreadsheet + "fills").Single().Attribute("count")!.Value));
+        // One fill for both spellings; the highlight beats the shade; a non-hex colour is ignored.
+        Assert.Equal(["FFFCB27F", "FFFCB27F", "FFDBEAFE", null], cells.Select(FillOf));
+        Assert.DoesNotContain(fills, fill => fill.Descendants(Spreadsheet + "fgColor")
+            .Any(color => color.Attribute("rgb")?.Value == "FFFFF5EF"));
+    }
+
+    [Fact]
     public void Document_UsesLanguageNeutralPackageDefaults()
     {
         var document = new PivotExcelDocument();

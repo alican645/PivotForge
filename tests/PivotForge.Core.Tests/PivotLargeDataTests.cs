@@ -53,6 +53,30 @@ public sealed class PivotLargeDataTests
         Assert.Throws<ArgumentOutOfRangeException>(() => PivotResultPaginator.CreatePage(source, 0, 1_001));
     }
 
+    [Fact]
+    public void Paginator_CarriesValueRangesOfTheWholeResult()
+    {
+        var source = new PivotResult
+        {
+            RowHeaders = [["R0"], ["R1"], ["R2"]],
+            ColumnHeaders = [["2025"], ["2026"]],
+            Cells =
+            [
+                new PivotCell { Row = 0, Column = 0, Values = new Dictionary<string, decimal?> { ["Amount_sum"] = 10 } },
+                new PivotCell { Row = 1, Column = 1, Values = new Dictionary<string, decimal?> { ["Amount_sum"] = -5 } },
+                new PivotCell { Row = 2, Column = 0, Values = new Dictionary<string, decimal?> { ["Amount_sum"] = 40, ["Count"] = null } }
+            ]
+        };
+
+        // The page holds only R1, yet the scale spans every row.
+        var ranges = PivotResultPaginator.CreatePage(source, 1, 1).Result.ValueRanges;
+
+        Assert.Equal(
+            [("Amount_sum", (int?)null, -5m, 40m), ("Amount_sum", 0, 10m, 40m), ("Amount_sum", 1, -5m, -5m)],
+            ranges.Select(range => (range.ValueKey, range.Column, range.Min, range.Max)));
+        Assert.Empty(source.ValueRanges);
+    }
+
     private static PivotResult CreateResult()
     {
         var headers = Enumerable.Range(0, 5)

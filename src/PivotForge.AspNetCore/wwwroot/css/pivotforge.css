@@ -1453,7 +1453,9 @@ select {
 
 /* The heatmap scale: --pt-heat runs from 0 (coldest) to 1 (hottest) and mixes
    that much of the hot colour into the cell. Not !important, so a conditional
-   rule or the selection still shows on top of it. */
+   rule or the selection still shows on top of it. The 55% and the colour are
+   mirrored in pivot-table.js for the Excel export, so keep --pt-heat-color a
+   #rrggbb value. */
 .pivot-table__table td.is-heat {
   background: color-mix(in srgb, var(--pt-heat-color) calc(var(--pt-heat, 0) * 55%), var(--pt-panel));
 }

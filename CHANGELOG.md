@@ -22,8 +22,16 @@ change will require a new major version.
   field, or within each row or column. Each data field is its own scale;
   totals and subtotals are not shaded, and a conditional formatting rule's
   colour wins on the cells it matches. The colour is the `--pt-heat-color`
-  CSS variable. In large-data mode the scale covers the rows on screen.
-  `PivotForge.heatmapLevels` exposes the scale calculation. (AspNetCore)
+  CSS variable. The shades are carried into the Excel export, and in
+  large-data mode the scale spans the whole result rather than the page on
+  screen. `PivotForge.heatmapLevels` exposes the scale calculation.
+  (AspNetCore)
+- `PivotExcelCell.FillColor`: an optional `#RRGGBB` background for an exported
+  cell. A `Highlight` wins when both are set. (Core)
+- `PivotResult.ValueRanges`: the smallest and largest value of each value
+  definition, over the whole result and per column. `PivotResultPaginator`
+  fills it on every page, so a page can be shaded on the whole result's
+  scale. (Core)
 
 ## [0.6.0-preview.6] — 2026-10-02
 

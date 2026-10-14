@@ -239,7 +239,7 @@ the renderer keeps its own default.
 | --- | --- | --- | --- |
 | `selection-mode` | `SelectionMode(PivotSelectionMode)` | `Single` | `Single` selects the clicked cell; `None` disables selection. |
 | `layout-mode` | `LayoutMode(PivotGridLayoutMode)` | `Tabular` | `Tabular` gives each row field its own column; `Compact` indents them into one. |
-| `heatmap` | `Heatmap(PivotHeatmapMode)` | `None` | Shades the value cells on a colour scale from the smallest value to the largest. `Table` draws one scale per data field, `Rows` one per row, `Columns` one per column. Totals and subtotals are not shaded, and a conditional formatting rule's colour wins on the cells it matches. The colour is the `--pt-heat-color` CSS variable. Not carried into the Excel export. |
+| `heatmap` | `Heatmap(PivotHeatmapMode)` | `None` | Shades the value cells on a colour scale from the smallest value to the largest. `Table` draws one scale per data field, `Rows` one per row, `Columns` one per column. Totals and subtotals are not shaded, and a conditional formatting rule's colour wins on the cells it matches. The colour is the `--pt-heat-color` CSS variable (a `#rrggbb` value, so the Excel export can reproduce it). The shades go into the Excel export too. In large-data mode each page carries the whole result's value ranges, so a value is shaded the same on every page. |
 | `context-menu` | `ContextMenu(bool)` | `true` | The right-click cell menu. |
 | `subtotals` | `Subtotals(bool)` | `true` | Subtotal rows. |
 | `column-subtotals` | `ColumnSubtotals(bool)` | `true` | Subtotal columns: a total column after each group of an outer column field. |
