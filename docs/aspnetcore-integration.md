@@ -1158,8 +1158,16 @@ C#: `PivotFieldBuilder.GroupInterval(PivotGroupInterval.Range).GroupSize(50000m)
 JavaScript: `{ groupInterval: "range", groupSize: 50000 }`; Core:
 `new PivotFieldRef("Amount", PivotGroupInterval.Range, 50000m)`, with
 `PivotFilter.BinSize` and `PivotEngine.DistinctValues(records, field, interval, binSize)`
-for filters and value lists. The width is set where the field is declared; the
-designer does not change it.
+for filters and value lists.
+
+The width is declared with the field, and the reader can change it in the field
+designer: a range level's settings carry a **Range width** box with **Apply** and,
+once changed, a way back to the declared width. The new width renames the level —
+`Amount:range50000` becomes `Amount:range10000` — and its caption, sort, position and
+value filter go with it; its filter values do not, since ranges of the old width match
+none of the new ones. A width another level of the same column already has is refused
+in the dialog. The change is kept with the view (`groupSizes` in a stored view or
+report file, by the level's declared name) and comes back with it.
 
 ### Pivot chart
 

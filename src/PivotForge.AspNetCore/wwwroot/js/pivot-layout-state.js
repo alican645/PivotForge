@@ -84,9 +84,19 @@
       // same way -- and are listed here because they are the reader's to edit,
       // to delete, and to carry in a saved view.
       this.userCalculated = new Set();
+      // A range width the reader picked, by the level's declared name. Changing
+      // it renames the level -- the width is part of its key, as it is of the
+      // engine's -- so the declared name is what a saved view remembers it by.
+      this.groupSizes = new Map();
+      // The declared width, by the level's declared name, for a level renamed.
+      this.declaredSizes = new Map();
+      // The level's declared name, for a level a width change renamed.
+      this.declaredNames = new Map();
       this.handlers = new Map();
 
       if (layout) {
+        // Before the placements, which name the levels as they were renamed.
+        this.adoptGroupSizes(layout.groupSizes);
         // Before the placements, which may seat them.
         this.adoptCalculatedFields(layout.calculatedFields);
         this.layout = this.adoptLayout(layout);
@@ -462,6 +472,117 @@
       });
     }
 
+    // A numeric range level's width, as declared or as the reader changed it.
+    isRange(name) {
+      return this.catalog.get(name)?.groupInterval === "range";
+    }
+
+    declaredGroupSize(name) {
+      this.field(name);
+      const declared = this.declaredNames.get(name) ?? name;
+      return this.declaredSizes.get(declared) ?? this.catalog.get(name).groupSize;
+    }
+
+    // Changes the width of a numeric range level and returns its new name. The
+    // width is part of the level's key, so every reference to the level --
+    // where it sits, its caption, its sort -- is carried over to the new name.
+    // Its filter values are not: they were ranges of the old width, which the
+    // new ranges no longer match, so the filter starts afresh.
+    setGroupSize(name, size) {
+      const field = this.field(name);
+      if (field.groupInterval !== "range") {
+        throw new Error(`Field "${name}" is not grouped into numeric ranges, so it has no range width.`);
+      }
+
+      const width = Number(size);
+      if (!Number.isFinite(width) || width <= 0) {
+        throw new Error(`The range width of "${name}" must be a number greater than zero.`);
+      }
+
+      const renamed = `${field.dataField}:range${String(width)}`;
+      if (renamed === name) {
+        return name;
+      }
+
+      if (this.catalog.has(renamed)) {
+        throw new Error(`"${field.dataField}" already has a level of ranges ${width} wide.`);
+      }
+
+      const declared = this.declaredNames.get(name) ?? name;
+      if (!this.declaredSizes.has(declared)) {
+        this.declaredSizes.set(declared, this.catalog.get(name).groupSize);
+      }
+
+      this.rename(name, renamed, { ...this.catalog.get(name), key: renamed, groupSize: width });
+
+      if (width === this.declaredSizes.get(declared)) {
+        this.groupSizes.delete(declared);
+        this.declaredNames.delete(renamed);
+      } else {
+        this.groupSizes.set(declared, width);
+        this.declaredNames.set(renamed, declared);
+      }
+
+      const filter = this.layout?.filters.find(entry => entry.field === renamed);
+      if (filter) {
+        filter.values = [];
+        delete filter.operator;
+      }
+
+      if (this.layout) {
+        this.emitChange();
+      }
+
+      return renamed;
+    }
+
+    // Moves every reference from one level name to another, keeping the
+    // catalog's order so the available list does not reshuffle.
+    rename(from, to, entry) {
+      this.catalog = new Map([...this.catalog].map(([key, field]) => (key === from ? [to, entry] : [key, field])));
+
+      for (const overrides of [this.captions, this.sortOrders, this.sortBys]) {
+        if (overrides.has(from)) {
+          overrides.set(to, overrides.get(from));
+          overrides.delete(from);
+        }
+      }
+
+      if (this.declaredNames.has(from)) {
+        this.declaredNames.delete(from);
+      }
+
+      if (!this.layout) {
+        return;
+      }
+
+      const swap = name => (name === from ? to : name);
+      this.layout.rows = this.layout.rows.map(swap);
+      this.layout.columns = this.layout.columns.map(swap);
+      this.layout.filters.forEach(filter => { filter.field = swap(filter.field); });
+    }
+
+    // Restores the widths getState() emitted, before the placements that name
+    // the renamed levels. A width that no longer fits -- the level is gone or
+    // no longer a range -- is skipped, as an unusable caption is.
+    adoptGroupSizes(groupSizes) {
+      if (!groupSizes || typeof groupSizes !== "object") {
+        return;
+      }
+
+      Object.entries(groupSizes).forEach(([name, size]) => {
+        if (!this.isRange(name)) {
+          return;
+        }
+
+        try {
+          this.setGroupSize(name, size);
+        } catch {
+          // Skipped, as above.
+        }
+      });
+    }
+
     // The caption as declared, ignoring any override. What "reset" restores and
     // what the rename box shows as its placeholder.
     declaredCaption(name) {
@@ -785,6 +906,7 @@
         captions: Object.fromEntries(this.captions),
         sortOrders: Object.fromEntries(this.sortOrders),
         sortBys: Object.fromEntries(this.sortBys),
+        groupSizes: Object.fromEntries(this.groupSizes),
         calculatedFields: [...this.userCalculated].map(name => ({
           name,
           caption: this.catalog.get(name).caption,

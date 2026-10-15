@@ -1268,3 +1268,84 @@ test("a format's zero text, negative style and compact switch are checked", () =
   assert.throws(() => state.setFormat("Amount", { zeroText: 0 }), /zeroText .* must be a string/);
   assert.throws(() => state.setFormat("Amount", { negative: "red" }), /Unknown format negative "red"/);
 });
+
+// ---- Range widths ------------------------------------------------------------
+
+const rangeCatalog = [
+  { dataField: "Amount", caption: "Tutar aralığı", area: "row", groupInterval: "range", groupSize: 50000 },
+  { dataField: "Region", caption: "Bölge", area: "column" },
+  { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+];
+
+test("a range width change renames the level everywhere it is referred to", () => {
+  const state = new PivotForge.PivotLayoutState(rangeCatalog);
+  state.setCaption("Amount:range50000", "Tutar dilimi");
+  state.setSortOrder("Amount:range50000", "Descending");
+  state.setFilterValues("Amount:range50000", ["0 – 50.000"]);
+  let changes = 0;
+  state.on("change", () => changes++);
+
+  const renamed = state.setGroupSize("Amount:range50000", 10000);
+
+  assert.equal(renamed, "Amount:range10000");
+  assert.equal(changes, 1);
+  const layout = state.getState();
+  assert.deepEqual(layout.rows, ["Amount:range10000"]);
+  assert.deepEqual(layout.captions, { "Amount:range10000": "Tutar dilimi" });
+  assert.deepEqual(layout.sortOrders, { "Amount:range10000": "Descending" });
+  // Ranges of the old width match none of the new ones.
+  assert.deepEqual(layout.filters, [{ field: "Amount:range10000", values: [], mode: "Include" }]);
+  assert.deepEqual(layout.groupSizes, { "Amount:range50000": 10000 });
+
+  const row = state.toFields().find(field => field.area === "row");
+  assert.equal(row.groupSize, 10000);
+  assert.equal(row.groupInterval, "range");
+  assert.equal(state.declaredGroupSize("Amount:range10000"), 50000);
+});
+
+test("going back to the declared width forgets the change", () => {
+  const state = new PivotForge.PivotLayoutState(rangeCatalog);
+  const renamed = state.setGroupSize("Amount:range50000", 10000);
+  assert.equal(state.setGroupSize(renamed, 20000), "Amount:range20000");
+  assert.deepEqual(state.getState().groupSizes, { "Amount:range50000": 20000 });
+
+  assert.equal(state.setGroupSize("Amount:range20000", 50000), "Amount:range50000");
+  assert.deepEqual(state.getState().groupSizes, {});
+  assert.deepEqual(state.getState().rows, ["Amount:range50000"]);
+});
+
+test("a width is refused on a level that is not a range, below zero, or already taken", () => {
+  const twoWidths = [
+    ...rangeCatalog,
+    { dataField: "Amount", caption: "Tutar (geniş)", area: "available", role: "dimension", groupInterval: "range", groupSize: 100000 }
+  ];
+  const state = new PivotForge.PivotLayoutState(twoWidths);
+  assert.throws(() => state.setGroupSize("Region", 10), /not grouped into numeric ranges/);
+  assert.throws(() => state.setGroupSize("Amount:range50000", 0), /greater than zero/);
+  assert.throws(() => state.setGroupSize("Amount:range50000", "x"), /greater than zero/);
+  assert.throws(() => state.setGroupSize("Amount:range50000", 100000), /already has a level of ranges 100000 wide/);
+  // Unchanged after every refusal.
+  assert.deepEqual(state.getState().rows, ["Amount:range50000"]);
+  assert.equal(state.setGroupSize("Amount:range50000", 50000), "Amount:range50000");
+});
+
+test("a saved view brings its widths back before the placements that name them", () => {
+  const first = new PivotForge.PivotLayoutState(rangeCatalog);
+  first.setGroupSize("Amount:range50000", 25000);
+  first.move("Amount:range25000", "column", 0);
+  const saved = first.getState();
+
+  const restored = new PivotForge.PivotLayoutState(rangeCatalog, saved);
+  assert.deepEqual(restored.getState().columns, ["Amount:range25000", "Region"]);
+  assert.equal(restored.toFields().find(field => field.dataField === "Amount" && field.area === "column").groupSize, 25000);
+
+  // A width for a level the catalog no longer has, or that is not a range, is skipped.
+  const lenient = new PivotForge.PivotLayoutState(rangeCatalog, {
+    rows: ["Amount:range50000"],
+    columns: ["Region"],
+    values: [{ field: "Amount", aggregation: "sum" }],
+    filters: [],
+    groupSizes: { "Gone:range5": 10, Region: 3, "Amount:range50000": -1 }
+  });
+  assert.deepEqual(lenient.getState().groupSizes, {});
+});
