@@ -241,6 +241,11 @@ Top-N.
       değil). Zaten yazılmış ama takvimin gösteremeyeceği bir argüman silinmek
       yerine metin kutusunda kalıyor
 
+- [x] Yalnızca ilgili değerler (`headerFilter.showRelevantValues`) — `show-relevant-values="true"`
+      ile değer seçici yalnızca **diğer** alanların filtrelerinden geçen kayıtların değerlerini
+      listeliyor. Alanın kendi filtresi listeyi hiç daraltmıyor; yoksa kaldırılan bir değer bir daha
+      seçilemezdi (bölümün başındaki ilke bu yüzden korunuyor). Daraltan filtreler de
+      `AllowedFields`'a tabi
 - [x] `hideEmptySummaryCells` — hiç veri düşmeyen satır ve sütunları düşürür.
       Sütun ekseni seviyelerinin çarpımı olduğu için seyrek veride hiç
       gerçekleşmemiş sütunlar kalır; satır ekseni yalnızca verinin gösterdiğini
@@ -298,6 +303,7 @@ Açık kalanlar:
 | Isı haritası (PivotTable.js'teki heatmap renderer) | ✅ `heatmap="Table\|Rows\|Columns"` |
 | Hücre içi çubuk grafik (PivotTable.js'teki table bar chart) | ✅ `value-bars="Table\|Rows\|Columns"` |
 | Pivot grafikleri (DevExtreme Chart bağlama, PivotTable.js chart renderer'ları) | ✅ `chart="Column\|StackedColumn\|Bar\|Line"` |
+| Ölçüler satır ekseninde (`dataFieldArea: "row"`) | ✅ `values-position="Rows"` |
 
 - [x] Ağaç düzeni satır başlıkları — `layout-mode="Tree"`
 - [x] Toplamın konumu — `totals-position="Before|After"`
@@ -313,6 +319,10 @@ Açık kalanlar:
 - [x] Kenarlıklar — `show-borders`: `true` dış çerçeve, `false` gövdede çizgi yok
 - [x] `word-wrap` — alan başına, bkz. Bölüm 1
 - [x] Tam ekran — araç çubuğunda; sayfa içinde (Fullscreen API değil), Escape ile çıkılıyor
+- [x] Ölçüler satır ekseninde — `values-position="Rows"`: her pivot satırı (ara toplamlar ve genel
+      toplam dahil) ölçü başına bir satıra bölünüyor, satır başlıkları bloğu kaplıyor, "Değerler"
+      sütunu ölçüyü adlandırıyor. Yalnızca renderer'da; istek ve motor değişmedi. Tasarımcıda
+      Σ Değerler çipini sürükleyerek eksen değiştirme ve görünümle saklama henüz yok
 - [ ] RTL desteği
 
 ---
@@ -331,11 +341,17 @@ DevExpress'in alan menüsüne yaklaştı.
 | Ayarlar modali (ad, konum, özet, showAs, biçim, kaldır) | ✅ |
 | Alan seçicide klasörleme (`displayFolder`) | ✅ |
 | Bağımsız (standalone) alan seçici | ❌ |
+| Ertelenmiş uygulama (`applyChangesMode: "onDemand"`) | ✅ `defer-layout-update` |
 | Tasarımcıdan sıralama paneli | ✅ | çip ayarlarında "Sıralama yönü" ve "Sıralama ölçütü" |
 | Tasarımcıdan filtre seçimi | ✅ | çipteki `▼` düğmesi `PivotFilterPicker`'ı açar |
 
 - [x] Sıralama paneli — tasarımcıdan `sortBy` sürmek: satır/sütun çipinin ayarlarında yön ve ölçüt (kendi etiketleri ya da bir değer); seçim başlık sıralamasını geri alıyor, kayıtlı görünümde saklanıyor
 - [x] `display-folder` ile alan gruplama — tek seviye; arama bütün klasörleri açıyor
+- [x] Ertelenmiş uygulama — `defer-layout-update`: Excel'in "Düzen güncellemesini ertele"
+      kutusu ve **Güncelle** düğmesi. DevExtreme'in popup'taki Tamam/İptal modeli yerine bu
+      seçildi: tasarımcı gömülü bir panel, ve İptal düzen durumunu geri sarmayı gerektirirdi.
+      Bekleyen düzenlemeler tek istekte gidiyor; değer filtresinin kendi Uygula düğmesi var,
+      o ertelenmiyor
 - [ ] Alan seçiciyi ayrı bileşen olarak kullanabilme
 
 ---
@@ -346,14 +362,18 @@ DevExpress'in alan menüsüne yaklaştı.
 |---|---|
 | Gerçek `.xlsx` (OOXML) | ✅ |
 | CSV dışa aktarma | ✅ |
-| Dışa aktarılan hücreyi özelleştirme (`onExporting`) | ❌ |
+| Dışa aktarılan hücreyi özelleştirme (`onExporting`) | ✅ `on-exporting` |
 | PDF / yazdırma | ✅ `widget.print()` + `@media print`; PDF tarayıcının "PDF olarak kaydet"i ile |
 
 - [x] CSV dışa aktarma — `widget.exportToCsv()` + `PivotForge.download()`.
       Excel'in gönderdiği aynı dışa aktarma modelinden üretiliyor, yani ikisi
       ayrışamıyor; birleşik hücreler açılıyor ve her satır en genişe göre
       dolduruluyor. `delimiter` ve `values: "raw"` seçenekleri var.
-- [ ] Dışa aktarma öncesi hücre özelleştirme kancası
+- [x] Dışa aktarma öncesi hücre özelleştirme kancası — `exporting` olayı (`on-exporting`):
+      DevExtreme'in `onExporting` + `customizeCell` ikilisi tek olayda. Her hücre ne
+      gösterdiğini söyleyen bir `source` taşıyor (sunucuya gitmeden ayıklanıyor);
+      hücre yerinde değiştiriliyor, dosya adı değişiyor ya da `cancel` ile iptal.
+      Excel hücresine `fontColor` ve `bold` eklendi (negatifi kırmızı yazmak için)
 - [x] Araç çubuğu — `toolbar="true"` / `toolbar-items`: Excel, CSV, Yazdır, Tümünü aç/kapat
 - [x] Yazdırma görünümü — `widget.print({ title, subtitle })`, `PivotForge.print(element)`
 

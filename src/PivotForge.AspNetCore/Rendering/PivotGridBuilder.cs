@@ -115,6 +115,17 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder AllowCalculatedFields(bool allow) =>
         Set("allowCalculatedFields", allow);
 
+    /// <summary>Shows Excel's "Defer layout update" box on the field designer.</summary>
+    /// <remarks>
+    /// While the box is ticked a designer edit changes only the panel; the grid is refreshed once,
+    /// with every held-back edit, when the reader presses Update or clears the box. The reader can
+    /// tick and clear it; <paramref name="defer"/> is how it starts. Left undeclared, the box is not
+    /// shown and every edit applies at once. Only visible where a field designer is attached.
+    /// </remarks>
+    /// <param name="defer">Whether the box starts ticked.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder DeferLayoutUpdate(bool defer) => Set("deferLayoutUpdate", defer);
+
     /// <summary>Shows or hides the "Loading..." panel drawn over the grid while data is requested.</summary>
     /// <remarks>
     /// On by default. The panel covers the first load and every reload a sort, filter or
@@ -347,6 +358,12 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder TotalsPosition(PivotTotalsPosition position) =>
         SetRenderer("totalsPosition", position == PivotTotalsPosition.After ? "after" : "before");
 
+    /// <summary>Sets which axis several values are drawn along.</summary>
+    /// <param name="position">Columns (the default) or rows.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ValuesPosition(PivotValuesPosition position) =>
+        SetRenderer("valuesPosition", position == PivotValuesPosition.Rows ? "rows" : "columns");
+
     /// <summary>Shades the value cells on a colour scale, from the smallest value to the largest.</summary>
     /// <remarks>
     /// Each data field is its own scale; totals and subtotals are not shaded. A conditional
@@ -446,6 +463,15 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <param name="hide">Whether empty rows and columns are dropped.</param>
     /// <returns>This builder.</returns>
     public PivotGridBuilder HideEmptySummaryCells(bool hide) => Set("hideEmptySummaryCells", hide);
+
+    /// <summary>Lists in a filter picker only the values the other fields' filters leave.</summary>
+    /// <remarks>
+    /// The field's own filter never narrows its list, so a value unchecked there stays on the list
+    /// to be checked again. Off by default, as DevExtreme's <c>showRelevantValues</c> is.
+    /// </remarks>
+    /// <param name="show">Whether the picker lists only the relevant values.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ShowRelevantValues(bool show) => Set("showRelevantValues", show);
 
     /// <summary>Sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
@@ -548,6 +574,17 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
     public PivotGridBuilder OnViewStateChanged(string handler) =>
         SetEvent("viewStateChanged", handler);
+
+    /// <summary>Names a page function called before an Excel or CSV file is written.</summary>
+    /// <remarks>
+    /// The function receives <c>{ format, document, fileName, cancel }</c>: it may change any cell of
+    /// <c>document</c> in place (each carries a <c>source</c> describing what it shows), rename the
+    /// file, or set <c>cancel</c> to stop the export.
+    /// </remarks>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnExporting(string handler) => SetEvent("exporting", handler);
 
     /// <summary>Restricts a field to the given values before aggregation.</summary>
     /// <param name="field">The source field to filter.</param>

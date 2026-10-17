@@ -797,6 +797,30 @@ public sealed class PivotEngineTests
     }
 
     [Fact]
+    public void DistinctValues_ListsOnlyTheValuesOfRecordsPassingTheFilters()
+    {
+        var orders = new[]
+        {
+            new Order("East", 2025, "A", 1m),
+            new Order("West", 2026, "A", 1m),
+            new Order("North", 2026, "B", 1m)
+        };
+        var engine = new PivotEngine();
+
+        Assert.Equal(
+            ["North", "West"],
+            engine.DistinctValues(orders, "Region", [new PivotFilter("Year", ["2026"])]));
+        // Exclude and operators narrow the list exactly as they narrow the pivot.
+        Assert.Equal(
+            ["East", "West"],
+            engine.DistinctValues(orders, "Region", [new PivotFilter("Category", ["B"], PivotFilterMode.Exclude)]));
+        // No filters is the unfiltered list.
+        Assert.Equal(["East", "North", "West"], engine.DistinctValues(orders, "Region", []));
+        Assert.Throws<PivotFieldNotFoundException>(
+            () => engine.DistinctValues(orders, "Region", [new PivotFilter("Missing", ["x"])]));
+    }
+
+    [Fact]
     public void DistinctValues_OrdersNumbersByValueRatherThanText()
     {
         var orders = new[]

@@ -13,6 +13,7 @@ internal interface IPivotForgeDataExecutor
         string field,
         PivotGroupInterval interval,
         decimal? binSize,
+        IReadOnlyList<PivotFilter> filters,
         int? sourceRowCount,
         CancellationToken cancellationToken);
 

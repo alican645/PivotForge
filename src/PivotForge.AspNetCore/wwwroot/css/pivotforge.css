@@ -1120,6 +1120,56 @@ select {
   margin-bottom: 0;
 }
 
+/* Excel's "Defer layout update": the box on the left, Update on the right,
+   wrapping under each other when the panel is too narrow for both. */
+.pivot-designer-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0 2px;
+  border-top: 1px solid var(--pt-border);
+}
+
+.pivot-designer-footer__defer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pt-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pivot-designer-footer__update {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--pt-accent);
+  border-radius: 3px;
+  background: var(--pt-accent);
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pivot-designer-footer__update:hover:not(:disabled) {
+  background: var(--pt-accent-strong);
+}
+
+.pivot-designer-footer__update:focus-visible {
+  outline: 2px solid var(--pt-selection-ring);
+  outline-offset: 1px;
+}
+
+/* Nothing held back: there is nothing for the button to do. */
+.pivot-designer-footer__update:disabled {
+  border-color: var(--pt-border);
+  background: var(--pt-panel-soft);
+  color: var(--pt-muted);
+  cursor: default;
+}
+
 .pivot-zone {
   display: grid;
   gap: 0;
@@ -1960,6 +2010,22 @@ select {
 
 .pivot-table__table.is-compact .pivot-table__row-header.is-repeated {
   color: transparent;
+}
+
+/* A rows layout's values column: it names which value a row holds, so it reads
+   as a label beside the row header rather than as a header of its own. */
+.pivot-table__measure-row-header {
+  min-width: 96px !important;
+  color: var(--pt-muted);
+  font-weight: 500;
+}
+
+/* A header stretched over its value rows labels the block from its top line,
+   as Excel does, whether it is a detail or a total header. */
+.pivot-table__row-header[rowspan]:not([rowspan="1"]),
+.pivot-table__subtotal-header[rowspan]:not([rowspan="1"]),
+.pivot-table__row-total-label[rowspan]:not([rowspan="1"]) {
+  vertical-align: top;
 }
 
 .pivot-table__corner[data-sticky-column]:not([data-sticky-column="0"]),

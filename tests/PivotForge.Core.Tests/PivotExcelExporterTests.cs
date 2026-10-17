@@ -118,6 +118,51 @@ public sealed class PivotExcelExporterTests
     }
 
     [Fact]
+    public void Export_WritesFontColorsAndBoldOverrides()
+    {
+        var document = new PivotExcelDocument
+        {
+            Rows =
+            [
+                new PivotExcelRow
+                {
+                    Cells =
+                    [
+                        new PivotExcelCell { Number = -1, FontColor = "#dc2626" },
+                        new PivotExcelCell { Number = -2, FontColor = "DC2626" },
+                        new PivotExcelCell { Number = 3, Bold = true },
+                        new PivotExcelCell { Text = "Toplam", Role = PivotExcelCellRole.Total, Bold = false },
+                        new PivotExcelCell { Number = 4, FontColor = "red" },
+                        new PivotExcelCell { Number = 5, FontColor = "#DC2626", Bold = true }
+                    ]
+                }
+            ]
+        };
+
+        using var archive = new ZipArchive(new MemoryStream(new PivotExcelExporter().Export(document)), ZipArchiveMode.Read);
+        var styles = ReadXml(archive, "xl/styles.xml");
+        var fonts = styles.Descendants(Spreadsheet + "font").ToArray();
+        var formats = styles.Descendants(Spreadsheet + "cellXfs").Single().Elements(Spreadsheet + "xf").ToArray();
+        var cells = ReadXml(archive, "xl/worksheets/sheet1.xml").Descendants(Spreadsheet + "c")
+            .Where(cell => cell.Attribute("r")!.Value.EndsWith('4'))
+            .ToArray();
+
+        (string? Color, bool Bold) FontOf(XElement cell)
+        {
+            var format = formats[int.Parse(cell.Attribute("s")!.Value)];
+            var font = fonts[int.Parse(format.Attribute("fontId")!.Value)];
+            return (font.Element(Spreadsheet + "color")?.Attribute("rgb")?.Value, font.Element(Spreadsheet + "b") is not null);
+        }
+
+        Assert.Equal(fonts.Length, int.Parse(styles.Descendants(Spreadsheet + "fonts").Single().Attribute("count")!.Value));
+        // One font for both spellings; Bold overrides the role either way; a non-hex colour is ignored.
+        Assert.Equal(
+            [("FFDC2626", false), ("FFDC2626", false), (null, true), (null, false), (null, false), ("FFDC2626", true)],
+            cells.Select(FontOf));
+        Assert.Equal(4, fonts.Length);
+    }
+
+    [Fact]
     public void Document_UsesLanguageNeutralPackageDefaults()
     {
         var document = new PivotExcelDocument();

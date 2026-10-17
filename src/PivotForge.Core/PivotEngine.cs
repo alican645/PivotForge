@@ -301,19 +301,61 @@ public sealed class PivotEngine
             binSize);
     }
 
+    /// <summary>Returns the distinct display values of a field among the records that pass the
+    /// given filters.</summary>
+    /// <typeparam name="T">The source record type.</typeparam>
+    /// <param name="records">The source records.</param>
+    /// <param name="field">The source field name.</param>
+    /// <param name="filters">The filters a record has to pass for its value to be listed. A
+    /// picker that narrows its list this way passes the <em>other</em> fields' filters, never the
+    /// field's own: a value that filter excluded would otherwise disappear and could never be
+    /// selected again.</param>
+    /// <param name="interval">The date interval to collapse the values to.</param>
+    /// <param name="binSize">The range width when <paramref name="interval"/> is
+    /// <see cref="PivotGroupInterval.Range"/>.</param>
+    /// <returns>The distinct values the filtered records hold, in value order.</returns>
+    public IReadOnlyList<string?> DistinctValues<T>(
+        IEnumerable<T> records,
+        string field,
+        IReadOnlyList<PivotFilter> filters,
+        PivotGroupInterval interval = PivotGroupInterval.None,
+        decimal? binSize = null)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(filters);
+
+        return DistinctValuesCore(
+            records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture, interval, binSize, filters);
+    }
+
     private static IReadOnlyList<string?> DistinctValuesCore(
         IEnumerable<object> records,
         string field,
         IRecordReader reader,
         CultureInfo culture,
         PivotGroupInterval interval = PivotGroupInterval.None,
-        decimal? binSize = null)
+        decimal? binSize = null,
+        IReadOnlyList<PivotFilter>? filters = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
 
         if (!reader.HasField(field))
         {
             throw new PivotFieldNotFoundException(field);
+        }
+
+        if (filters is { Count: > 0 })
+        {
+            foreach (var filter in filters)
+            {
+                if (!reader.HasField(filter.Field))
+                {
+                    throw new PivotFieldNotFoundException(filter.Field);
+                }
+            }
+
+            var compiled = CompileFilters(filters);
+            records = records.Where(record => MatchesFilters(record, compiled, reader, culture));
         }
 
         // Keyed by the same string the filter compares against, so whatever a

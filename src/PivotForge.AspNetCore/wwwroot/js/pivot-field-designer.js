@@ -22,6 +22,9 @@
     format: "Format",
     settings: "Field settings",
     filterValues: "Filter values",
+    // Excel's wording for holding edits back until the reader asks for them.
+    deferUpdate: "Defer layout update",
+    update: "Update",
     // {0} is replaced with the number of listed values.
     filterCount: "({0})",
     // The same count means the opposite thing under an excluding filter, so it
@@ -371,7 +374,91 @@
       // Built on first use, so a designer whose filter zone is never opened
       // never creates the picker's overlay. A host may supply its own.
       this.filterPicker = options.filterPicker ?? null;
+      // Excel's "Defer layout update": null keeps the box off the panel and
+      // every edit applied at once, as before the option existed; true or
+      // false shows the box, ticked or not. While it is ticked an edit only
+      // changes the panel, and what it would have sent is merged into
+      // pendingUpdate until Update is pressed or the box is cleared.
+      this.deferUpdates = typeof options.deferUpdates === "boolean" ? options.deferUpdates : null;
+      this.pendingUpdate = null;
       this.render();
+    }
+
+    // Every edit that would refresh the grid goes through here. Merged rather
+    // than queued: each payload is the designer's whole request state, so the
+    // newest one carries every earlier edit, and a sort reset one of them
+    // asked for (rowSort: null) survives a later edit that did not ask again.
+    async push(update) {
+      if (this.deferUpdates === true) {
+        this.pendingUpdate = { ...(this.pendingUpdate ?? {}), ...update };
+        this.renderFooter();
+        return;
+      }
+
+      await this.widget.update(update);
+    }
+
+    async applyPending() {
+      const pending = this.pendingUpdate;
+      this.pendingUpdate = null;
+      this.renderFooter();
+
+      if (pending) {
+        await this.widget.update(pending);
+      }
+    }
+
+    // Clearing the box applies what it held back, as it does in Excel: the
+    // reader asked for edits to take effect, and these are edits.
+    async setDeferUpdates(defer) {
+      this.deferUpdates = Boolean(defer);
+      if (!this.deferUpdates) {
+        await this.applyPending();
+      } else {
+        this.renderFooter();
+      }
+    }
+
+    createFooter() {
+      const document = root.document;
+      const footer = document.createElement("div");
+      footer.className = "pivot-designer-footer";
+
+      const label = document.createElement("label");
+      label.className = "pivot-designer-footer__defer";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.dataset.action = "defer-update";
+      box.addEventListener("change", () => this.setDeferUpdates(box.checked));
+      const text = document.createElement("span");
+      text.textContent = this.labels.deferUpdate;
+      label.appendChild(box);
+      label.appendChild(text);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "pivot-designer-footer__update";
+      button.dataset.action = "apply-update";
+      button.textContent = this.labels.update;
+      button.addEventListener("click", () => this.applyPending());
+
+      this.footerBox = box;
+      this.footerButton = button;
+      this.renderFooter();
+      footer.appendChild(label);
+      footer.appendChild(button);
+      return footer;
+    }
+
+    // Updated in place, so holding an edit back does not rebuild the chips
+    // the reader is in the middle of arranging.
+    renderFooter() {
+      if (!this.footerButton) {
+        return;
+      }
+
+      this.footerBox.checked = this.deferUpdates === true;
+      this.footerButton.disabled = !this.pendingUpdate;
     }
 
     // aria-labelledby needs an id, and two designers on one page must not both
@@ -1321,7 +1408,7 @@
       this.widget.renameField?.(name, renamed);
       this.widget.saveState?.();
       this.render();
-      await this.widget.update(this.state.toRequestState());
+      await this.push(this.state.toRequestState());
     }
 
     // "Tutar (Sum)" -- the caption alone would not tell two summaries of one
@@ -1340,7 +1427,7 @@
     async applySort(name, area, sort) {
       this.state.setSort(name, sort);
       this.render();
-      await this.widget.update({
+      await this.push({
         ...this.state.toRequestState(),
         ...(area === "row" ? { rowSort: null } : { columnSort: null })
       });
@@ -2138,7 +2225,7 @@
 
       this.closeSettings();
       this.render();
-      await this.widget.update(this.state.toRequestState());
+      await this.push(this.state.toRequestState());
     }
 
     // In the reader's language where the locale words the code, and in the
@@ -2425,7 +2512,8 @@
 
       ZONES.forEach(area => grid.appendChild(this.createZone(area)));
 
-      this.host.replaceChildren(this.createAvailable(), grid);
+      this.footer = this.deferUpdates === null ? null : this.createFooter();
+      this.host.replaceChildren(...[this.createAvailable(), grid, this.footer].filter(Boolean));
       this.refreshTabStops();
 
       // Only give focus back if the designer had it: a mutation driven from
@@ -2464,7 +2552,7 @@
       // A refused mutation must not reach the widget, so the state runs first.
       mutation();
       this.render();
-      await this.widget.update(this.state.toRequestState());
+      await this.push(this.state.toRequestState());
     }
 
     dispose() {

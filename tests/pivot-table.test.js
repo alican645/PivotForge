@@ -1224,3 +1224,24 @@ test("value bars are set on the value cells and cleared when switched off", () =
   assert.deepEqual(cells.map(cell => cell.bar()), [[undefined, undefined], [undefined, undefined]]);
   assert.equal(cells.some(cell => cell.classList.has("has-value-bar")), false);
 });
+
+test("a rows layout counts its values column before the data columns", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const values = [{ key: "a", showGrandTotals: false }, { key: "b" }];
+  const columnHeaders = [["2025"], ["2026"]];
+
+  renderer.measureColumns = 0;
+  assert.equal(renderer.dataStart(2), 2);
+  // Two row levels, two columns of two values, and one total: "a" gave its own up.
+  assert.equal(renderer.columnCount(2, columnHeaders, values, {}), 7);
+
+  renderer.measureColumns = 1;
+  const slot = renderer.createValueSlot(values);
+  assert.equal(renderer.dataStart(2), 3);
+  // The values column, then one slot per column and one total.
+  assert.equal(renderer.columnCount(2, columnHeaders, [slot], {}), 6);
+  // The slot keeps the total column while any value keeps its total, and names no value.
+  assert.equal(slot.showGrandTotals, true);
+  assert.equal(slot.label, "");
+  assert.equal(slot.allowSorting, false);
+});

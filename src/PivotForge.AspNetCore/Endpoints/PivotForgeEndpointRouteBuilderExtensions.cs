@@ -217,7 +217,8 @@ public static class PivotForgeEndpointRouteBuilderExtensions
     {
         var options = optionsAccessor.Value;
 
-        if (!options.Allows([request.Field]))
+        // The narrowing filters read source fields too, so they answer to the same list.
+        if (!options.Allows([request.Field, .. request.Filters.Select(filter => filter.Field)]))
         {
             return FieldNotAllowed();
         }
@@ -230,6 +231,7 @@ public static class PivotForgeEndpointRouteBuilderExtensions
                 request.Field,
                 request.Interval,
                 request.BinSize,
+                request.Filters,
                 sourceRowCount,
                 cancellationToken);
             var visibleValues = values.Take(options.FieldValueLimit).ToArray();

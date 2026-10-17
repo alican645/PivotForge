@@ -16,6 +16,41 @@ change will require a new major version.
 
 ### Added
 
+- `values-position="Rows"` / `ValuesPosition(PivotValuesPosition.Rows)` /
+  `rendererOptions.valuesPosition: "rows"` draws several values down the rows
+  instead of across the columns, as DevExtreme's `dataFieldArea: "row"`
+  does: each pivot row (its subtotals and the grand total too) becomes one
+  row per value, the row headers span the block, and a **Values** column
+  (`texts.valuesHeading`, "Değerler" in Turkish) names each row. The column
+  axis carries a single value slot, with no value-header row. A value giving
+  up its grand total leaves a blank so the rows stay aligned. With one value
+  nothing changes. Renderer only; the request and the engine are untouched.
+  (AspNetCore)
+- An `exporting` event (`on-exporting` / `OnExporting(string)` /
+  `events: { exporting }`, DOM `pivotforge:exporting`) fires before an Excel
+  or CSV file is made. The handler gets `{ format, document, fileName, cancel }`:
+  it changes cells in place, each of which carries a `source` (`area`,
+  `rowType`, `rowPath`, `columnPath`, `valueKey`, `value`) that is stripped
+  before the document is posted; it renames the file; or it cancels, and the
+  export method returns `null`. DevExtreme's `onExporting` and `customizeCell`
+  in one place. (AspNetCore)
+- `defer-layout-update="true|false"` / `DeferLayoutUpdate(bool)` /
+  `deferLayoutUpdate`: Excel's **Defer layout update** box and **Update**
+  button at the foot of the field designer (DevExtreme's
+  `applyChangesMode: "onDemand"`). While ticked, designer edits change only
+  the panel and reach the grid together, in one request, on Update or when
+  the box is cleared. Undeclared, the panel is as before. In the Turkish
+  locale: "Düzen güncellemesini ertele" / "Güncelle". (AspNetCore)
+- `show-relevant-values="true"` / `ShowRelevantValues(bool)` /
+  `showRelevantValues: true`: a filter picker lists only the values the other
+  fields' filters leave, as DevExtreme's `headerFilter.showRelevantValues`
+  does. The field's own filter never narrows its list. `/field-values` takes
+  an optional `filters` list (checked against `AllowedFields`), and
+  `PivotEngine.DistinctValues(records, field, filters, ...)` is the new
+  overload behind it. (Core, AspNetCore)
+- `PivotExcelCell.FontColor` (`#RRGGBB`) and `PivotExcelCell.Bold` — a text
+  colour and a weight that overrides the role's, so a negative value can be
+  written red. (Core)
 - The field designer changes a numeric range's width: a range level's settings
   carry a **Range width** box (`Aralık genişliği`) with Apply and a way back
   to the declared width. The level is renamed with its width, keeping its

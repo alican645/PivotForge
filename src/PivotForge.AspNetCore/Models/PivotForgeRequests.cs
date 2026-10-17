@@ -74,7 +74,9 @@ public sealed class PivotForgePageRequest
 /// <summary>Requests the distinct values a filter on one field can accept.</summary>
 /// <remarks>This carries no pivot definition on purpose: a filter picker lists every value the
 /// field holds, so unchecking one and reopening the picker still shows the rest. Narrowing the
-/// list by the filters already applied would make previously excluded values unreachable.</remarks>
+/// list by the field's own filter would make previously excluded values unreachable; narrowing
+/// it by the <em>other</em> fields' filters (<see cref="Filters"/>) does not, and is what a grid
+/// asks for when it shows only relevant values.</remarks>
 public sealed class PivotForgeFieldValuesRequest
 {
     /// <summary>Gets the source field whose values are listed.</summary>
@@ -87,6 +89,10 @@ public sealed class PivotForgeFieldValuesRequest
 
     /// <summary>Gets the range width when <see cref="Interval"/> is <see cref="PivotGroupInterval.Range"/>.</summary>
     public decimal? BinSize { get; init; }
+
+    /// <summary>Gets the filters a record has to pass for its value to be listed.</summary>
+    /// <remarks>Empty lists every value the field holds.</remarks>
+    public IReadOnlyList<PivotFilter> Filters { get; init; } = [];
 
     /// <summary>Gets the source-row hint passed to the configured data provider.</summary>
     public int SourceRowCount { get; init; } = 100_000;

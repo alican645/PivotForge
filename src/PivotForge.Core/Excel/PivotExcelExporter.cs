@@ -106,14 +106,36 @@ public sealed class PivotExcelExporter
             .Select((fill, index) => (Fill: fill, Id: FixedFillColors.Length + index))
             .ToDictionary(item => item.Fill, item => item.Id, StringComparer.Ordinal);
 
-        return new StyleCatalog(keys, numberFormats, customFills);
+        // After the two fixed fonts, so a cell that only keeps its role's weight
+        // shares them instead of minting a copy.
+        var customFonts = keys
+            .Where(key => key.FontColor is not null)
+            .Select(key => (Bold: IsBold(key), Color: key.FontColor!))
+            .Distinct()
+            .Select((font, index) => (Font: font, Id: FixedFontCount + index))
+            .ToDictionary(item => item.Font, item => item.Id);
+
+        return new StyleCatalog(keys, numberFormats, customFills, customFonts);
     }
 
     private static StyleKey StyleKeyOf(PivotExcelCell cell) => new(
         cell.Role.ToString(),
         cell.Number is null ? null : cell.NumberFormat ?? "#,##0.00",
         cell.Highlight,
-        cell.Highlight == PivotExcelHighlight.None ? NormalizeFill(cell.FillColor) : null);
+        cell.Highlight == PivotExcelHighlight.None ? NormalizeFill(cell.FillColor) : null,
+        NormalizeFill(cell.FontColor),
+        cell.Bold);
+
+    private static bool IsBold(StyleKey key) => key.Bold ?? key.Role is "title"
+        or nameof(PivotExcelCellRole.Header)
+        or nameof(PivotExcelCellRole.RowHeader)
+        or nameof(PivotExcelCellRole.Subtotal)
+        or nameof(PivotExcelCellRole.Total)
+        or nameof(PivotExcelCellRole.GrandTotal);
+
+    private static int ResolveFontId(StyleKey key, StyleCatalog catalog) => key.FontColor is { } color
+        ? catalog.CustomFonts[(IsBold(key), color)]
+        : IsBold(key) ? 1 : 0;
 
     // Six hex digits, upper-cased so "#f97316" and "F97316" share one fill.
     private static string? NormalizeFill(string? color)
@@ -289,7 +311,7 @@ public sealed class PivotExcelExporter
         }
         writer.WriteEndElement();
 
-        WriteFonts(writer);
+        WriteFonts(writer, catalog.CustomFonts);
         WriteFills(writer, catalog.CustomFills);
         WriteBorders(writer);
 
@@ -303,7 +325,7 @@ public sealed class PivotExcelExporter
         foreach (var key in catalog.Keys)
         {
             var role = key.Role;
-            var fontId = role is "title" or nameof(PivotExcelCellRole.Header) or nameof(PivotExcelCellRole.RowHeader) or nameof(PivotExcelCellRole.Subtotal) or nameof(PivotExcelCellRole.Total) or nameof(PivotExcelCellRole.GrandTotal) ? 1 : 0;
+            var fontId = ResolveFontId(key, catalog);
             var fillId = key.Fill is { } fill ? catalog.CustomFills[fill] : ResolveFillId(key);
             var numberFormatId = key.NumberFormat is null ? 0 : catalog.NumberFormats[key.NumberFormat];
             var horizontal = role is nameof(PivotExcelCellRole.Value) or nameof(PivotExcelCellRole.Subtotal) or nameof(PivotExcelCellRole.Total) or nameof(PivotExcelCellRole.GrandTotal) ? "right" : "left";
@@ -348,22 +370,35 @@ public sealed class PivotExcelExporter
         };
     }
 
-    private static void WriteFonts(XmlWriter writer)
+    // Indexed by font id: 0 regular, 1 bold, then the custom fonts in id order.
+    private const int FixedFontCount = 2;
+
+    private static void WriteFonts(XmlWriter writer, IReadOnlyDictionary<(bool Bold, string Color), int> customFonts)
     {
         writer.WriteStartElement("fonts");
-        writer.WriteAttributeString("count", "2");
-        WriteFont(writer, false);
-        WriteFont(writer, true);
+        writer.WriteAttributeString("count", (FixedFontCount + customFonts.Count).ToString(CultureInfo.InvariantCulture));
+        WriteFont(writer, false, null);
+        WriteFont(writer, true, null);
+        foreach (var (font, _) in customFonts.OrderBy(item => item.Value))
+        {
+            WriteFont(writer, font.Bold, font.Color);
+        }
         writer.WriteEndElement();
     }
 
-    private static void WriteFont(XmlWriter writer, bool bold)
+    private static void WriteFont(XmlWriter writer, bool bold, string? color)
     {
         writer.WriteStartElement("font");
         if (bold) writer.WriteElementString("b", "");
         writer.WriteStartElement("sz");
         writer.WriteAttributeString("val", bold ? "11" : "10");
         writer.WriteEndElement();
+        if (color is not null)
+        {
+            writer.WriteStartElement("color");
+            writer.WriteAttributeString("rgb", $"FF{color}");
+            writer.WriteEndElement();
+        }
         writer.WriteStartElement("name");
         writer.WriteAttributeString("val", "Aptos");
         writer.WriteEndElement();
@@ -568,11 +603,18 @@ public sealed class PivotExcelExporter
 
     private sealed record CellPlacement(int Row, int Column, int RowSpan, int ColumnSpan, PivotExcelCell Cell);
     private sealed record SheetLayout(IReadOnlyList<CellPlacement> Placements, int MaxColumn);
-    private sealed record StyleKey(string Role, string? NumberFormat, PivotExcelHighlight Highlight, string? Fill);
+    private sealed record StyleKey(
+        string Role,
+        string? NumberFormat,
+        PivotExcelHighlight Highlight,
+        string? Fill,
+        string? FontColor = null,
+        bool? Bold = null);
     private sealed record StyleCatalog(
         IReadOnlyList<StyleKey> Keys,
         IReadOnlyDictionary<string, int> NumberFormats,
-        IReadOnlyDictionary<string, int> CustomFills)
+        IReadOnlyDictionary<string, int> CustomFills,
+        IReadOnlyDictionary<(bool Bold, string Color), int> CustomFonts)
     {
         public int IndexOf(StyleKey key)
         {

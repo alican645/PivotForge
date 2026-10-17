@@ -65,6 +65,14 @@ public sealed class PivotExcelCell
     /// screen. A value that is not six hexadecimal digits (with or without the <c>#</c>) is ignored.
     /// </remarks>
     public string? FillColor { get; init; }
+
+    /// <summary>Gets an optional text colour as <c>#RRGGBB</c>, such as red for a negative value.</summary>
+    /// <remarks>A value that is not six hexadecimal digits (with or without the <c>#</c>) is ignored.</remarks>
+    public string? FontColor { get; init; }
+
+    /// <summary>Gets whether the text is bold; <see langword="null"/> keeps the weight the role gives it.</summary>
+    /// <remarks>Headers and totals are bold and values are not unless this says otherwise.</remarks>
+    public bool? Bold { get; init; }
 }
 
 /// <summary>Specifies the semantic role used to style an exported cell.</summary>

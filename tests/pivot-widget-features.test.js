@@ -100,6 +100,45 @@ test("fieldValues asks the endpoint for one field and nothing else", async () =>
   widget.dispose();
 });
 
+test("with showRelevantValues, fieldValues sends the other fields' filters but never the field's own", async () => {
+  const { widget, calls } = createWidget(
+    () => okJson({ field: "urun", values: [], totalCount: 0, truncated: false, limit: 1000 }),
+    {
+      showRelevantValues: true,
+      fields: [
+        ...fields,
+        { caption: "Bölge", dataField: "bolge", area: "filter" }
+      ],
+      filters: [
+        { field: "urun", values: ["Lokum"] },
+        { field: "bolge", values: ["Ege"] }
+      ]
+    });
+
+  await widget.fieldValues("urun");
+  await widget.fieldValues("bolge");
+
+  assert.deepEqual(calls[0].body.filters.map(filter => [filter.field, filter.values]), [["bolge", ["Ege"]]]);
+  assert.deepEqual(calls[1].body.filters.map(filter => [filter.field, filter.values]), [["urun", ["Lokum"]]]);
+  widget.dispose();
+});
+
+test("without showRelevantValues, or with no other filter, fieldValues sends no filters", async () => {
+  const off = createWidget(() => okJson({ values: [] }), { filters: [{ field: "urun", values: ["Lokum"] }] });
+  const onlyOwn = createWidget(() => okJson({ values: [] }), {
+    showRelevantValues: true,
+    filters: [{ field: "urun", values: ["Lokum"] }]
+  });
+
+  await off.widget.fieldValues("tutar");
+  await onlyOwn.widget.fieldValues("urun");
+
+  assert.equal(off.calls[0].body.filters, undefined);
+  assert.equal(onlyOwn.calls[0].body.filters, undefined);
+  off.widget.dispose();
+  onlyOwn.widget.dispose();
+});
+
 test("fieldValues is rejected when filtering is disabled", async () => {
   const { widget } = createWidget(() => okJson({}), { allowFiltering: false });
 
@@ -127,6 +166,69 @@ test("exportToExcel posts the rendered document model, not the pivot request", a
   assert.equal(blob.size, 2048);
   assert.equal(fileName, null);
   widget.dispose();
+});
+
+test("an exporting handler changes cells, renames the file, and its context never reaches the server", async () => {
+  const exportModel = {
+    rows: [{ cells: [
+      { text: "-5", number: -5, source: { area: "data", valueKey: "tutar_sum", value: -5 } },
+      { text: "Lokum", source: { area: "row" } }
+    ] }]
+  };
+  const seen = [];
+  const { widget, calls } = createWidget(() => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => 'attachment; filename="server.xlsx"' },
+    blob: async () => ({ size: 1 })
+  }), { allowExcelExport: true });
+  widget.renderer = { getExcelExportModel: () => exportModel };
+  widget.on("exporting", event => {
+    seen.push(event.format);
+    for (const cell of event.document.rows[0].cells) {
+      if (cell.source.area === "data" && cell.source.value < 0) {
+        cell.fontColor = "#DC2626";
+      }
+    }
+    event.fileName = "satis.xlsx";
+  });
+
+  const { fileName } = await widget.exportToExcel();
+
+  assert.deepEqual(seen, ["excel"]);
+  assert.deepEqual(calls[0].body.rows[0].cells, [
+    { text: "-5", number: -5, fontColor: "#DC2626" },
+    { text: "Lokum" }
+  ]);
+  assert.equal(fileName, "satis.xlsx");
+  widget.dispose();
+});
+
+test("an exporting handler that cancels stops the request", async () => {
+  const { widget, calls } = createWidget(() => okJson({}), { allowExcelExport: true });
+  widget.renderer = { getExcelExportModel: () => ({ rows: [] }) };
+  widget.on("exporting", event => { event.cancel = true; });
+
+  assert.equal(await widget.exportToExcel(), null);
+  assert.equal(calls.length, 0);
+  widget.dispose();
+});
+
+test("a declared exporting handler is resolved by name", async () => {
+  globalThis.__pivotExporting = event => { event.cancel = event.format === "excel"; };
+  try {
+    const { widget, calls } = createWidget(() => okJson({}), {
+      allowExcelExport: true,
+      events: { exporting: "__pivotExporting" }
+    });
+    widget.renderer = { getExcelExportModel: () => ({ rows: [] }) };
+
+    assert.equal(await widget.exportToExcel(), null);
+    assert.equal(calls.length, 0);
+    widget.dispose();
+  } finally {
+    delete globalThis.__pivotExporting;
+  }
 });
 
 test("exportToExcel throws when the widget has no renderer to export from", async () => {
@@ -374,6 +476,32 @@ test("exportToCsv passes its options through to the model and the text", () => {
     assert.equal(blob.text, "﻿Ürün;Tutar\r\nLokum;1250");
     assert.equal(fileName, "satis.csv");
     assert.equal(requested[0].sheetName, "Pivot");
+  });
+});
+
+test("exportToCsv runs the exporting handler first", () => {
+  withCsvWidget(widget => {
+    const formats = [];
+    widget.on("exporting", event => {
+      formats.push(event.format);
+      event.document.rows[1].cells[0].text = "Lokum (TR)";
+      event.fileName = "ozel.csv";
+    });
+
+    const { blob, fileName } = widget.exportToCsv();
+
+    assert.deepEqual(formats, ["csv"]);
+    assert.equal(blob.text, "\uFEFFÜrün,Tutar\r\nLokum (TR),1.250");
+    assert.equal(fileName, "ozel.csv");
+    csvModel.rows[1].cells[0].text = "Lokum";
+  });
+});
+
+test("exportToCsv returns nothing when the exporting handler cancels", () => {
+  withCsvWidget(widget => {
+    widget.on("exporting", event => { event.cancel = true; });
+
+    assert.equal(widget.exportToCsv(), null);
   });
 });
 
