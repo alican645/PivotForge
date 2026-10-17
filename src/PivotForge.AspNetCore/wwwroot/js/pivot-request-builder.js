@@ -60,6 +60,9 @@
   // Date groupings. Spelled as the engine's enum reads them, lowercased, because
   // that spelling is also half of a grouped level's identity.
   const GROUP_INTERVALS = ["year", "quarter", "month", "day", "dayOfWeek", "range"];
+  // What a source column's values are converted to as they are read (DevExtreme's
+  // dataType). Sent as the engine's enum name.
+  const DATA_TYPES = ["string", "number", "date"];
 
   const TOP_N_MODES = ["Top", "Bottom"];
   // How a value filter compares a group's summary value. The two ranges read a
@@ -440,6 +443,18 @@
       );
     }
 
+    const dataType = field.dataType ?? null;
+    if (dataType !== null && !DATA_TYPES.includes(dataType)) {
+      throw new Error(
+        `Unknown dataType "${dataType}" on field "${dataField}". Expected one of: ${DATA_TYPES.join(", ")}.`
+      );
+    }
+
+    // A formula's result is computed, not read, so there is nothing to convert.
+    if (dataType !== null && expression !== null) {
+      throw new Error(`"dataType" on field "${dataField}" cannot be combined with "expression".`);
+    }
+
     const groupInterval = isData ? null : field.groupInterval ?? null;
     if (groupInterval !== null && !GROUP_INTERVALS.includes(groupInterval)) {
       throw new Error(
@@ -500,6 +515,7 @@
         : `${dataField}:${groupInterval}${groupInterval === "range" ? String(groupSize) : ""}`,
       groupInterval,
       groupSize,
+      dataType,
       area,
       role,
       areaIndex: areaIndex ?? null,
@@ -621,8 +637,33 @@
     return `${field.dataField}_${String(field.aggregation).toLowerCase()}`;
   }
 
+  // The type of every source column the catalog types, keyed by column: the
+  // type belongs to the column, so a year level and a month level of one date
+  // column are one entry -- and two that disagree are a mistake caught here.
+  function dataTypes(fields) {
+    const types = {};
+
+    for (const field of fields) {
+      if (field.dataType === null) {
+        continue;
+      }
+
+      const type = field.dataType[0].toUpperCase() + field.dataType.slice(1);
+      if (types[field.dataField] && types[field.dataField] !== type) {
+        throw new Error(
+          `Field "${field.dataField}" is declared as both ${types[field.dataField]} and ${type}; a column has one data type.`);
+      }
+
+      types[field.dataField] = type;
+    }
+
+    return types;
+  }
+
   function buildRequest(fields, extras = {}) {
-    const normalized = normalizeFields(fields).filter(field => field.visible);
+    const declared = normalizeFields(fields);
+    const types = dataTypes(declared);
+    const normalized = declared.filter(field => field.visible);
     const inArea = area => normalized.filter(field => field.area === area);
     const values = inArea("data");
 
@@ -689,7 +730,10 @@
       // another area. A value sort declared without a direction takes the row
       // axis default; valueKey is sent only when declared, so a page that never
       // uses it sends the request it always did.
-      fieldSorts: fieldSorts(normalized, columnSort(extras.columnSort))
+      fieldSorts: fieldSorts(normalized, columnSort(extras.columnSort)),
+      // Sent only when the catalog types a column, so every request written
+      // before data types existed is unchanged.
+      ...(Object.keys(types).length > 0 ? { dataTypes: types } : {})
     };
   }
 
@@ -818,9 +862,9 @@
   }
 
   PivotForge.PivotRequestBuilder = {
-    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts,
+    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes,
     normalizeRankings, normalizeValueFilters, comparisonType, parseExpression,
-    AGGREGATIONS, CALCULATED, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
+    AGGREGATIONS, CALCULATED, DATA_TYPES, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
     FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS, VALUE_FILTER_OPERATORS
   };
 

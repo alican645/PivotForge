@@ -45,4 +45,11 @@ public sealed class PivotRequest
     /// on that axis; the column axis is governed by these alone. A sort carrying a value key orders
     /// its level by that value's summary, on either axis.</remarks>
     public IReadOnlyList<PivotFieldSort> FieldSorts { get; init; } = [];
+
+    /// <summary>Gets the type each named source field's values are converted to when read.</summary>
+    /// <remarks>Keyed by source field, not by level: a date column grouped by year and again by
+    /// month is one column of one type. Names match the way field names do everywhere, ignoring
+    /// case. A field left out, or typed <see cref="PivotDataType.Auto"/>, is read as it is.</remarks>
+    public IReadOnlyDictionary<string, PivotDataType> DataTypes { get; init; } =
+        new Dictionary<string, PivotDataType>();
 }

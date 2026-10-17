@@ -22,7 +22,8 @@ internal static class PivotFieldAccess
         .Concat(request.Columns)
         .Select(level => level.Field)
         .Concat(request.Values.SelectMany(ValueFields))
-        .Concat(request.Filters.Select(filter => filter.Field));
+        .Concat(request.Filters.Select(filter => filter.Field))
+        .Concat(request.DataTypes.Keys);
 
     private static IEnumerable<string> ValueFields(PivotValueDefinition value)
     {

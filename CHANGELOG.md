@@ -16,6 +16,15 @@ change will require a new major version.
 
 ### Added
 
+- Field data types: `PivotRequest.DataTypes` (`PivotDataType.String|Number|Date`)
+  converts a source column's values where they are read, so a text source can
+  be summed (`"1250"`), grouped by date (`"2026-03-14"`) and ordered by number
+  (9 before 10). A value that does not convert is blank. Aggregation, filters,
+  drill-down, ordering and `DistinctValues` (new `dataTypes` argument) see the
+  same value. Declared with `field-type` on `<pivot-field>` /
+  `PivotFieldBuilder.DataType()` / `dataType` in JavaScript (DevExtreme's
+  `dataType`); the request carries `dataTypes`, which `AllowedFields`
+  governs and the large-data cache keys on. (Core, AspNetCore)
 - The field designer's **Σ Values** chip (`Σ Değerler` in Turkish): while
   there are two or more values it sits at the end of the Columns or Rows
   zone, and dragging it (or moving it with the keyboard) between the two

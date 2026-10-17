@@ -1798,8 +1798,16 @@
         ...(level?.groupInterval ? { interval: level.groupInterval } : {}),
         ...(level?.groupSize ? { binSize: level.groupSize } : {}),
         ...this.relevantValueFilters(field),
+        ...this.fieldValueDataTypes(),
         sourceRowCount: this.options.sourceRowCount
       });
+    }
+
+    // The list has to hold what the headers show, so it is read with the same
+    // conversions the pivot request asks for.
+    fieldValueDataTypes() {
+      const types = PivotForge.PivotRequestBuilder.dataTypes(this.fields);
+      return Object.keys(types).length > 0 ? { dataTypes: types } : {};
     }
 
     // Translated by the request builder, so a grouped level's filter arrives as

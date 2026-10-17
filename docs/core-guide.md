@@ -33,6 +33,25 @@ var csvResult = new PivotEngine().ExecuteRecords(csvRecords, request, cancellati
 
 JSON input must be an array of flat objects. CSV input uses the first row as field names and supports quoted values, escaped quotes, and invariant-culture decimal conversion.
 
+### Data types
+
+A source that holds numbers or dates as text — a CSV column the parser could not type, a loosely typed JSON feed, a `DataTable` of strings — declares what each column is:
+
+```csharp
+var request = new PivotRequest
+{
+    Rows = [new PivotFieldRef("OrderDate", PivotGroupInterval.Month)],
+    Values = [PivotValueDefinition.Sum("Amount")],
+    DataTypes = new Dictionary<string, PivotDataType>
+    {
+        ["OrderDate"] = PivotDataType.Date,
+        ["Amount"] = PivotDataType.Number
+    }
+};
+```
+
+Each value is converted where it is read, so aggregation, grouping, filters, `DistinctValues` (which takes the same map) and drill-down all see it, and a converted value behaves exactly like a typed `decimal` or `DateTime`. `Number` reads text invariantly, then in the engine's culture; `Date` reads it in the engine's culture, then invariantly; `String` takes the invariant text, so a numeric code orders as text. A value that does not convert is blank. A `Number` or `Date` level sorts by its values when it is sorted. Typing a field the source does not have is refused like any other unknown field.
+
 ## Configure a Pivot
 
 ```csharp
