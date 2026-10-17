@@ -14,6 +14,12 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.7.0-preview.1] — 2026-10-18
+
+Pivot charts, numeric ranges, value filters and in-cell bars, values drawn
+down the rows with a Σ Values chip, field data types, an export hook,
+relevant-only filter values and a deferred layout update.
+
 ### Added
 
 - Field data types: `PivotRequest.DataTypes` (`PivotDataType.String|Number|Date`)
@@ -169,8 +175,6 @@ change will require a new major version.
   around. A column field's arrow also shows a value sort declared without a
   direction, which ascends. (AspNetCore)
 
-### Added
-
 - Per-field presentation: `allow-sorting`, `allow-filtering`, `width` and
   `word-wrap` on `<pivot-field>` / `AllowSorting()`, `AllowFiltering()`,
   `Width()`, `WordWrap()` / `allowSorting`, `allowFiltering`, `width`,
@@ -183,24 +187,10 @@ change will require a new major version.
   `wordWrap` lets a field's labels wrap instead of ending in an ellipsis.
   (AspNetCore)
 
-### Added
-
 - Detail modal labels from the markup: `drill-down-label-{key}="..."` (the key
   in kebab-case, `drill-down-label-no-records`) / `DrillDownLabel(key, text)`
   renames one of the modal's texts over the locale pack's word. An unknown key
   is an error listing the fifteen there are. (AspNetCore)
-
-### Fixed
-
-- Searching the field list, a filter's values or the detail modal now ignores
-  accents and the dotted or dotless i: "isk" finds "İskonto", "satis" finds
-  "Satış". (AspNetCore)
-
-- `drillDownModalOptions.labels` replaced the locale pack's whole label set, so
-  renaming one text turned the other fourteen English. Labels now merge key by
-  key, as the designer's and the conditional panel's do. (AspNetCore)
-
-### Added
 
 - Subtotal position: `totals-position="Before|After"` /
   `TotalsPosition(PivotTotalsPosition)` / `totalsPosition: "before" | "after"`.
@@ -211,8 +201,6 @@ change will require a new major version.
   total row alone either way. Works in the tabular, compact and tree layouts.
   (AspNetCore)
 
-### Added
-
 - Toolbar: `toolbar="true"` / `Toolbar(true)` / `toolbar: true` puts a strip
   of buttons above the grid — Excel (when export is allowed), CSV, Print,
   Expand all and Collapse all. `toolbar-items="Excel,Print"` /
@@ -221,8 +209,6 @@ change will require a new major version.
   `aria-label`; a failure is raised as the `error` event. The texts are
   renderer texts (`toolbarExcel`, `toolbarPrint`, ...), translated in the `tr`
   locale. (AspNetCore)
-
-### Added
 
 - Tree row header layout: `layout-mode="Tree"` / `LayoutMode(PivotGridLayoutMode.Tree)`
   / `layoutMode: "tree"`, DevExtreme's `rowHeaderLayout: "tree"`. It is the
@@ -273,6 +259,16 @@ change will require a new major version.
   `Variance`, `StDev` or `StdDev` is no longer called: those names are built
   in now, and a built-in name always means the built-in summary. A custom
   median written as in the old documentation gives the same numbers. (Core)
+
+### Fixed
+
+- Searching the field list, a filter's values or the detail modal now ignores
+  accents and the dotted or dotless i: "isk" finds "İskonto", "satis" finds
+  "Satış". (AspNetCore)
+
+- `drillDownModalOptions.labels` replaced the locale pack's whole label set, so
+  renaming one text turned the other fourteen English. Labels now merge key by
+  key, as the designer's and the conditional panel's do. (AspNetCore)
 
 ## [0.6.0-preview.6] — 2026-10-02
 
@@ -721,7 +717,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.6...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.7.0-preview.1...HEAD
+[0.7.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.6...v0.7.0-preview.1
 [0.6.0-preview.6]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.5...v0.6.0-preview.6
 [0.6.0-preview.5]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.4...v0.6.0-preview.5
 [0.6.0-preview.4]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.3...v0.6.0-preview.4
