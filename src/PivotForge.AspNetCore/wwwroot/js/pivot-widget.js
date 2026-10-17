@@ -45,6 +45,10 @@
     // Excel's "Defer layout update" box on the designer: null leaves it off the
     // panel, true or false shows it ticked or not.
     deferLayoutUpdate: null,
+    // Right to left (DevExtreme's rtlEnabled). Null follows the page: the
+    // stylesheet is written in logical properties, so a grid inside dir="rtl"
+    // mirrors without being told. True or false pins the grid either way.
+    rtlEnabled: null,
     topN: [],
     // Row levels kept only where their summary value meets a condition:
     // { field, operator, value, value2?, valueKey? }. Like topN they run after
@@ -292,6 +296,7 @@
 
       // Before the renderer, which is the first thing to put text on screen.
       this.locale = this.resolveLocale();
+      this.applyDirection(this.container);
 
       this.subscribeDeclaredEvents();
 
@@ -312,6 +317,7 @@
         : false;
 
       this.toolbarNode = this.createToolbar();
+      this.applyDirection(this.toolbarNode);
 
       // After the toolbar, so a chart above the grid sits between the two.
       this.chart = this.createChart();
@@ -353,6 +359,7 @@
           allowCalculatedFields: this.options.allowCalculatedFields !== false,
           deferUpdates: this.options.deferLayoutUpdate
         });
+        this.applyDirection(this.designer.host);
         // Caption edits and filter-value picks never travel through a widget
         // method, so subscribing here is what makes them persist at all.
         this.layoutState.on("change", () => this.saveState());
@@ -381,6 +388,16 @@
       }
 
       return new PivotForge.PivotLayoutState(this.options.fields);
+    }
+
+    // Writes the declared direction onto an element the widget owns. Undeclared
+    // leaves it alone, so it inherits whatever the page says.
+    applyDirection(element) {
+      if (!element || typeof this.options.rtlEnabled !== "boolean") {
+        return;
+      }
+
+      element.dir = this.options.rtlEnabled ? "rtl" : "ltr";
     }
 
     declaredValuesPosition() {
@@ -1311,6 +1328,9 @@
       }
       this.chartNode = host;
       host.hidden = !this.chartVisible;
+      // A chart's axes do not mirror: categories still run left to right and
+      // numbers still rise upwards, whichever way the page reads.
+      host.dir = "ltr";
 
       return new PivotForge.PivotChart(host, {
         ...this.chartState,
@@ -1916,7 +1936,15 @@
     // `cancel`. Synchronous, so a handler that wants to stop the export has to
     // decide before the file is made -- which is the only moment it can.
     emitExporting(format, document, fileName) {
-      const payload = { format, document, fileName, cancel: false };
+      const payload = {
+        format,
+        document,
+        fileName,
+        // As DevExtreme's onExporting has it, so a handler can lay out what it
+        // adds the way the grid reads.
+        rtlEnabled: Boolean(PivotForge.isRtl?.(this.container)),
+        cancel: false
+      };
       this.emit("exporting", payload);
       return payload;
     }

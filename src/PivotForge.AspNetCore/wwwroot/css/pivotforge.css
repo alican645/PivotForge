@@ -115,7 +115,7 @@ select {
   grid-column: 2;
   grid-row: 1;
   padding: 10px;
-  border-left: 1px solid var(--pt-border);
+  border-inline-start: 1px solid var(--pt-border);
   background: #f8fafc;
   overflow: auto;
 }
@@ -211,7 +211,7 @@ select {
 .pivot-view-menu {
   position: absolute;
   top: calc(100% + 5px);
-  left: 0;
+  inset-inline-start: 0;
   z-index: 100;
   width: 292px;
   display: grid;
@@ -293,7 +293,7 @@ select {
 }
 
 .pivot-view-mode button + button {
-  border-left: 1px solid var(--pt-border);
+  border-inline-start: 1px solid var(--pt-border);
 }
 
 .pivot-view-mode button[data-selected="true"] {
@@ -409,7 +409,7 @@ select {
   font: inherit;
   font-size: 12px;
   font-weight: 800;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -423,7 +423,7 @@ select {
 }
 
 .pivot-field-list > .is-in-folder {
-  margin-left: 14px;
+  margin-inline-start: 14px;
 }
 
 .pivot-field-help {
@@ -529,8 +529,8 @@ select {
 .pivot-chip.is-drop-after::after {
   content: "";
   position: absolute;
-  right: 6px;
-  left: 6px;
+  inset-inline-end: 6px;
+  inset-inline-start: 6px;
   z-index: 3;
   height: 2px;
   border-radius: 999px;
@@ -566,11 +566,11 @@ select {
 }
 
 .pivot-field-chip.is-measure {
-  border-left: 2px solid var(--pt-accent);
+  border-inline-start: 2px solid var(--pt-accent);
 }
 
 .pivot-field-chip.is-dimension {
-  border-left: 2px solid #64748b;
+  border-inline-start: 2px solid #64748b;
 }
 
 .pivot-field-chip__main,
@@ -792,7 +792,7 @@ select {
 
 .pivot-chip-menu__item {
   width: 100%;
-  text-align: left;
+  text-align: start;
 }
 
 .pivot-chip-menu__item.is-danger {
@@ -937,7 +937,7 @@ select {
 .pivot-filter-menu {
   position: absolute;
   top: calc(100% + 4px);
-  left: 6px;
+  inset-inline-start: 6px;
   z-index: 60;
   display: grid;
   gap: 5px;
@@ -1039,7 +1039,7 @@ select {
   content: "";
   width: 7px;
   height: 4px;
-  border-left: 2px solid #ffffff;
+  border-inline-start: 2px solid #ffffff;
   border-bottom: 2px solid #ffffff;
   transform: rotate(-45deg) translateY(-1px);
 }
@@ -1491,8 +1491,8 @@ select {
 .pivot-toolbar.pivot-is-fullscreen {
   position: fixed;
   top: 0;
-  right: 0;
-  left: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   z-index: 1000;
   padding: 6px 12px;
   background: var(--pt-panel);
@@ -1502,9 +1502,9 @@ select {
 .pivot-table.pivot-is-fullscreen {
   position: fixed;
   top: var(--pivot-toolbar-height, 0px);
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
-  left: 0;
+  inset-inline-start: 0;
   z-index: 1000;
   max-height: none;
 }
@@ -1532,7 +1532,7 @@ select {
 .pivot-load-panel {
   position: sticky;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
   z-index: 40;
   height: 0;
   overflow: visible;
@@ -1600,9 +1600,9 @@ select {
   min-width: 118px;
   max-width: 240px;
   padding: 8px 10px;
-  border-right: 1px solid var(--pt-border);
+  border-inline-end: 1px solid var(--pt-border);
   border-bottom: 1px solid var(--pt-border);
-  text-align: right;
+  text-align: end;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1613,7 +1613,7 @@ select {
    bottom, so the table closes the frame with the two edges they leave open. */
 .pivot-table__table.is-bordered {
   border-top: 1px solid var(--pt-border);
-  border-left: 1px solid var(--pt-border);
+  border-inline-start: 1px solid var(--pt-border);
 }
 
 /* show-borders="false": the lines go transparent rather than away, so no
@@ -1730,7 +1730,7 @@ select {
   background: transparent;
   color: var(--pt-text);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 
 .pivot-cell-menu__item:nth-child(4),
@@ -1958,9 +1958,9 @@ select {
 
 .pivot-table__corner {
   z-index: 8;
-  left: var(--sticky-left, 0px);
+  inset-inline-start: var(--sticky-left, 0px);
   min-width: var(--pt-row-header-width) !important;
-  text-align: left !important;
+  text-align: start !important;
 }
 
 /* The cell that names a column field, and the blank strip beside the row field
@@ -1982,17 +1982,17 @@ select {
 .pivot-table__row-total-label,
 .pivot-table__subtotal-header {
   position: sticky;
-  left: var(--sticky-left, 0px);
+  inset-inline-start: var(--sticky-left, 0px);
   z-index: 4;
   min-width: var(--pt-row-header-width) !important;
-  text-align: left !important;
+  text-align: start !important;
   background: #ffffff !important;
   font-weight: 700;
 }
 
 .pivot-table__table.is-compact .pivot-table__row-header.is-compact,
 .pivot-table__table.is-compact .pivot-table__subtotal-header.is-compact {
-  padding-left: calc(10px + var(--pivot-indent, 0px)) !important;
+  padding-inline-start: calc(10px + var(--pivot-indent, 0px)) !important;
 }
 
 /* Tree guides: a thin line for every ancestor, each under its parent's toggle
@@ -2032,7 +2032,7 @@ select {
 .pivot-table__row-header[data-sticky-column]:not([data-sticky-column="0"]),
 .pivot-table__row-total-label[data-sticky-column]:not([data-sticky-column="0"]),
 .pivot-table__subtotal-header[data-sticky-column]:not([data-sticky-column="0"]) {
-  left: auto !important;
+  inset-inline-start: auto !important;
 }
 
 .pivot-table__row-header.is-empty,
@@ -2142,7 +2142,7 @@ select {
 .pivot-table__resize-handle {
   position: absolute;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
   z-index: 20;
   width: 8px;
@@ -2154,7 +2154,7 @@ select {
   content: "";
   position: absolute;
   top: 7px;
-  right: 4px;
+  inset-inline-end: 4px;
   bottom: 7px;
   width: 1px;
   background: transparent;
@@ -2237,7 +2237,7 @@ select {
   height: 22px;
   display: inline-grid;
   place-items: center;
-  margin-right: 6px;
+  margin-inline-end: 6px;
   border: 1px solid rgba(15, 118, 110, 0.32);
   border-radius: 5px;
   background: #ffffff;
@@ -2357,7 +2357,7 @@ select {
 
 .pivot-drill-down-toolbar .pivot-button {
   min-height: 34px;
-  margin-left: auto;
+  margin-inline-start: auto;
   padding: 0 14px;
 }
 
@@ -2763,10 +2763,10 @@ select {
 .pivot-drill-down-table td {
   height: 34px;
   padding: 6px 9px;
-  border-right: 1px solid var(--pt-border);
+  border-inline-end: 1px solid var(--pt-border);
   border-bottom: 1px solid var(--pt-border);
   background: #ffffff;
-  text-align: left;
+  text-align: start;
   white-space: nowrap;
 }
 
@@ -2810,7 +2810,7 @@ select {
 /* PivotDrillDownModal marks its own numeric columns from the declared value
    formats, so alignment follows the data rather than the column position. */
 .pivot-drill-down-table td.is-numeric {
-  text-align: right;
+  text-align: end;
 }
 
 /* A hand-built detail table cannot mark its columns, so it keeps the positional
@@ -2818,7 +2818,7 @@ select {
    are meaningless and would right-align whatever happened to land there. */
 .pivot-drill-down-table:not(:has(td.is-numeric)) td:nth-child(4),
 .pivot-drill-down-table:not(:has(td.is-numeric)) td:nth-child(n+6) {
-  text-align: right;
+  text-align: end;
 }
 
 @media (max-width: 720px) {
@@ -2850,8 +2850,8 @@ select {
   .pivot-sidebar {
     grid-column: 1;
     grid-row: 2;
-    border-left: 0;
-    border-right: 0;
+    border-inline-start: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid var(--pt-border);
   }
 }
@@ -2907,7 +2907,7 @@ select {
    make a long available-field list impossible to scroll with a finger. */
 .pivot-chip__grip {
   flex: 0 0 auto;
-  margin-left: auto;
+  margin-inline-start: auto;
   padding: 0 0.125rem;
   color: var(--pt-muted);
   cursor: grab;
@@ -3083,7 +3083,7 @@ select {
   color: var(--pt-text);
   cursor: pointer;
   font-size: 0.75rem;
-  text-align: left;
+  text-align: start;
 }
 
 .pivot-value-settings__choice:hover:not(:disabled) {
@@ -3270,7 +3270,7 @@ select {
 .pivot-formula__remove {
   position: absolute;
   top: -9px;
-  right: -9px;
+  inset-inline-end: -9px;
   display: grid;
   place-items: center;
   width: 24px;
@@ -3322,7 +3322,7 @@ select {
   color: var(--pt-text);
   cursor: pointer;
   font-size: 1rem;
-  text-align: left;
+  text-align: start;
 }
 
 /* A finger drags a field instead of scrolling the dialog. */
@@ -3520,7 +3520,7 @@ select {
   min-height: 28px;
   padding: 2px 10px;
   border: 0;
-  border-left: 1px solid var(--pt-border);
+  border-inline-start: 1px solid var(--pt-border);
   background: var(--pt-panel);
   color: var(--pt-muted);
   font-size: 12px;
@@ -3529,7 +3529,7 @@ select {
 }
 
 .pivot-chart__type:first-child {
-  border-left: 0;
+  border-inline-start: 0;
 }
 
 .pivot-chart__type[aria-pressed="true"] {
@@ -3765,3 +3765,32 @@ select {
     display: none;
   }
 }
+
+/* --- Right to left ------------------------------------------------------------
+   Everything above is written in logical properties, so a grid inside dir="rtl"
+   -- declared with rtl-enabled or inherited from the page -- mirrors on its own.
+   What follows is what logical properties cannot express: gradients, background
+   positions and glyphs that point. */
+
+/* A value bar grows from the start edge, which is the right in RTL. */
+.pivot-table__table td.has-value-bar:dir(rtl) {
+  background-image: linear-gradient(to left,
+    transparent var(--pt-bar-start),
+    var(--pt-bar-fill) var(--pt-bar-start),
+    var(--pt-bar-fill) var(--pt-bar-end),
+    transparent var(--pt-bar-end)) !important;
+}
+
+/* Tree guides hang from the right, one per ancestor, under each toggle. */
+.pivot-table__table.is-tree .pivot-table__row-header.is-compact:dir(rtl),
+.pivot-table__table.is-tree .pivot-table__subtotal-header.is-compact:dir(rtl) {
+  background-image: repeating-linear-gradient(
+    to left, var(--pt-border) 0 1px, transparent 1px 18px) !important;
+  background-position: right 21px top 0 !important;
+}
+
+/* A collapsed group's arrow points along the reading direction. */
+.pivot-table__toggle[aria-expanded="false"]:dir(rtl) {
+  transform: scaleX(-1);
+}
+

@@ -50,6 +50,10 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("defer-layout-update")]
     public bool? DeferLayoutUpdate { get; set; }
 
+    /// <summary>Gets or sets whether the grid is laid out right to left; undeclared follows the page.</summary>
+    [HtmlAttributeName("rtl-enabled")]
+    public bool? RtlEnabled { get; set; }
+
     /// <summary>Gets or sets whether a "Loading..." panel covers the grid while data is requested.</summary>
     [HtmlAttributeName("load-panel")]
     public bool? LoadPanel { get; set; }
@@ -379,6 +383,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (DeferLayoutUpdate is { } deferLayoutUpdate)
         {
             builder.DeferLayoutUpdate(deferLayoutUpdate);
+        }
+
+        if (RtlEnabled is { } rtlEnabled)
+        {
+            builder.RtlEnabled(rtlEnabled);
         }
 
         if (LoadPanel is { } loadPanel)

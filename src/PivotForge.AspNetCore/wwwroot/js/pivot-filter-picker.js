@@ -357,6 +357,8 @@
       elements.overlay.classList.add("is-open");
       elements.overlay.setAttribute("aria-hidden", "false");
       this.anchor = anchor;
+      // Read the way the grid that opened it reads, not the page it is added to.
+      PivotForge.matchDirection?.(elements.overlay, anchor ?? this.widget?.container);
       this.place();
       this.watchAnchor(anchor !== null);
       elements.title.textContent = format(this.labels.title, caption ?? field);
@@ -740,11 +742,12 @@
 
       const flip = below < DROPDOWN_HEIGHT && above > below;
       const width = Math.min(DROPDOWN_WIDTH, viewportWidth - 2 * VIEWPORT_MARGIN);
-      // Aligned to the button's left edge, pushed back in where that would run
-      // past the right edge -- the designer's funnels sit near it.
+      // Aligned to the button's starting edge -- its left, or in RTL its right --
+      // and pushed back in where that would run off the screen.
+      const start = this.elements?.overlay?.dir === "rtl" ? rect.right - width : rect.left;
       const left = Math.max(
         VIEWPORT_MARGIN,
-        Math.min(rect.left, viewportWidth - width - VIEWPORT_MARGIN));
+        Math.min(start, viewportWidth - width - VIEWPORT_MARGIN));
 
       return {
         top: flip ? null : rect.bottom + DROPDOWN_GAP,

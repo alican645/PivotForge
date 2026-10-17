@@ -23,6 +23,11 @@ public sealed class PivotExcelDocument
 
     /// <summary>Gets the worksheet data rows.</summary>
     public IReadOnlyList<PivotExcelRow> Rows { get; init; } = [];
+
+    /// <summary>Gets whether the sheet reads right to left, as the grid it was exported from does.</summary>
+    /// <remarks>The sheet's columns run from the right, and every horizontal alignment trades
+    /// sides with it: headers align right and numbers left, as they do on screen.</remarks>
+    public bool RightToLeft { get; init; }
 }
 
 /// <summary>Represents one logical row in a pivot workbook.</summary>

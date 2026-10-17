@@ -303,7 +303,10 @@
       const own = panel.getBoundingClientRect?.() ?? { width: 0, height: 0 };
       const width = root.innerWidth ?? 0;
       const height = root.innerHeight ?? 0;
-      panel.style.left = `${Math.max(margin, Math.min(rect.left, width - own.width - margin))}px`;
+      PivotForge.matchDirection?.(panel, this.anchor);
+      // From the cell's starting edge, which is its right in RTL.
+      const start = panel.dir === "rtl" ? rect.right - own.width : rect.left;
+      panel.style.left = `${Math.max(margin, Math.min(start, width - own.width - margin))}px`;
       panel.style.top = `${Math.max(margin, Math.min(rect.bottom + 6, height - own.height - margin))}px`;
     }
 

@@ -830,8 +830,9 @@
       switch (key) {
         case "ArrowUp": return this.moveGrab(-1);
         case "ArrowDown": return this.moveGrab(1);
-        case "ArrowLeft": return this.shiftGrabArea(-1);
-        case "ArrowRight": return this.shiftGrabArea(1);
+        // The zones mirror in RTL, so the horizontal keys trade places there.
+        case "ArrowLeft": return this.shiftGrabArea(PivotForge.isRtl?.(this.host) ? 1 : -1);
+        case "ArrowRight": return this.shiftGrabArea(PivotForge.isRtl?.(this.host) ? -1 : 1);
         case " ":
         case "Spacebar":
         case "Enter":
@@ -1136,6 +1137,7 @@
       };
       root.document.addEventListener("keydown", this.settingsKeydown);
 
+      PivotForge.matchDirection?.(overlay, this.host);
       (root.document.body ?? this.host).appendChild(overlay);
       this.settings = { overlay, dialog, title, body };
       return this.settings;

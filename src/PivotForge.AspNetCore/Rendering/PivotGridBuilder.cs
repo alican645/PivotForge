@@ -126,6 +126,19 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder DeferLayoutUpdate(bool defer) => Set("deferLayoutUpdate", defer);
 
+    /// <summary>Lays the grid out right to left, or pins it left to right.</summary>
+    /// <remarks>
+    /// Left undeclared, the grid follows the page: a site whose <c>&lt;html&gt;</c> carries
+    /// <c>dir="rtl"</c> gets a mirrored grid without saying anything. Declaring it writes
+    /// <c>dir</c> on the grid, its toolbar and its field designer, and the menus, pickers and
+    /// modals they open follow. The row headers freeze on the right, the arrow keys move the way
+    /// they point, and an Excel export is a right-to-left sheet. The chart does not mirror.
+    /// DevExtreme's <c>rtlEnabled</c>.
+    /// </remarks>
+    /// <param name="enabled">True for right to left, false for left to right.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder RtlEnabled(bool enabled) => Set("rtlEnabled", enabled);
+
     /// <summary>Shows or hides the "Loading..." panel drawn over the grid while data is requested.</summary>
     /// <remarks>
     /// On by default. The panel covers the first load and every reload a sort, filter or

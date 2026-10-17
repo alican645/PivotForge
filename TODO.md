@@ -302,7 +302,7 @@ Açık kalanlar:
 | Sütun genişliği sürükleme | ✅ |
 | Genişlet / daralt | ✅ motorda, ⚠️ bildirimi yok |
 | `wordWrapEnabled` | ✅ alan başına `word-wrap` |
-| `rtlEnabled` | ❌ |
+| `rtlEnabled` | ✅ `rtl-enabled`; bildirilmezse sayfanın yönü izleniyor |
 | Yükleme göstergesi (`loadPanel`) | ✅ `load-panel`, varsayılan açık |
 | Isı haritası (PivotTable.js'teki heatmap renderer) | ✅ `heatmap="Table\|Rows\|Columns"` |
 | Hücre içi çubuk grafik (PivotTable.js'teki table bar chart) | ✅ `value-bars="Table\|Rows\|Columns"` |
@@ -331,7 +331,11 @@ Açık kalanlar:
       kaldırılamıyor. Konum düzenin parçası: `state-storing` ve rapor dosyaları, bildirimden
       farklıysa saklıyor. Çip bölgenin hep sonunda: renderer ölçüleri yalnızca en içteki
       seviye olarak çizebiliyor, Excel'deki gibi ara seviyeye konamıyor
-- [ ] RTL desteği
+- [x] RTL desteği — `rtl-enabled`. Stil sayfası mantıksal özelliklere taşındı, bu yüzden `dir="rtl"`
+      bir sayfada grid bildirim olmadan aynalanıyor; bildirim yönü sabitliyor. Klavye okları,
+      sütun genişletme, odaklı hücreyi görünür tutma, menü ve açılır pencereler aynalandı; gövdeye
+      eklenen her katman sayfanın değil grid'in yönünü alıyor. Excel'de sağdan sola sayfa. Grafik
+      bilinçli olarak aynalanmıyor
 
 ---
 
