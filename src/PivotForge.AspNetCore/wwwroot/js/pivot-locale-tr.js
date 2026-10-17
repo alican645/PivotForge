@@ -60,6 +60,8 @@
       format: "Biçim",
       settings: "Alan ayarları",
       filterValues: "Filtre değerleri",
+      deferUpdate: "Düzen güncellemesini ertele",
+      update: "Güncelle",
       filterCount: "({0})",
       filterCountExcluded: "({0} hariç)",
       filterCondition: "({0})",

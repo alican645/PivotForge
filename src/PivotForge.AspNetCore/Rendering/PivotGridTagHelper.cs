@@ -45,6 +45,11 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("allow-calculated-fields")]
     public bool? AllowCalculatedFields { get; set; }
 
+    /// <summary>Gets or sets whether the field designer shows a "Defer layout update" box, and
+    /// whether it starts ticked.</summary>
+    [HtmlAttributeName("defer-layout-update")]
+    public bool? DeferLayoutUpdate { get; set; }
+
     /// <summary>Gets or sets whether a "Loading..." panel covers the grid while data is requested.</summary>
     [HtmlAttributeName("load-panel")]
     public bool? LoadPanel { get; set; }
@@ -223,6 +228,11 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("hide-empty-summary-cells")]
     public bool? HideEmptySummaryCells { get; set; }
 
+    /// <summary>Gets or sets whether a filter picker lists only the values the other fields'
+    /// filters leave.</summary>
+    [HtmlAttributeName("show-relevant-values")]
+    public bool? ShowRelevantValues { get; set; }
+
     /// <summary>Gets or sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
     /// Left unset it follows the request's UI culture, so a Turkish request gets
@@ -279,6 +289,10 @@ public sealed class PivotGridTagHelper : TagHelper
     /// <summary>Gets or sets the page function called when the view state changes.</summary>
     [HtmlAttributeName("on-view-state-changed")]
     public string? OnViewStateChanged { get; set; }
+
+    /// <summary>Gets or sets the page function called before an Excel or CSV file is written.</summary>
+    [HtmlAttributeName("on-exporting")]
+    public string? OnExporting { get; set; }
 
     /// <summary>Collects the declared fields and writes the grid markup.</summary>
     /// <param name="context">The tag helper context.</param>
@@ -355,6 +369,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (AllowCalculatedFields is { } allowCalculatedFields)
         {
             builder.AllowCalculatedFields(allowCalculatedFields);
+        }
+
+        if (DeferLayoutUpdate is { } deferLayoutUpdate)
+        {
+            builder.DeferLayoutUpdate(deferLayoutUpdate);
         }
 
         if (LoadPanel is { } loadPanel)
@@ -507,6 +526,11 @@ public sealed class PivotGridTagHelper : TagHelper
             builder.HideEmptySummaryCells(hideEmptySummaryCells);
         }
 
+        if (ShowRelevantValues is { } showRelevantValues)
+        {
+            builder.ShowRelevantValues(showRelevantValues);
+        }
+
         if (Locale is { } locale)
         {
             builder.Locale(locale);
@@ -560,6 +584,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (OnViewStateChanged is { } onViewStateChanged)
         {
             builder.OnViewStateChanged(onViewStateChanged);
+        }
+
+        if (OnExporting is { } onExporting)
+        {
+            builder.OnExporting(onExporting);
         }
 
         foreach (var ranking in declaredRankings)

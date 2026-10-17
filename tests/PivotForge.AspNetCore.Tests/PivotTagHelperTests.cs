@@ -1378,6 +1378,19 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesTheExportingHandlerUnderEvents()
+    {
+        var fromTagHelper = await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", OnExporting = "app.colorNegatives" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum));
+
+        Assert.Equal(
+            "app.colorNegatives",
+            ConfigOf(fromTagHelper).GetProperty("events").GetProperty("exporting").GetString());
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().OnExporting(" "));
+    }
+
+    [Fact]
     public async Task EventsMatchTheEquivalentBuilderConfiguration()
     {
         var fromTagHelper = await RenderAsync(
@@ -1613,6 +1626,39 @@ public class PivotTagHelperTests
             new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
 
         Assert.True(config.GetProperty("hideEmptySummaryCells").GetBoolean());
+    }
+
+    [Fact]
+    public async Task WritesShowRelevantValuesOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ShowRelevantValues = true },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var undeclared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.True(declared.GetProperty("showRelevantValues").GetBoolean());
+        Assert.False(undeclared.TryGetProperty("showRelevantValues", out _));
+    }
+
+    [Fact]
+    public async Task WritesDeferLayoutUpdateOnlyWhenDeclared()
+    {
+        var ticked = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", DeferLayoutUpdate = true },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var cleared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", DeferLayoutUpdate = false },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var undeclared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.True(ticked.GetProperty("deferLayoutUpdate").GetBoolean());
+        // False is a declaration too: it shows the box, unticked.
+        Assert.False(cleared.GetProperty("deferLayoutUpdate").GetBoolean());
+        Assert.False(undeclared.TryGetProperty("deferLayoutUpdate", out _));
     }
 
     [Fact]

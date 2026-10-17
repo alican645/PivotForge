@@ -529,6 +529,54 @@ public sealed class PivotForgeAspNetCoreTests
     }
 
     [Fact]
+    public async Task FieldValuesEndpoint_NarrowsByTheFiltersItIsGiven()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Sale>(
+            (_, _) => ValueTask.FromResult<IReadOnlyList<Sale>>(
+            [
+                new("South", 90m),
+                new("North", 120m),
+                new("East", 10m)
+            ]),
+            options => options.AllowedFields.Add("Region"));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            using var narrowed = await client.PostAsync("/pivotforge/field-values", new StringContent(
+                """{ "field": "Region", "filters": [{ "field": "Region", "values": ["North", "East"] }] }""",
+                Encoding.UTF8,
+                "application/json"));
+            narrowed.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(await narrowed.Content.ReadAsStringAsync());
+            Assert.Equal(
+                ["East", "North"],
+                document.RootElement.GetProperty("values").EnumerateArray().Select(value => value.GetString()));
+
+            // A narrowing filter reads a source field, so the allow-list governs it too.
+            using var refused = await client.PostAsync("/pivotforge/field-values", new StringContent(
+                """{ "field": "Region", "filters": [{ "field": "Amount", "values": ["10"] }] }""",
+                Encoding.UTF8,
+                "application/json"));
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, refused.StatusCode);
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task FieldValuesEndpoint_RejectsAnUnknownField()
     {
         var builder = WebApplication.CreateBuilder();

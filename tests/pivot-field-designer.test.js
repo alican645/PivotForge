@@ -2515,3 +2515,73 @@ test("only a range level has a width to change", () => {
   openSettings(host, "Amount");
   assert.equal(findByAction(settingsPanel(), "group-size"), null);
 });
+
+// --- defer layout update ------------------------------------------------------
+
+function buildDeferred(deferUpdates) {
+  const updates = [];
+  const widget = { update: async payload => { updates.push(payload); } };
+  const state = new PivotForge.PivotLayoutState(catalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget, deferUpdates });
+
+  return { designer, state, host, updates };
+}
+
+test("without deferUpdates the panel has no defer box and edits apply at once", async () => {
+  const { designer, host, updates } = build();
+
+  assert.equal(findByAction(host, "defer-update"), null);
+  await designer.apply(() => designer.state.move("Quarter", "row", 1));
+  assert.equal(updates.length, 1);
+});
+
+test("a ticked defer box holds every edit back until Update, then sends them as one", async () => {
+  const { designer, host, updates } = buildDeferred(true);
+  const update = findByAction(host, "apply-update");
+
+  assert.equal(findByAction(host, "defer-update").checked, true);
+  assert.equal(update.disabled, true);
+
+  await designer.apply(() => designer.state.move("Quarter", "row", 1));
+  await designer.applySort("Region", "row", { order: "Descending" });
+
+  assert.deepEqual(updates, []);
+  assert.equal(findByAction(host, "apply-update").disabled, false);
+
+  await findByAction(host, "apply-update").dispatch("click");
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(updates.length, 1);
+  assert.deepEqual(updates[0].fields.filter(field => field.area === "row").map(field => field.dataField), ["Region", "Quarter"]);
+  // The sort reset the sort edit asked for is kept though a later payload did not repeat it.
+  assert.equal(updates[0].rowSort, null);
+  assert.equal(findByAction(host, "apply-update").disabled, true);
+});
+
+test("clearing the defer box applies what it held back", async () => {
+  const { designer, host, updates } = buildDeferred(true);
+
+  await designer.apply(() => designer.state.move("Quarter", "row", 1));
+  const box = findByAction(host, "defer-update");
+  box.checked = false;
+  box.dispatch("change");
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(updates.length, 1);
+  await designer.apply(() => designer.state.remove("Quarter"));
+  assert.equal(updates.length, 2);
+});
+
+test("an unticked defer box applies edits at once but can be ticked", async () => {
+  const { designer, host, updates } = buildDeferred(false);
+
+  await designer.apply(() => designer.state.move("Quarter", "row", 1));
+  assert.equal(updates.length, 1);
+
+  const box = findByAction(host, "defer-update");
+  box.checked = true;
+  box.dispatch("change");
+  await designer.apply(() => designer.state.remove("Quarter"));
+  assert.equal(updates.length, 1);
+});

@@ -38,6 +38,13 @@
     // Dropped in the engine rather than hidden in the browser, so paging, Excel
     // export and drill-down all agree on which rows exist.
     hideEmptySummaryCells: false,
+    // A filter picker lists only the values the other fields' filters leave
+    // (DevExtreme's headerFilter.showRelevantValues). Never the field's own
+    // filter: a value unchecked there has to stay on the list to come back.
+    showRelevantValues: false,
+    // Excel's "Defer layout update" box on the designer: null leaves it off the
+    // panel, true or false shows it ticked or not.
+    deferLayoutUpdate: null,
     topN: [],
     // Row levels kept only where their summary value meets a condition:
     // { field, operator, value, value2?, valueKey? }. Like topN they run after
@@ -88,6 +95,13 @@
     return true;
   };
 
+  // The cell context an "exporting" handler reads is for the page, not the
+  // server: it would only grow the request and tie the endpoint's contract to
+  // the renderer's.
+  function serializeExportDocument(document) {
+    return JSON.stringify(document, (key, value) => (key === "source" ? undefined : value));
+  }
+
   function isConditionalRule(rule) {
     return PivotForge.isConditionalRule?.(rule) ?? true;
   }
@@ -120,7 +134,8 @@
     "cellCopied",
     "cellFilterRequested",
     "conditionalFormatRequested",
-    "viewStateChanged"
+    "viewStateChanged",
+    "exporting"
   ];
 
   // Looks up a handler declared by name, so Razor markup can name a function
@@ -327,7 +342,8 @@
           state: this.layoutState,
           widget: this,
           labels: this.designerLabels(),
-          allowCalculatedFields: this.options.allowCalculatedFields !== false
+          allowCalculatedFields: this.options.allowCalculatedFields !== false,
+          deferUpdates: this.options.deferLayoutUpdate
         });
         // Caption edits and filter-value picks never travel through a widget
         // method, so subscribing here is what makes them persist at all.
@@ -1728,9 +1744,10 @@
       });
     }
 
-    // The distinct values a filter on this field can accept. Deliberately not
-    // narrowed by the filters already applied: a picker that hid the values the
-    // user just excluded could never bring them back.
+    // The distinct values a filter on this field can accept. Never narrowed by
+    // the field's own filter: a picker that hid the values the user just
+    // excluded could never bring them back. With showRelevantValues the other
+    // fields' filters narrow it, which leaves that promise intact.
     async fieldValues(field) {
       this.assertNotDisposed();
 
@@ -1747,8 +1764,26 @@
         field: level?.dataField ?? field,
         ...(level?.groupInterval ? { interval: level.groupInterval } : {}),
         ...(level?.groupSize ? { binSize: level.groupSize } : {}),
+        ...this.relevantValueFilters(field),
         sourceRowCount: this.options.sourceRowCount
       });
+    }
+
+    // Translated by the request builder, so a grouped level's filter arrives as
+    // its source field plus interval, exactly as the pivot request sends it.
+    relevantValueFilters(field) {
+      if (!this.options.showRelevantValues) {
+        return {};
+      }
+
+      const others = this.filters.filter(filter => filter.field !== field);
+      if (others.length === 0) {
+        return {};
+      }
+
+      return {
+        filters: PivotForge.PivotRequestBuilder.buildRequest(this.options.fields, { filters: others }).filters
+      };
     }
 
     async exportToExcel(options = {}) {
@@ -1771,11 +1806,16 @@
         throw new Error("Cannot export because no pivot table has been rendered yet.");
       }
 
+      const exporting = this.emitExporting("excel", document, options.fileName ?? null);
+      if (exporting.cancel) {
+        return null;
+      }
+
       const fetchImpl = this.options.fetchImpl ?? root.fetch?.bind(root);
       const response = await fetchImpl(`${this.endpointPrefix}/excel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(document)
+        body: serializeExportDocument(exporting.document)
       });
 
       if (!response.ok) {
@@ -1786,7 +1826,10 @@
       }
 
       const blob = await response.blob();
-      const fileName = parseContentDispositionFileName(response.headers?.get?.("Content-Disposition"));
+      // A name the handler chose wins over the server's suggestion: it is the
+      // one place a page can name the file without wrapping the download.
+      const fileName = exporting.fileName ??
+        parseContentDispositionFileName(response.headers?.get?.("Content-Disposition"));
       return { blob, fileName };
     }
 
@@ -1809,13 +1852,32 @@
         throw new Error("Cannot export because no pivot table has been rendered yet.");
       }
 
+      const exporting = this.emitExporting(
+        "csv",
+        model,
+        options.fileName ?? `pivotforge-${new Date().toISOString().slice(0, 10)}.csv`);
+      if (exporting.cancel) {
+        return null;
+      }
+
       // A byte-order mark, because a spreadsheet opening a CSV without one
       // guesses the encoding and gets every non-ASCII caption wrong.
-      const text = `\uFEFF${PivotForge.toCsv(model, options)}`;
+      const text = `\uFEFF${PivotForge.toCsv(exporting.document, options)}`;
       return {
         blob: new root.Blob([text], { type: "text/csv;charset=utf-8" }),
-        fileName: options.fileName ?? `pivotforge-${new Date().toISOString().slice(0, 10)}.csv`
+        fileName: exporting.fileName
       };
+    }
+
+    // DevExtreme's onExporting and customizeCell in one event: the handler gets
+    // the document about to be written, may change any cell in place (each
+    // carries a `source` saying what it shows), rename the file, or set
+    // `cancel`. Synchronous, so a handler that wants to stop the export has to
+    // decide before the file is made -- which is the only moment it can.
+    emitExporting(format, document, fileName) {
+      const payload = { format, document, fileName, cancel: false };
+      this.emit("exporting", payload);
+      return payload;
     }
 
     // Prints this grid and nothing else on the page: the whole table, headers

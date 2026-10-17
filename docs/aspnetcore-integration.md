@@ -265,6 +265,8 @@ the renderer keeps its own default.
 | `aria-label` | `AriaLabel(string)` | `Pivot tablosu` | Accessible name announced for the grid. Must not be blank. Give two pivots on one page two different names, or a screen reader cannot tell them apart. |
 | `culture` | `Culture(string)` | the reader's own locale | BCP 47 tag used to format numbers in the browser. Must not be blank. Server-side collation is separate — see [Localization](#localization). |
 | `hide-empty-summary-cells` | `HideEmptySummaryCells(bool)` | `false` | Drops rows and columns holding no values at all. The column axis is the product of its levels, so sparse data leaves whole columns that never occurred; a row is empty when its values all aggregated to nothing. Dropped in the engine, so paging, Excel export and drill-down all agree on which rows exist. |
+| `show-relevant-values` | `ShowRelevantValues(bool)` | `false` | A filter picker lists only the values the **other** fields' filters leave (DevExtreme's `headerFilter.showRelevantValues`). The field's own filter never narrows its list, so a value unchecked there can still be checked again. The other filters travel as `filters` on `/field-values` and answer to `AllowedFields`. |
+| `defer-layout-update` | `DeferLayoutUpdate(bool)` | undeclared | Excel's **Defer layout update** box at the foot of the field designer (DevExtreme's `applyChangesMode: "onDemand"`). While ticked, a designer edit changes only the panel; the grid refreshes once, with every held-back edit, when the reader presses **Update** or clears the box. The value is how the box starts; undeclared, there is no box and edits apply at once. A value filter set from field settings has its own Apply and is not held back. |
 | `locale` | `Locale(string)` | the request's UI culture | Name of the locale pack supplying every on-screen string. Must not be blank. `en` is the built-in English and loads nothing — see [Localization](#localization). |
 
 `selection-mode`, `layout-mode`, `heatmap`, `value-bars`, `chart`, `chart-position` and `totals-position` are non-nullable enums so Razor accepts the
@@ -375,6 +377,7 @@ not switch the DOM event off, and vice versa.
 | `on-cell-copied` | `OnCellCopied(string)` | `{ text, copied, kind }` |
 | `on-cell-filter-requested` | `OnCellFilterRequested(string)` | the cell selection |
 | `on-view-state-changed` | `OnViewStateChanged(string)` | the renderer view state |
+| `on-exporting` | `OnExporting(string)` | `{ format, document, fileName, cancel }` — see below |
 
 The attribute names a function on the page, optionally as a dotted path
 (`app.handlers.onLoaded`). It is resolved when the event fires rather than when
@@ -408,6 +411,43 @@ A consumer that supplies its own `rendererOptions` callback still receives it;
 the widget's event fires alongside. The one exception is
 `onCellDoubleClick`, where supplying a callback also suppresses the packaged
 detail modal, so a page with its own modal does not get two.
+
+##### Customizing an export
+
+`exporting` fires before an Excel or CSV file is made — from the toolbar,
+`exportToExcel()` or `exportToCsv()` — and covers what DevExtreme splits into
+`onExporting` and `customizeCell`. `format` is `"excel"` or `"csv"`;
+`document` is the model about to be written, changed **in place**; `fileName`
+may be replaced (for Excel it otherwise comes from the server); setting
+`cancel = true` makes the export method return `null` and nothing is written.
+The handler is synchronous.
+
+Each cell of `document.rows[].cells[]` carries a `source` describing it:
+`area` (`"column"` for a header row, `"row"` for a row header, `"data"` for a
+value), `rowType`, `rowPath`, `columnPath`, `valueKey` and `value`. `source` is
+removed before the document is posted. Besides `text`, `number`,
+`numberFormat`, `highlight` and `fillColor`, an Excel cell takes `fontColor`
+(`#RRGGBB`) and `bold` (`true`/`false`; left out, headers and totals stay bold
+and values do not).
+
+```html
+<pivot-grid id="pivotGrid" allow-excel-export="true" on-exporting="colorNegatives">
+  <pivot-field field="Amount" area="Data" aggregation="Sum" />
+</pivot-grid>
+
+<script>
+  function colorNegatives(event) {
+    for (const row of event.document.rows) {
+      for (const cell of row.cells) {
+        if (cell.source.area === "data" && cell.source.value < 0) {
+          cell.fontColor = "#DC2626";
+        }
+      }
+    }
+    event.fileName = "sales.xlsx";
+  }
+</script>
+```
 
 Anything not listed here still needs `rendererOptions` through
 `PivotForge.create`, or the `pivotforge:ready` event — see
@@ -1346,7 +1386,7 @@ picker.
 | `POST /pivotforge/large/start` | Calculate/cache a large result and return its first page |
 | `POST /pivotforge/large/page` | Return a page from an existing cached session |
 | `POST /pivotforge/drill-down` | Return source records matching row and column paths |
-| `POST /pivotforge/field-values` | Return the distinct values a filter on one field can accept |
+| `POST /pivotforge/field-values` | Return the distinct values a filter on one field can accept; optional `filters` narrow them to the records those filters keep |
 | `POST /pivotforge/excel` | Convert a renderer export model into an `.xlsx` response |
 
 A missing or expired large-data session returns HTTP `410 Gone`. Invalid pivot, paging, drill-down, field-values, and Excel requests return HTTP `400 Bad Request`. Request cancellation propagates through the provider and Core calculation.

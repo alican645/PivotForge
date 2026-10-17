@@ -634,7 +634,26 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       numberFormat: typeof selection?.value === "number" ? this.getExcelNumberFormat(valueDefinition) : null,
       role: this.getExcelCellRole(cell, row),
       highlight: this.getExcelCellHighlight(cell),
-      fillColor: this.getExcelCellFillColor(cell)
+      fillColor: this.getExcelCellFillColor(cell),
+      source: this.getExportCellSource(cell, row, selection)
+    };
+  }
+
+  // What an "exporting" handler needs to recognise a cell without reading the
+  // DOM: which part of the table it came from and, for a value, which measure
+  // and coordinate. The widget strips it before the document is posted.
+  getExportCellSource(cell, row, selection) {
+    const area = row?.parentElement?.tagName === "THEAD"
+      ? "column"
+      : selection?.type === "cell" ? "data" : cell.tagName === "TH" ? "row" : "data";
+
+    return {
+      area,
+      rowType: selection?.rowType ?? null,
+      rowPath: selection?.rowHeader ? [...selection.rowHeader] : null,
+      columnPath: selection?.columnHeader ? [...selection.columnHeader] : null,
+      valueKey: selection?.valueKey ?? null,
+      value: selection?.type === "cell" ? selection.value ?? null : null
     };
   }
 
