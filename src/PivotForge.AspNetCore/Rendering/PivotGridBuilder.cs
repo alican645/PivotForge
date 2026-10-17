@@ -358,6 +358,12 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder TotalsPosition(PivotTotalsPosition position) =>
         SetRenderer("totalsPosition", position == PivotTotalsPosition.After ? "after" : "before");
 
+    /// <summary>Sets which axis several values are drawn along.</summary>
+    /// <param name="position">Columns (the default) or rows.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder ValuesPosition(PivotValuesPosition position) =>
+        SetRenderer("valuesPosition", position == PivotValuesPosition.Rows ? "rows" : "columns");
+
     /// <summary>Shades the value cells on a colour scale, from the smallest value to the largest.</summary>
     /// <remarks>
     /// Each data field is its own scale; totals and subtotals are not shaded. A conditional

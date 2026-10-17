@@ -879,6 +879,30 @@ public class PivotTagHelperTests
     }
 
     [Theory]
+    [InlineData(PivotValuesPosition.Columns, "columns")]
+    [InlineData(PivotValuesPosition.Rows, "rows")]
+    public async Task WritesValuesPositionWhenTheAttributeIsWritten(PivotValuesPosition position, string expected)
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", ValuesPosition = position },
+            ["values-position"],
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal(expected, config.GetProperty("rendererOptions").GetProperty("valuesPosition").GetString());
+    }
+
+    [Fact]
+    public async Task OmitsValuesPositionWhenTheAttributeIsNotWritten()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.False(config.TryGetProperty("rendererOptions", out var options) &&
+            options.TryGetProperty("valuesPosition", out _));
+    }
+
+    [Theory]
     [InlineData(PivotHeatmapMode.None, "none")]
     [InlineData(PivotHeatmapMode.Table, "table")]
     [InlineData(PivotHeatmapMode.Rows, "rows")]

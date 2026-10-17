@@ -303,6 +303,7 @@ Açık kalanlar:
 | Isı haritası (PivotTable.js'teki heatmap renderer) | ✅ `heatmap="Table\|Rows\|Columns"` |
 | Hücre içi çubuk grafik (PivotTable.js'teki table bar chart) | ✅ `value-bars="Table\|Rows\|Columns"` |
 | Pivot grafikleri (DevExtreme Chart bağlama, PivotTable.js chart renderer'ları) | ✅ `chart="Column\|StackedColumn\|Bar\|Line"` |
+| Ölçüler satır ekseninde (`dataFieldArea: "row"`) | ✅ `values-position="Rows"` |
 
 - [x] Ağaç düzeni satır başlıkları — `layout-mode="Tree"`
 - [x] Toplamın konumu — `totals-position="Before|After"`
@@ -318,6 +319,10 @@ Açık kalanlar:
 - [x] Kenarlıklar — `show-borders`: `true` dış çerçeve, `false` gövdede çizgi yok
 - [x] `word-wrap` — alan başına, bkz. Bölüm 1
 - [x] Tam ekran — araç çubuğunda; sayfa içinde (Fullscreen API değil), Escape ile çıkılıyor
+- [x] Ölçüler satır ekseninde — `values-position="Rows"`: her pivot satırı (ara toplamlar ve genel
+      toplam dahil) ölçü başına bir satıra bölünüyor, satır başlıkları bloğu kaplıyor, "Değerler"
+      sütunu ölçüyü adlandırıyor. Yalnızca renderer'da; istek ve motor değişmedi. Tasarımcıda
+      Σ Değerler çipini sürükleyerek eksen değiştirme ve görünümle saklama henüz yok
 - [ ] RTL desteği
 
 ---

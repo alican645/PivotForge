@@ -19,6 +19,7 @@
         rowLabels: "Satır Etiketleri",
         rowsHeading: "Satırlar",
         rowHeading: "Satır {0}",
+        valuesHeading: "Değerler",
         noData: "Veri yok",
         noValueFields: "Render edilecek bir değer alanı yok.",
         cellActions: "Hücre işlemleri",

@@ -2012,6 +2012,22 @@ select {
   color: transparent;
 }
 
+/* A rows layout's values column: it names which value a row holds, so it reads
+   as a label beside the row header rather than as a header of its own. */
+.pivot-table__measure-row-header {
+  min-width: 96px !important;
+  color: var(--pt-muted);
+  font-weight: 500;
+}
+
+/* A header stretched over its value rows labels the block from its top line,
+   as Excel does, whether it is a detail or a total header. */
+.pivot-table__row-header[rowspan]:not([rowspan="1"]),
+.pivot-table__subtotal-header[rowspan]:not([rowspan="1"]),
+.pivot-table__row-total-label[rowspan]:not([rowspan="1"]) {
+  vertical-align: top;
+}
+
 .pivot-table__corner[data-sticky-column]:not([data-sticky-column="0"]),
 .pivot-table__row-header[data-sticky-column]:not([data-sticky-column="0"]),
 .pivot-table__row-total-label[data-sticky-column]:not([data-sticky-column="0"]),

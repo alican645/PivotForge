@@ -163,6 +163,11 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("totals-position")]
     public PivotTotalsPosition TotalsPosition { get; set; }
 
+    /// <summary>Gets or sets which axis several values are drawn along.</summary>
+    /// <remarks>Non-nullable for the same reason as <see cref="SelectionMode"/>.</remarks>
+    [HtmlAttributeName("values-position")]
+    public PivotValuesPosition ValuesPosition { get; set; }
+
     /// <summary>Gets or sets whether the cell context menu is available.</summary>
     [HtmlAttributeName("context-menu")]
     public bool? ContextMenu { get; set; }
@@ -455,6 +460,11 @@ public sealed class PivotGridTagHelper : TagHelper
         if (written.Contains("totals-position"))
         {
             builder.TotalsPosition(TotalsPosition);
+        }
+
+        if (written.Contains("values-position"))
+        {
+            builder.ValuesPosition(ValuesPosition);
         }
 
         if (ContextMenu is { } contextMenu)

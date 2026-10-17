@@ -16,6 +16,16 @@ change will require a new major version.
 
 ### Added
 
+- `values-position="Rows"` / `ValuesPosition(PivotValuesPosition.Rows)` /
+  `rendererOptions.valuesPosition: "rows"` draws several values down the rows
+  instead of across the columns, as DevExtreme's `dataFieldArea: "row"`
+  does: each pivot row (its subtotals and the grand total too) becomes one
+  row per value, the row headers span the block, and a **Values** column
+  (`texts.valuesHeading`, "Değerler" in Turkish) names each row. The column
+  axis carries a single value slot, with no value-header row. A value giving
+  up its grand total leaves a blank so the rows stay aligned. With one value
+  nothing changes. Renderer only; the request and the engine are untouched.
+  (AspNetCore)
 - An `exporting` event (`on-exporting` / `OnExporting(string)` /
   `events: { exporting }`, DOM `pivotforge:exporting`) fires before an Excel
   or CSV file is made. The handler gets `{ format, document, fileName, cancel }`:
