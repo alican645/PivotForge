@@ -33,13 +33,14 @@ internal sealed class PivotForgeDataExecutor<TRecord>(
         PivotGroupInterval interval,
         decimal? binSize,
         IReadOnlyList<PivotFilter> filters,
+        IReadOnlyDictionary<string, PivotDataType> dataTypes,
         int? sourceRowCount,
         CancellationToken cancellationToken)
     {
         var records = await GetRecordsAsync(sourceRowCount, cancellationToken);
 
         return await Task.Run(
-            () => new PivotEngine().DistinctValues(records, field, filters, interval, binSize),
+            () => new PivotEngine().DistinctValues(records, field, filters, interval, binSize, dataTypes),
             cancellationToken);
     }
 

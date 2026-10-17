@@ -1034,7 +1034,9 @@
         dataField: field?.dataField ?? name,
         ...(field?.groupInterval ? { groupInterval: field.groupInterval } : {}),
         ...(field?.groupSize ? { groupSize: field.groupSize } : {}),
-        ...(field?.expression ? { expression: field.expression } : {})
+        ...(field?.expression ? { expression: field.expression } : {}),
+        // The column's type travels with it wherever it is placed.
+        ...(field?.dataType ? { dataType: field.dataType } : {})
       };
     }
 

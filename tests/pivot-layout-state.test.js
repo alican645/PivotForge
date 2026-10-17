@@ -1391,3 +1391,18 @@ test("adopting a declared position changes it without announcing a change", () =
   assert.equal(state.valuesPosition, "rows");
   assert.equal(announced, false);
 });
+
+test("a field's data type moves with it", () => {
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Region", area: "row" },
+    { dataField: "Code", area: "available", role: "dimension", dataType: "number" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+
+  state.move("Code", "column");
+
+  assert.equal(state.toFields().find(field => field.dataField === "Code").dataType, "number");
+  assert.deepEqual(
+    PivotForge.PivotRequestBuilder.buildRequest(state.toFields()).dataTypes,
+    { Code: "Number" });
+});

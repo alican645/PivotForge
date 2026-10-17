@@ -180,6 +180,15 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("group-interval")]
     public PivotGroupInterval GroupInterval { get; set; }
 
+    /// <summary>Gets or sets the type the source column's values are converted to when read.</summary>
+    /// <remarks>
+    /// <c>field-type</c> rather than DevExtreme's <c>dataType</c> spelt as an attribute: Razor
+    /// leaves every <c>data-</c> attribute to the page. Non-nullable for the same reason as
+    /// <see cref="GroupInterval"/>.
+    /// </remarks>
+    [HtmlAttributeName("field-type")]
+    public PivotDataType FieldType { get; set; }
+
     /// <summary>Gets or sets the width of each range when <c>group-interval="Range"</c>, such as 100.</summary>
     [HtmlAttributeName("group-size")]
     public decimal? GroupSize { get; set; }
@@ -358,6 +367,11 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (_writtenAttributes.Contains("group-interval"))
         {
             builder.GroupInterval(GroupInterval);
+        }
+
+        if (_writtenAttributes.Contains("field-type"))
+        {
+            builder.DataType(FieldType);
         }
 
         if (GroupSize is { } groupSize)

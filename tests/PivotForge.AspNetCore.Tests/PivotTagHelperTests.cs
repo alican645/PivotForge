@@ -40,7 +40,8 @@ public class PivotTagHelperTests
         string? CustomizeText = null,
         bool? AllowCrossGroupCalculation = null,
         string? DisplayFolder = null,
-        decimal? GroupSize = null);
+        decimal? GroupSize = null,
+        PivotDataType? FieldType = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -142,6 +143,12 @@ public class PivotTagHelperTests
         {
             helper.GroupInterval = groupInterval;
             attributes.Add(new TagHelperAttribute("group-interval", groupInterval.ToString()));
+        }
+
+        if (spec.FieldType is { } fieldType)
+        {
+            helper.FieldType = fieldType;
+            attributes.Add(new TagHelperAttribute("field-type", fieldType.ToString()));
         }
 
         if (spec.SortByValueKey is not null)
@@ -1108,6 +1115,33 @@ public class PivotTagHelperTests
         var fields = config.GetProperty("fields");
         Assert.Equal("year", fields[0].GetProperty("groupInterval").GetString());
         Assert.Equal("month", fields[1].GetProperty("groupInterval").GetString());
+    }
+
+    [Fact]
+    public async Task WritesADeclaredFieldTypeAsDataTypeAndOmitsAnUndeclaredOne()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("OrderDate", PivotArea.Row, GroupInterval: PivotGroupInterval.Month, FieldType: PivotDataType.Date),
+            new FieldSpec("Region", PivotArea.Row),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum, FieldType: PivotDataType.Number)));
+
+        var fields = config.GetProperty("fields");
+        Assert.Equal("date", fields[0].GetProperty("dataType").GetString());
+        Assert.False(fields[1].TryGetProperty("dataType", out _));
+        Assert.Equal("number", fields[2].GetProperty("dataType").GetString());
+    }
+
+    [Fact]
+    public void RefusesADataTypeOnACalculatedField()
+    {
+        var builder = new PivotFieldBuilder()
+            .DataField("Margin")
+            .Area(PivotArea.Data)
+            .Expression("[Amount] / 2")
+            .DataType(PivotDataType.Number);
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
     [Fact]

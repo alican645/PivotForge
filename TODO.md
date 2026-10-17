@@ -91,7 +91,7 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
 | `expanded` | ✅ | ✅ | Alan başına başlangıç durumu; yalnızca ilk çizimde |
 | `showTotals` (alan başına) | ✅ | ✅ | `show-totals` niteliği ve `ShowTotals()` metodu |
 | `showGrandTotals` (alan başına) | ✅ | ✅ | `show-grand-totals` niteliği ve `ShowGrandTotals()` metodu; grid düzeyinde `show-row-grand-totals` / `show-column-grand-totals` |
-| `dataType` | ❌ | ❌ | Tür dönüşümü yok |
+| `dataType` | ✅ | ✅ | `field-type="String\|Number\|Date"` (`data-` önekini Razor sayfaya bıraktığı için bu ad); motorda okuma anında dönüşüm |
 | `groupInterval` (yıl/çeyrek/ay/gün, sayısal aralık) | ✅ | ✅ | `group-interval` niteliği ve `GroupInterval()` metodu; aynı kolon birden fazla seviyede; `Range` + `group-size` ile sayısal aralıklar |
 | `selector` / `sortingMethod` | ❌ | ❌ | Özel gruplama/sıralama fonksiyonu |
 | `customizeText` | ✅ | ✅ | `customize-text` ile sayfa fonksiyonu; hazır kalıplar `format-compact`, `format-zero-text`, `format-negative`. Yalnızca değer hücreleri; başlık etiketleri değil |
@@ -158,7 +158,11 @@ DevExpress alan başına 38 seçenek sunuyor. PivotForge'daki karşılıkları:
       tanımlanıyor (`PivotFieldRef`). Etiket ile sıra tek konu: ay adı olarak
       okunur, ay numarasına göre sıralanır. Filtre, drill-down ve değer seçici
       aynı gruplamadan geçiyor
-- [ ] `data-type` ve tür dönüşümü
+- [x] `data-type` ve tür dönüşümü — `field-type` / `DataType()` / `dataType`. Tip kaynak kolona ait,
+      istekte `dataTypes` sözlüğü olarak gidiyor; motor değeri **okurken** çeviriyor, böylece toplama,
+      gruplama, filtre, değer seçici, detay ve sıralama aynı değeri görüyor. Çevrilemeyen değer boş
+      (DevExtreme'de `Number("abc")` gibi). Çevrilen tarih/sayı tipli bir alanla birebir aynı davranıyor;
+      etiket biçimi değişmedi
 - [x] `width`, `word-wrap` — satır alanı başlık sütununu, değer alanı tüm değer sütunlarını boyuyor; okuyucunun sürüklediği genişlik kazanıyor
 - [x] Alan başına `allow-sorting` / `allow-filtering` — her bölgede geçerli, alanla birlikte taşınıyor; değer alanında değer başlığı sıralamasını kapatıyor
 

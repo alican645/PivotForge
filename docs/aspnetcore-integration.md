@@ -457,7 +457,7 @@ Anything not listed here still needs `rendererOptions` through
 
 `<pivot-field>` attributes are `field` (the source column, required),
 `caption`, `area`, `role`, `aggregation`, `show-as`, the seven `format-*`
-attributes, `visible`, `area-index`, `sort-order`, `group-interval`,
+attributes, `visible`, `area-index`, `sort-order`, `group-interval`, `field-type`,
 `allow-sorting`, `allow-filtering`, `width`, `word-wrap`, `display-folder`, and — on
 `Row` fields only — `expanded`, `show-totals` and `sort-by-value-key`, and — on `Data` fields only — `show-grand-totals`,
 `customize-text` and `allow-cross-group-calculation`. `area` defaults to `Data`, matching
@@ -495,9 +495,22 @@ date column into header groups — see [Date grouping](#date-grouping) — and
 `group-interval="Range"` with `group-size` splits a numeric one into ranges — see
 [Numeric ranges](#numeric-ranges).
 
-`area`, `role`, `aggregation`, `show-as`, `sort-order`, and `group-interval`
+`field-type` (`String`, `Number`, `Date`; `DataType(PivotDataType)` on the
+builder, `dataType` in JavaScript — DevExtreme's `dataType`, renamed because
+Razor leaves every `data-` attribute to the page) converts the source column's
+values as they are read, for a source that carries everything as text: `Number`
+lets `"1250"` be summed and its headers run 9, 10 rather than 10, 9; `Date` lets
+`"2026-03-14"` be grouped by month and an unreadable date fall into the blank
+group; `String` orders a numeric code as text. A value that does not convert is
+blank. The conversion happens in the engine, so aggregation, filters, the value
+picker, drill-down and ordering all see the same value; the request carries it
+as `dataTypes: { "Amount": "Number" }`, which `AllowedFields` governs like any
+other field name. The type belongs to the column, so two levels of one column
+cannot declare different types, and a calculated field cannot declare one.
+
+`area`, `role`, `aggregation`, `show-as`, `sort-order`, `group-interval` and `field-type`
 bind to the `PivotArea`, `PivotFieldRole`, `PivotAggregation`, `PivotShowAs`,
-`PivotSortDirection`, and `PivotGroupInterval` enums, so a misspelled value such as `area="Roww"` fails
+`PivotSortDirection`, `PivotGroupInterval` and `PivotDataType` enums, so a misspelled value such as `area="Roww"` fails
 the Razor compile rather than surfacing in the browser.
 
 A `<pivot-field>` outside a `<pivot-grid>` throws, as does a grid with no

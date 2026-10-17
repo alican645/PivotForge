@@ -800,3 +800,38 @@ test("value filters are checked and sent only when there are any", () => {
   assert.throws(() => normalizeValueFilters([{ field: "urun", operator: "Equal", value: 1, value2: 2 }]),
     /compares one value/);
 });
+
+// --- data types -----------------------------------------------------------------
+
+test("a declared data type travels per column, and only when declared", () => {
+  const plain = PivotForge.PivotRequestBuilder.buildRequest([
+    { dataField: "Region", area: "row" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]);
+  const typed = PivotForge.PivotRequestBuilder.buildRequest([
+    { dataField: "OrderDate", area: "row", groupInterval: "year", dataType: "date" },
+    { dataField: "OrderDate", area: "row", groupInterval: "month", dataType: "date" },
+    { dataField: "Amount", area: "data", aggregation: "sum", dataType: "number" },
+    // Typed though not placed: a formula or a later move may read it.
+    { dataField: "Code", area: "available", role: "dimension", dataType: "string" }
+  ]);
+
+  assert.equal("dataTypes" in plain, false);
+  assert.deepEqual(typed.dataTypes, { OrderDate: "Date", Amount: "Number", Code: "String" });
+});
+
+test("a column typed two ways, an unknown type, or a typed formula is refused", () => {
+  const build = fields => PivotForge.PivotRequestBuilder.buildRequest(fields);
+  const amount = { dataField: "Amount", area: "data", aggregation: "sum" };
+
+  assert.throws(() => build([
+    { dataField: "OrderDate", area: "row", groupInterval: "year", dataType: "date" },
+    { dataField: "OrderDate", area: "column", dataType: "string" },
+    amount
+  ]), /one data type/);
+  assert.throws(() => build([{ dataField: "Region", area: "row", dataType: "money" }, amount]), /Unknown dataType/);
+  assert.throws(() => build([
+    amount,
+    { dataField: "Margin", area: "data", expression: "[Amount] / 2", dataType: "number" }
+  ]), /cannot be combined with "expression"/);
+});

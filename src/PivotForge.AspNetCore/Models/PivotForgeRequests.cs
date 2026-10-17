@@ -34,8 +34,15 @@ public class PivotForgeRequest
     /// <summary>Gets the row header levels whose groups are kept only when their value meets a condition.</summary>
     public IReadOnlyList<PivotValueFilter> ValueFilters { get; init; } = [];
 
+    /// <summary>Gets the type each named source field's values are converted to when read.</summary>
+    /// <remarks>See <see cref="PivotRequest.DataTypes"/>. The names answer to
+    /// <see cref="PivotForgeOptions.AllowedFields"/> like every other field the request names.</remarks>
+    public IReadOnlyDictionary<string, PivotDataType> DataTypes { get; init; } =
+        new Dictionary<string, PivotDataType>();
+
     internal PivotRequest ToPivotRequest() => new()
     {
+        DataTypes = DataTypes,
         HideEmptySummaryCells = HideEmptySummaryCells,
         Rows = Rows,
         Columns = Columns,
@@ -93,6 +100,11 @@ public sealed class PivotForgeFieldValuesRequest
     /// <summary>Gets the filters a record has to pass for its value to be listed.</summary>
     /// <remarks>Empty lists every value the field holds.</remarks>
     public IReadOnlyList<PivotFilter> Filters { get; init; } = [];
+
+    /// <summary>Gets the type each named source field's values are converted to when read, so
+    /// the list holds what the headers show.</summary>
+    public IReadOnlyDictionary<string, PivotDataType> DataTypes { get; init; } =
+        new Dictionary<string, PivotDataType>();
 
     /// <summary>Gets the source-row hint passed to the configured data provider.</summary>
     public int SourceRowCount { get; init; } = 100_000;

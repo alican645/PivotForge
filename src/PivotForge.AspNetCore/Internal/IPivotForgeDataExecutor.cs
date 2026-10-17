@@ -14,6 +14,7 @@ internal interface IPivotForgeDataExecutor
         PivotGroupInterval interval,
         decimal? binSize,
         IReadOnlyList<PivotFilter> filters,
+        IReadOnlyDictionary<string, PivotDataType> dataTypes,
         int? sourceRowCount,
         CancellationToken cancellationToken);
 

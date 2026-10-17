@@ -80,6 +80,24 @@ internal static class PivotGroupLabels
         };
     }
 
+    /// <summary>Returns the order the labels of a typed field belong in.</summary>
+    /// <param name="type">The field's declared type.</param>
+    /// <param name="culture">The culture a date label is read in.</param>
+    /// <returns>A comparer, or null when the type orders as text.</returns>
+    /// <remarks>A converted number is labelled with its invariant text and a converted date with
+    /// its invariant date text, so the label reads back as the value it came from. A blank or
+    /// unreadable label goes last.</remarks>
+    public static IComparer<string?>? Order(PivotDataType type, CultureInfo culture) => type switch
+    {
+        PivotDataType.Number => new NumberComparer(label =>
+            decimal.TryParse(label, NumberStyles.Number | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out var number)
+                ? number
+                : null),
+        PivotDataType.Date => new NumberComparer(label =>
+            !string.IsNullOrEmpty(label) && TryConvertToDate(label, culture, out var date) ? date.Ticks : null),
+        _ => null
+    };
+
     // The separator between a range's bounds: an en dash with a space either side,
     // which a minus sign on either bound can never be mistaken for.
     private const string RangeSeparator = " – ";
@@ -154,7 +172,7 @@ internal static class PivotGroupLabels
             label is not null && order.TryGetValue(label, out var index) ? index : null);
     }
 
-    private static bool TryConvertToDate(object? value, CultureInfo culture, out DateTime date)
+    internal static bool TryConvertToDate(object? value, CultureInfo culture, out DateTime date)
     {
         switch (value)
         {

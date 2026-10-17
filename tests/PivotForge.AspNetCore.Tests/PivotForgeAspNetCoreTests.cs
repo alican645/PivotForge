@@ -576,6 +576,66 @@ public sealed class PivotForgeAspNetCoreTests
         }
     }
 
+    private sealed record TextSale(string Region, string Amount);
+
+    [Fact]
+    public async Task Endpoints_ConvertDeclaredDataTypesAndKeepThemToTheAllowList()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<TextSale>(
+            (_, _) => ValueTask.FromResult<IReadOnlyList<TextSale>>(
+            [
+                new("North", "10"),
+                new("North", "9"),
+                new("South", "abc")
+            ]),
+            options => options.AllowedFields.UnionWith(["Region", "Amount"]));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            async Task<JsonElement> PostAsync(string path, string json)
+            {
+                using var response = await client.PostAsync(path, new StringContent(json, Encoding.UTF8, "application/json"));
+                response.EnsureSuccessStatusCode();
+                return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
+            }
+
+            var pivot = await PostAsync("/pivotforge/pivot", """
+                { "rows": ["Region"], "values": [{ "field": "Amount", "aggregation": "sum" }],
+                  "dataTypes": { "Amount": "Number" } }
+                """);
+            Assert.Equal(19m, pivot.GetProperty("grandTotals").GetProperty("Amount_sum").GetDecimal());
+
+            var values = await PostAsync("/pivotforge/field-values", """
+                { "field": "Amount", "dataTypes": { "Amount": "Number" } }
+                """);
+            Assert.Equal(
+                ["", "9", "10"],
+                values.GetProperty("values").EnumerateArray().Select(value => value.GetString()));
+
+            // A typed field is a field the request names, so it answers to the allow-list.
+            using var refused = await client.PostAsync("/pivotforge/pivot", new StringContent(
+                """{ "rows": ["Region"], "values": [{ "field": "Amount", "aggregation": "count" }], "dataTypes": { "Secret": "Number" } }""",
+                Encoding.UTF8,
+                "application/json"));
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, refused.StatusCode);
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
     [Fact]
     public async Task FieldValuesEndpoint_RejectsAnUnknownField()
     {

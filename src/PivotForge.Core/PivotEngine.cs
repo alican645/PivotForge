@@ -313,19 +313,22 @@ public sealed class PivotEngine
     /// <param name="interval">The date interval to collapse the values to.</param>
     /// <param name="binSize">The range width when <paramref name="interval"/> is
     /// <see cref="PivotGroupInterval.Range"/>.</param>
+    /// <param name="dataTypes">The types source fields are converted to when read, as
+    /// <see cref="PivotRequest.DataTypes"/>, so the list holds what the headers show.</param>
     /// <returns>The distinct values the filtered records hold, in value order.</returns>
     public IReadOnlyList<string?> DistinctValues<T>(
         IEnumerable<T> records,
         string field,
         IReadOnlyList<PivotFilter> filters,
         PivotGroupInterval interval = PivotGroupInterval.None,
-        decimal? binSize = null)
+        decimal? binSize = null,
+        IReadOnlyDictionary<string, PivotDataType>? dataTypes = null)
     {
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(filters);
 
         return DistinctValuesCore(
-            records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture, interval, binSize, filters);
+            records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture, interval, binSize, filters, dataTypes);
     }
 
     private static IReadOnlyList<string?> DistinctValuesCore(
@@ -335,7 +338,8 @@ public sealed class PivotEngine
         CultureInfo culture,
         PivotGroupInterval interval = PivotGroupInterval.None,
         decimal? binSize = null,
-        IReadOnlyList<PivotFilter>? filters = null)
+        IReadOnlyList<PivotFilter>? filters = null,
+        IReadOnlyDictionary<string, PivotDataType>? dataTypes = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
 
@@ -343,6 +347,16 @@ public sealed class PivotEngine
         {
             throw new PivotFieldNotFoundException(field);
         }
+
+        foreach (var typed in dataTypes?.Keys ?? [])
+        {
+            if (!reader.HasField(typed))
+            {
+                throw new PivotFieldNotFoundException(typed);
+            }
+        }
+
+        reader = TypedRecordReader.Wrap(reader, dataTypes, culture);
 
         if (filters is { Count: > 0 })
         {
@@ -432,6 +446,7 @@ public sealed class PivotEngine
         CultureInfo culture)
     {
         ValidateRequest(request, reader, CustomAggregates);
+        reader = TypedRecordReader.Wrap(reader, request.DataTypes, culture);
         ValidateDrillDownPath(rowPath, request.Rows, nameof(rowPath));
         ValidateDrillDownPath(columnPath, request.Columns, nameof(columnPath));
         var filters = CompileFilters(request.Filters);
@@ -485,6 +500,7 @@ public sealed class PivotEngine
         CancellationToken cancellationToken)
     {
         var plan = ValidateRequest(request, reader, CustomAggregates);
+        reader = TypedRecordReader.Wrap(reader, request.DataTypes, culture);
 
         var scan = Scan(records, request, plan, reader, culture, null, cancellationToken);
 
@@ -519,6 +535,7 @@ public sealed class PivotEngine
             columnLevelValues,
             request.Columns,
             ResolveLevelDirections(request.Columns, request.FieldSorts),
+            request.DataTypes,
             culture);
         var columnLookup = CreateHeaderLookup(columnHeaders);
         var rawCells = buckets
@@ -1374,7 +1391,8 @@ public sealed class PivotEngine
         // every field its formula reads -- which the plan's inputs already list.
         foreach (var field in request.Rows.Concat(request.Columns).Select(level => level.Field)
                      .Concat(plan.Inputs.Select(input => input.Field))
-                     .Concat(request.Filters.Select(filter => filter.Field)))
+                     .Concat(request.Filters.Select(filter => filter.Field))
+                     .Concat(request.DataTypes.Keys))
         {
             if (string.IsNullOrWhiteSpace(field))
             {
@@ -1533,6 +1551,7 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> columnLevelValues,
         IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotSortDirection?> directions,
+        IReadOnlyDictionary<string, PivotDataType> dataTypes,
         CultureInfo culture)
     {
         if (observedHeaders.Count == 0)
@@ -1542,7 +1561,7 @@ public sealed class PivotEngine
 
         var headers = new List<IReadOnlyList<string?>>();
         AppendColumnHeaderProducts(
-            headers, OrderColumnLevels(columnLevelValues, fields, directions, culture), [], 0);
+            headers, OrderColumnLevels(columnLevelValues, fields, directions, dataTypes, culture), [], 0);
         return headers;
     }
 
@@ -1556,6 +1575,7 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> columnLevelValues,
         IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotSortDirection?> directions,
+        IReadOnlyDictionary<string, PivotDataType> dataTypes,
         CultureInfo culture)
     {
         return columnLevelValues
@@ -1563,7 +1583,9 @@ public sealed class PivotEngine
             {
                 var interval = fields.ElementAtOrDefault(level)?.Interval ?? PivotGroupInterval.None;
                 var intervalOrder = PivotGroupLabels.Order(interval, culture);
-                var comparer = intervalOrder ?? StringComparer.Create(culture, ignoreCase: true);
+                // A typed level sorts by its values when asked to sort, but like any
+                // undeclared level it keeps the order the data arrived in otherwise.
+                var comparer = intervalOrder ?? LevelComparer(fields, level, dataTypes, culture);
 
                 return directions.ElementAtOrDefault(level) switch
                 {
@@ -1640,7 +1662,7 @@ public sealed class PivotEngine
             ? SortRowsByLevel(rowOrder, rowHeaders, ResolveLevelSorts(request.Rows, request.FieldSorts), lookup, request, culture)
             : sort.Mode switch
         {
-            PivotSortMode.RowLabel => SortRowsByLabel(rowOrder, rowHeaders, request.Rows, sort, culture),
+            PivotSortMode.RowLabel => SortRowsByLabel(rowOrder, rowHeaders, request.Rows, sort, request.DataTypes, culture),
             // Every level by the same value, each inside its parent: sorting the rows as one
             // flat list would pull a group's rows apart and leave its subtotal nowhere to go.
             PivotSortMode.RowTotalValue when !string.IsNullOrWhiteSpace(sort.ValueKey) =>
@@ -1704,7 +1726,7 @@ public sealed class PivotEngine
             .OrderBy(
                 row => row,
                 Comparer<int>.Create((left, right) =>
-                    CompareRows(left, right, rowHeaders, request.Rows, levelSorts, groupValues, culture)))
+                    CompareRows(left, right, rowHeaders, request.Rows, levelSorts, groupValues, request.DataTypes, culture)))
             .ToArray();
     }
 
@@ -1715,6 +1737,7 @@ public sealed class PivotEngine
         IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotFieldSort?> levelSorts,
         IReadOnlyList<decimal?[]?> groupValues,
+        IReadOnlyDictionary<string, PivotDataType> dataTypes,
         CultureInfo culture)
     {
         var leftHeader = rowHeaders[left];
@@ -1727,7 +1750,7 @@ public sealed class PivotEngine
             // order while the plain levels around it stay collated.
             var leftLabel = leftHeader.ElementAtOrDefault(level);
             var rightLabel = rightHeader.ElementAtOrDefault(level);
-            var labelComparison = LevelComparer(fields, level, culture).Compare(leftLabel, rightLabel);
+            var labelComparison = LevelComparer(fields, level, dataTypes, culture).Compare(leftLabel, rightLabel);
 
             // Groups are identified ordinally everywhere else, so "abc" and "ABC" are two
             // groups the collation calls equal. Separating them here keeps each group's
@@ -2089,13 +2112,14 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
         IReadOnlyList<PivotFieldRef> rowFields,
         PivotSort sort,
+        IReadOnlyDictionary<string, PivotDataType> dataTypes,
         CultureInfo culture)
     {
         var level = ResolveRowFieldLevel(rowFields, sort.Field);
         // A grouped level sorts the way its interval runs even when the reader
         // asked for a label sort: alphabetical month names are not what anyone
         // means by sorting a month column.
-        var comparer = LevelComparer(rowFields, level, culture);
+        var comparer = LevelComparer(rowFields, level, dataTypes, culture);
 
         return ApplyDirection(
             rowOrder.OrderBy(row => rowHeaders[row].ElementAtOrDefault(level), comparer),
@@ -2110,16 +2134,27 @@ public sealed class PivotEngine
         string.Equals(name, field.Key, StringComparison.Ordinal) ||
         string.Equals(name, field.Field, StringComparison.Ordinal);
 
-    /// <summary>The comparer a header level is ordered by: its interval's, or the culture's.</summary>
+    /// <summary>The comparer a header level is ordered by: its interval's, its declared type's,
+    /// or the culture's.</summary>
     private static IComparer<string?> LevelComparer(
         IReadOnlyList<PivotFieldRef> fields,
         int level,
+        IReadOnlyDictionary<string, PivotDataType> dataTypes,
         CultureInfo culture)
     {
-        var interval = fields.ElementAtOrDefault(level)?.Interval ?? PivotGroupInterval.None;
+        var field = fields.ElementAtOrDefault(level);
+        var interval = field?.Interval ?? PivotGroupInterval.None;
 
-        return PivotGroupLabels.Order(interval, culture) ?? StringComparer.Create(culture, ignoreCase: true);
+        return PivotGroupLabels.Order(interval, culture) ??
+            PivotGroupLabels.Order(DataTypeOf(field?.Field, dataTypes), culture) ??
+            StringComparer.Create(culture, ignoreCase: true);
     }
+
+    // Matched ignoring case, as every field name is.
+    private static PivotDataType DataTypeOf(string? field, IReadOnlyDictionary<string, PivotDataType> dataTypes) =>
+        field is null
+            ? PivotDataType.Auto
+            : dataTypes.FirstOrDefault(pair => string.Equals(pair.Key, field, StringComparison.OrdinalIgnoreCase)).Value;
 
     private static int ResolveRowFieldLevel(IReadOnlyList<PivotFieldRef> rowFields, string? field)
     {

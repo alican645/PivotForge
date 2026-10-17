@@ -34,6 +34,7 @@ public sealed class PivotFieldBuilder
     private string? _sortByValueKey;
     private IReadOnlyList<string?>? _sortBySummaryPath;
     private PivotGroupInterval? _groupInterval;
+    private PivotDataType? _dataType;
     private decimal? _groupSize;
     private string? _expression;
 
@@ -439,6 +440,22 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Converts the source column's values to a type when they are read.</summary>
+    /// <remarks>
+    /// For a source that carries everything as text: <see cref="PivotDataType.Number"/> lets
+    /// <c>"1250"</c> be summed and ordered as a number, <see cref="PivotDataType.Date"/> lets
+    /// <c>"2026-03-14"</c> be grouped by month, <see cref="PivotDataType.String"/> orders a numeric
+    /// code as text. A value that does not convert is blank. The type belongs to the column, so
+    /// two levels of one column must not declare different types. DevExtreme's <c>dataType</c>.
+    /// </remarks>
+    /// <param name="type">The type the values are converted to.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder DataType(PivotDataType type)
+    {
+        _dataType = type;
+        return this;
+    }
+
     /// <summary>Sets the width of each range for <see cref="PivotGroupInterval.Range"/>, such as 100.</summary>
     /// <remarks>
     /// A numeric field grouped with <c>GroupInterval(PivotGroupInterval.Range).GroupSize(100)</c>
@@ -579,6 +596,14 @@ public sealed class PivotFieldBuilder
                 "SortBySummaryPath only says which summary the value sort compares.");
         }
 
+        // A formula's result is computed, not read, so there is nothing to convert.
+        if (_expression is not null && _dataType is not null and not PivotDataType.Auto)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets DataType, but it is calculated from a formula. " +
+                "DataType converts a source column's values as they are read.");
+        }
+
         // A measure is aggregated, not grouped: collapsing it to a month would
         // leave nothing to sum.
         if (_area == PivotArea.Data && _groupInterval is not null)
@@ -646,6 +671,11 @@ public sealed class PivotFieldBuilder
         if (_groupInterval is { } groupInterval and not PivotGroupInterval.None)
         {
             field["groupInterval"] = ToCamelCase(groupInterval.ToString());
+        }
+
+        if (_dataType is { } dataType and not PivotDataType.Auto)
+        {
+            field["dataType"] = ToCamelCase(dataType.ToString());
         }
 
         if (_groupSize is { } groupSize)
