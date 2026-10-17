@@ -29,7 +29,7 @@ public sealed class PivotExcelExporter
             WriteEntry(archive, "_rels/.rels", WritePackageRelationships);
             WriteEntry(archive, "xl/workbook.xml", writer => WriteWorkbook(writer, document.SheetName));
             WriteEntry(archive, "xl/_rels/workbook.xml.rels", WriteWorkbookRelationships);
-            WriteEntry(archive, "xl/styles.xml", writer => WriteStyles(writer, styles));
+            WriteEntry(archive, "xl/styles.xml", writer => WriteStyles(writer, styles, document.RightToLeft));
             WriteEntry(archive, "xl/worksheets/sheet1.xml", writer => WriteWorksheet(writer, document, layout, styles));
         }
 
@@ -160,17 +160,21 @@ public sealed class PivotExcelExporter
         var frozenRows = Math.Max(0, document.HeaderRowCount) + DataStartRow - 1;
         var frozenColumns = Math.Max(0, document.FrozenColumnCount);
 
-        if (frozenRows > 0 || frozenColumns > 0)
+        if (frozenRows > 0 || frozenColumns > 0 || document.RightToLeft)
         {
             writer.WriteStartElement("sheetViews");
             writer.WriteStartElement("sheetView");
+            if (document.RightToLeft) writer.WriteAttributeString("rightToLeft", "1");
             writer.WriteAttributeString("workbookViewId", "0");
-            writer.WriteStartElement("pane");
-            if (frozenColumns > 0) writer.WriteAttributeString("xSplit", frozenColumns.ToString(CultureInfo.InvariantCulture));
-            if (frozenRows > 0) writer.WriteAttributeString("ySplit", frozenRows.ToString(CultureInfo.InvariantCulture));
-            writer.WriteAttributeString("topLeftCell", $"{ColumnName(frozenColumns + 1)}{frozenRows + 1}");
-            writer.WriteAttributeString("state", "frozen");
-            writer.WriteEndElement();
+            if (frozenRows > 0 || frozenColumns > 0)
+            {
+                writer.WriteStartElement("pane");
+                if (frozenColumns > 0) writer.WriteAttributeString("xSplit", frozenColumns.ToString(CultureInfo.InvariantCulture));
+                if (frozenRows > 0) writer.WriteAttributeString("ySplit", frozenRows.ToString(CultureInfo.InvariantCulture));
+                writer.WriteAttributeString("topLeftCell", $"{ColumnName(frozenColumns + 1)}{frozenRows + 1}");
+                writer.WriteAttributeString("state", "frozen");
+                writer.WriteEndElement();
+            }
             writer.WriteEndElement();
             writer.WriteEndElement();
         }
@@ -295,7 +299,7 @@ public sealed class PivotExcelExporter
         writer.WriteEndElement();
     }
 
-    private static void WriteStyles(XmlWriter writer, StyleCatalog catalog)
+    private static void WriteStyles(XmlWriter writer, StyleCatalog catalog, bool rightToLeft)
     {
         writer.WriteStartDocument();
         writer.WriteStartElement("styleSheet", SpreadsheetNamespace);
@@ -328,7 +332,10 @@ public sealed class PivotExcelExporter
             var fontId = ResolveFontId(key, catalog);
             var fillId = key.Fill is { } fill ? catalog.CustomFills[fill] : ResolveFillId(key);
             var numberFormatId = key.NumberFormat is null ? 0 : catalog.NumberFormats[key.NumberFormat];
-            var horizontal = role is nameof(PivotExcelCellRole.Value) or nameof(PivotExcelCellRole.Subtotal) or nameof(PivotExcelCellRole.Total) or nameof(PivotExcelCellRole.GrandTotal) ? "right" : "left";
+            var numeric = role is nameof(PivotExcelCellRole.Value) or nameof(PivotExcelCellRole.Subtotal) or nameof(PivotExcelCellRole.Total) or nameof(PivotExcelCellRole.GrandTotal);
+            // Excel keeps "left" and "right" physical in a right-to-left sheet, so
+            // they trade places here to read as they do on screen.
+            var horizontal = numeric != rightToLeft ? "right" : "left";
             WriteXf(writer, numberFormatId, fontId, fillId, role is "title" or "metadata" ? 0 : 1, numberFormatId > 0, true, horizontal);
         }
         writer.WriteEndElement();

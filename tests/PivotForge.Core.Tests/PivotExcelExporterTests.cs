@@ -162,6 +162,41 @@ public sealed class PivotExcelExporterTests
         Assert.Equal(4, fonts.Length);
     }
 
+    [Theory]
+    [InlineData(false, null, "right", "left")]
+    [InlineData(true, "1", "left", "right")]
+    public void Export_WritesARightToLeftSheetWithMirroredAlignment(
+        bool rightToLeft, string? expectedView, string valueAlignment, string headerAlignment)
+    {
+        var document = new PivotExcelDocument
+        {
+            RightToLeft = rightToLeft,
+            Rows =
+            [
+                new PivotExcelRow
+                {
+                    Cells =
+                    [
+                        new PivotExcelCell { Text = "Ege", Role = PivotExcelCellRole.RowHeader },
+                        new PivotExcelCell { Number = 1 }
+                    ]
+                }
+            ]
+        };
+
+        using var archive = new ZipArchive(new MemoryStream(new PivotExcelExporter().Export(document)), ZipArchiveMode.Read);
+        var worksheet = ReadXml(archive, "xl/worksheets/sheet1.xml");
+        var formats = ReadXml(archive, "xl/styles.xml").Descendants(Spreadsheet + "cellXfs").Single()
+            .Elements(Spreadsheet + "xf").ToArray();
+        var cells = worksheet.Descendants(Spreadsheet + "c").Where(cell => cell.Attribute("r")!.Value.EndsWith('4')).ToArray();
+        string AlignmentOf(XElement cell) =>
+            formats[int.Parse(cell.Attribute("s")!.Value)].Element(Spreadsheet + "alignment")!.Attribute("horizontal")!.Value;
+
+        Assert.Equal(expectedView, worksheet.Descendants(Spreadsheet + "sheetView").SingleOrDefault()?.Attribute("rightToLeft")?.Value);
+        Assert.Equal(headerAlignment, AlignmentOf(cells[0]));
+        Assert.Equal(valueAlignment, AlignmentOf(cells[1]));
+    }
+
     [Fact]
     public void Document_UsesLanguageNeutralPackageDefaults()
     {

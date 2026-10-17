@@ -1245,3 +1245,26 @@ test("a rows layout counts its values column before the data columns", () => {
   assert.equal(slot.label, "");
   assert.equal(slot.allowSorting, false);
 });
+
+test("the horizontal arrows trade places right to left, and only there", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const rtl = { dir: "rtl" };
+  const ltr = { dir: "ltr" };
+  const previous = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = element => ({ direction: element.dir });
+
+  try {
+    assert.equal(window.PivotForge.isRtl(rtl), true);
+    assert.equal(window.PivotForge.isRtl(null), false);
+    assert.equal(renderer.visualArrow("ArrowLeft", rtl), "ArrowRight");
+    assert.equal(renderer.visualArrow("ArrowRight", rtl), "ArrowLeft");
+    assert.equal(renderer.visualArrow("ArrowUp", rtl), "ArrowUp");
+    assert.equal(renderer.visualArrow("ArrowLeft", ltr), "ArrowLeft");
+
+    const menu = {};
+    window.PivotForge.matchDirection(menu, rtl);
+    assert.equal(menu.dir, "rtl");
+  } finally {
+    globalThis.getComputedStyle = previous;
+  }
+});

@@ -219,6 +219,7 @@
       elements.tableWrap.hidden = true;
       elements.overlay.classList.add("is-open");
       elements.overlay.setAttribute("aria-hidden", "false");
+      PivotForge.matchDirection?.(elements.overlay, this.widget?.container);
       elements.title.textContent = this.createTitle(selection);
       elements.summary.textContent = "";
       this.setState(this.labels.loading, false);

@@ -1720,6 +1720,26 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesRtlEnabledOnlyWhenDeclared()
+    {
+        var rtl = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RtlEnabled = true },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var ltr = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RtlEnabled = false },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var undeclared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.True(rtl.GetProperty("rtlEnabled").GetBoolean());
+        // False pins the grid left to right on a right-to-left page.
+        Assert.False(ltr.GetProperty("rtlEnabled").GetBoolean());
+        // Undeclared follows the page.
+        Assert.False(undeclared.TryGetProperty("rtlEnabled", out _));
+    }
+
+    [Fact]
     public async Task OmitsHideEmptySummaryCellsWhenUndeclared()
     {
         var config = ConfigOf(await RenderAsync(

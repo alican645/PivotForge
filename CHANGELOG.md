@@ -14,6 +14,20 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- Right to left: `rtl-enabled="true|false"` / `RtlEnabled(bool)` /
+  `rtlEnabled`, DevExtreme's `rtlEnabled`. Undeclared, the grid follows the
+  page's own direction -- the stylesheet now uses logical properties
+  throughout, so a `dir="rtl"` page mirrors it with no declaration. Row
+  headers freeze on the right, the arrow keys move the way they point, column
+  resizing, keeping a focused cell in view, the cell menu, the filter picker
+  and the conditional panel are mirrored, and every overlay takes the grid's
+  direction rather than the page's. The chart stays left to right. (AspNetCore)
+- `PivotExcelDocument.RightToLeft`: a right-to-left sheet whose horizontal
+  alignments trade sides, as the grid's do; a right-to-left grid exports one.
+  The `exporting` payload carries `rtlEnabled`. (Core, AspNetCore)
+
 ## [0.7.0-preview.1] — 2026-10-18
 
 Pivot charts, numeric ranges, value filters and in-cell bars, values drawn

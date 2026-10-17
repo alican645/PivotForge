@@ -138,6 +138,28 @@ PivotForge.valueBarExtents = function valueBarExtents(entries, mode, ranges = []
   });
 };
 
+// Whether an element is laid out right to left -- declared with rtlEnabled or
+// inherited from the page. Read from the computed style every time, because
+// that is what the browser lays out by; the stylesheet is written in logical
+// properties, so only what the code computes from coordinates asks this.
+PivotForge.isRtl = function isRtl(element) {
+  try {
+    return Boolean(element) && typeof getComputedStyle === "function" &&
+      getComputedStyle(element).direction === "rtl";
+  } catch {
+    return false;
+  }
+};
+
+// Something the grid shows outside itself -- a menu, a picker, a modal -- is
+// added to the page's body, which may run the other way. It takes its owner's
+// direction so it reads the same way as the grid it came from.
+PivotForge.matchDirection = function matchDirection(element, owner) {
+  if (element && owner) {
+    element.dir = PivotForge.isRtl(owner) ? "rtl" : "ltr";
+  }
+};
+
 // Turns an export model into comma-separated text. Takes the same model the
 // Excel endpoint is sent, so the two exports can never disagree about what the
 // grid says -- and it inherits the model's cleaning, which drops the sort
@@ -631,6 +653,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       sheetName: options.sheetName ?? "Pivot Tablo",
       headerRowCount: table.tHead?.rows.length ?? 0,
       frozenColumnCount: Math.max(0, frozenColumnCount),
+      // Written only for a right-to-left grid, so every other model is unchanged.
+      ...(PivotForge.isRtl(table) ? { rightToLeft: true } : {}),
       rows: Array.from(table.rows)
         .filter(row => !row.hidden && row.style.display !== "none")
         .map(row => ({
@@ -1837,7 +1861,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         event.preventDefault();
         selectTarget(target);
         const rect = target.getBoundingClientRect();
-        this.openContextMenu(target, rect.left + 12, rect.top + 12, settings);
+        // At the cell's starting corner: its right edge in RTL.
+        const x = PivotForge.isRtl(target) ? rect.right - 12 : rect.left + 12;
+        this.openContextMenu(target, x, rect.top + 12, settings);
         return;
       }
 
@@ -1850,7 +1876,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       if (isCell && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault();
-        this.moveCellSelection(table, target, event.key, settings);
+        this.moveCellSelection(table, target, this.visualArrow(event.key, table), settings);
         return;
       }
 
@@ -2002,20 +2028,33 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     const hostRect = host.getBoundingClientRect();
     const cellRect = cell.getBoundingClientRect();
-    const stickyRight = Math.max(
-      hostRect.left,
-      ...Array.from(cell.parentElement?.querySelectorAll("[data-sticky-column]") ?? [])
-        .map(header => header.getBoundingClientRect().right));
+    const stickyHeaders = Array.from(cell.parentElement?.querySelectorAll("[data-sticky-column]") ?? [])
+      .map(header => header.getBoundingClientRect());
     const stickyBottom = Math.max(
       hostRect.top,
       ...Array.from(table?.querySelectorAll("[data-sticky-row]") ?? [])
         .map(header => header.getBoundingClientRect().bottom));
     const gap = 8;
 
-    if (cellRect.right > hostRect.right - gap) {
-      host.scrollLeft += cellRect.right - hostRect.right + gap;
-    } else if (cellRect.left < stickyRight + gap) {
-      host.scrollLeft -= stickyRight + gap - cellRect.left;
+    // The frozen row headers sit at the start edge -- the right in RTL -- and
+    // a cell scrolled under them is as hidden as one scrolled off the far side.
+    // A positive scrollLeft change moves the view right in either direction.
+    if (PivotForge.isRtl(host)) {
+      const stickyLeft = Math.min(hostRect.right, ...stickyHeaders.map(rect => rect.left));
+
+      if (cellRect.left < hostRect.left + gap) {
+        host.scrollLeft -= hostRect.left + gap - cellRect.left;
+      } else if (cellRect.right > stickyLeft - gap) {
+        host.scrollLeft += cellRect.right - stickyLeft + gap;
+      }
+    } else {
+      const stickyRight = Math.max(hostRect.left, ...stickyHeaders.map(rect => rect.right));
+
+      if (cellRect.right > hostRect.right - gap) {
+        host.scrollLeft += cellRect.right - hostRect.right + gap;
+      } else if (cellRect.left < stickyRight + gap) {
+        host.scrollLeft -= stickyRight + gap - cellRect.left;
+      }
     }
 
     if (cellRect.bottom > hostRect.bottom - gap) {
@@ -2023,6 +2062,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     } else if (cellRect.top < stickyBottom + gap) {
       host.scrollTop -= stickyBottom + gap - cellRect.top;
     }
+  }
+
+  // The arrow keys move the way they point. Navigation walks cells in document
+  // order, which runs right to left on screen in RTL, so the two horizontal
+  // keys trade places there.
+  visualArrow(key, element) {
+    if (!PivotForge.isRtl(element)) {
+      return key;
+    }
+
+    return { ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" }[key] ?? key;
   }
 
   resolveNavigationPosition(rows, currentRow, currentIndex, currentColumn, direction) {
@@ -2150,6 +2200,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     });
 
     menu.addEventListener("keydown", event => this.handleContextMenuKeydown(event, cell));
+    PivotForge.matchDirection(menu, cell);
     document.body.appendChild(menu);
     this.contextMenu = menu;
     this.contextMenuCell = cell;
@@ -2157,7 +2208,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     const margin = 8;
     const rect = menu.getBoundingClientRect();
-    menu.style.left = `${Math.max(margin, Math.min(clientX, window.innerWidth - rect.width - margin))}px`;
+    // Opening away from the start edge: rightwards from the point, or in RTL
+    // leftwards, so the menu covers the cell's neighbours rather than the
+    // headers that name it.
+    const left = menu.dir === "rtl" ? clientX - rect.width : clientX;
+    menu.style.left = `${Math.max(margin, Math.min(left, window.innerWidth - rect.width - margin))}px`;
     menu.style.top = `${Math.max(margin, Math.min(clientY, window.innerHeight - rect.height - margin))}px`;
     menu.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
     return menu;
@@ -2537,6 +2592,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
         const columnIndex = Number(header.dataset.columnIndex);
         const startX = event.clientX;
+        // The handle sits on the end edge, the left in RTL: dragging it away
+        // from the column widens it either way.
+        const sign = PivotForge.isRtl(table) ? -1 : 1;
         const startWidth = header.getBoundingClientRect().width;
         const minWidth = settings.minColumnWidth ?? 72;
         const maxWidth = settings.maxColumnWidth ?? 420;
@@ -2546,7 +2604,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         handle.setPointerCapture?.(event.pointerId);
 
         const move = moveEvent => {
-          const nextWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + moveEvent.clientX - startX));
+          const nextWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + sign * (moveEvent.clientX - startX)));
           this.columnWidths.set(columnIndex, nextWidth);
           table.querySelectorAll(`[data-column-index="${columnIndex}"]`).forEach(cell => {
             this.setCellWidth(cell, nextWidth);
