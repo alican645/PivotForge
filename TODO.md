@@ -321,8 +321,12 @@ Açık kalanlar:
 - [x] Tam ekran — araç çubuğunda; sayfa içinde (Fullscreen API değil), Escape ile çıkılıyor
 - [x] Ölçüler satır ekseninde — `values-position="Rows"`: her pivot satırı (ara toplamlar ve genel
       toplam dahil) ölçü başına bir satıra bölünüyor, satır başlıkları bloğu kaplıyor, "Değerler"
-      sütunu ölçüyü adlandırıyor. Yalnızca renderer'da; istek ve motor değişmedi. Tasarımcıda
-      Σ Değerler çipini sürükleyerek eksen değiştirme ve görünümle saklama henüz yok
+      sütunu ölçüyü adlandırıyor. Yalnızca renderer'da; istek ve motor değişmedi
+- [x] Tasarımcıda **Σ Değerler** çipi — iki ya da daha fazla ölçü varken Sütunlar veya Satırlar
+      bölgesinin sonunda duruyor; sürükleyerek ya da klavyeyle iki bölge arasında taşınıyor,
+      kaldırılamıyor. Konum düzenin parçası: `state-storing` ve rapor dosyaları, bildirimden
+      farklıysa saklıyor. Çip bölgenin hep sonunda: renderer ölçüleri yalnızca en içteki
+      seviye olarak çizebiliyor, Excel'deki gibi ara seviyeye konamıyor
 - [ ] RTL desteği
 
 ---

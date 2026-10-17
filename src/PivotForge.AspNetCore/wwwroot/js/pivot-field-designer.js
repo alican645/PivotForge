@@ -24,6 +24,7 @@
     filterValues: "Filter values",
     // Excel's wording for holding edits back until the reader asks for them.
     deferUpdate: "Defer layout update",
+    valuesChip: "\u03a3 Values",
     update: "Update",
     // {0} is replaced with the number of listed values.
     filterCount: "({0})",
@@ -187,6 +188,12 @@
   // How far a press has to travel before it counts as a drag rather than a
   // click. Below this the chip's own controls keep working normally.
   const DRAG_THRESHOLD = 5;
+
+  // The chip standing for every value at once -- Excel's Σ Values. It is not a
+  // field: it sits at the end of the Rows or Columns zone, only while there are
+  // two or more values to place, and moving it changes which axis they are
+  // drawn along. Named so no source column plausibly collides with it.
+  const VALUES_CHIP = "__pivotforge_values__";
 
   // Pointer capture is an optimisation, not a requirement: it keeps moves
   // arriving after the pointer leaves the chip. It legitimately throws when the
@@ -673,9 +680,9 @@
         return;
       }
 
-      if (this.state.canDrop(name, target.area)) {
+      if (this.canDropChip(name, target.area)) {
         const dropAt = this.dropIndex(target.body, event.clientY);
-        this.apply(() => this.state.move(name, target.area, dropAt));
+        this.apply(() => this.moveChip(name, target.area, dropAt));
       }
     }
 
@@ -735,8 +742,15 @@
 
       // A refused drag used to fall out silently, leaving "not allowed here"
       // and "broken" looking identical.
-      if (!this.state.canDrop(name, target.area)) {
+      if (!this.canDropChip(name, target.area)) {
         target.zone.classList.add("is-drop-refused");
+        return;
+      }
+
+      // The Σ chip always lands at the end of its zone, so there is no slot to
+      // point at -- the zone is the target.
+      if (name === VALUES_CHIP) {
+        target.zone.classList.add("is-empty-drop-target");
         return;
       }
 
@@ -796,7 +810,7 @@
           this.beginGrab(name);
           return true;
         case "Enter":
-          if (this.state.areaOf(name) === "available") {
+          if (name === VALUES_CHIP || this.state.areaOf(name) === "available") {
             return false;
           }
           this.openSettings(name);
@@ -832,7 +846,7 @@
     }
 
     beginGrab(name) {
-      const area = this.state.areaOf(name);
+      const area = this.areaOfChip(name);
       this.grab = { name, area, index: Math.max(this.namesIn(area).indexOf(name), 0) };
 
       const chip = this.chipFor(name);
@@ -862,7 +876,7 @@
       const names = this.namesIn(grab.area);
       // A field already in this zone can only occupy the slots that exist; one
       // arriving from elsewhere may also land past the last chip.
-      const last = grab.area === this.state.areaOf(grab.name) ? names.length - 1 : names.length;
+      const last = grab.area === this.areaOfChip(grab.name) ? names.length - 1 : names.length;
       grab.index = Math.min(Math.max(grab.index + step, 0), Math.max(last, 0));
       this.showGrabFeedback();
       return true;
@@ -879,7 +893,7 @@
       const names = this.namesIn(next);
       // Arriving in a zone lands at its end, which is where a field dropped
       // into a zone with a mouse most often goes.
-      grab.index = next === this.state.areaOf(grab.name)
+      grab.index = next === this.areaOfChip(grab.name)
         ? Math.max(names.length - 1, 0)
         : names.length;
       this.showGrabFeedback();
@@ -891,7 +905,7 @@
     grabAllowed(grab) {
       return grab.area === "available"
         ? this.canReturn(grab.name)
-        : this.state.canDrop(grab.name, grab.area);
+        : this.canDropChip(grab.name, grab.area);
     }
 
     showGrabFeedback() {
@@ -908,7 +922,7 @@
         return;
       }
 
-      if (grab.area === "available" || target.body.children.length === 0) {
+      if (grab.area === "available" || grab.name === VALUES_CHIP || target.body.children.length === 0) {
         target.zone.classList.add("is-empty-drop-target");
         return;
       }
@@ -920,7 +934,7 @@
     // the grabbed chip when the move stays inside its own zone -- so a slot
     // past that chip is one further along on screen than it is in the result.
     markerIndex(grab) {
-      const from = grab.area === this.state.areaOf(grab.name)
+      const from = grab.area === this.areaOfChip(grab.name)
         ? this.namesIn(grab.area).indexOf(grab.name)
         : -1;
       return from >= 0 && grab.index > from ? grab.index + 1 : grab.index;
@@ -941,8 +955,13 @@
         return;
       }
 
-      if (grab.area !== this.state.areaOf(grab.name)) {
-        this.apply(() => this.state.move(grab.name, grab.area, grab.index));
+      if (grab.area !== this.areaOfChip(grab.name)) {
+        this.apply(() => this.moveChip(grab.name, grab.area, grab.index));
+        return;
+      }
+
+      // The Σ chip has one place in a zone, so it cannot be reordered there.
+      if (grab.name === VALUES_CHIP) {
         return;
       }
 
@@ -967,7 +986,7 @@
     }
 
     focusSibling(name, step) {
-      const body = this.zones.get(this.state.areaOf(name))?.body;
+      const body = this.zones.get(this.areaOfChip(name))?.body;
       if (!body) {
         return false;
       }
@@ -2294,12 +2313,82 @@
 
       const names = this.namesIn(area);
       names.forEach(name => body.appendChild(this.createChip(name, area)));
+      if (this.showsValuesChip() && this.areaOfChip(VALUES_CHIP) === area) {
+        body.appendChild(this.createValuesChip());
+      }
       return zone;
+    }
+
+    // --- Σ Values ---------------------------------------------------------
+    // The drag and keyboard code ask these instead of the state, so the one
+    // chip that is not a field is handled in four small places rather than in
+    // every gesture.
+
+    showsValuesChip() {
+      return typeof this.state.setValuesPosition === "function" && this.state.getState().values.length > 1;
+    }
+
+    areaOfChip(name) {
+      return name === VALUES_CHIP
+        ? (this.state.valuesPosition === "rows" ? "row" : "column")
+        : this.state.areaOf(name);
+    }
+
+    canDropChip(name, area) {
+      return name === VALUES_CHIP
+        ? area === "row" || area === "column"
+        : this.state.canDrop(name, area);
+    }
+
+    moveChip(name, area, index) {
+      if (name === VALUES_CHIP) {
+        this.state.setValuesPosition(area === "row" ? "rows" : "columns");
+        return;
+      }
+
+      this.state.move(name, area, index);
+    }
+
+    // Built like a field chip -- same grip, same focus and keyboard handling --
+    // minus the controls: it cannot be removed and has no settings.
+    createValuesChip() {
+      const document = root.document;
+      const chip = document.createElement("div");
+      chip.className = "pivot-chip pivot-chip--values";
+      chip.dataset.field = VALUES_CHIP;
+      chip.tabIndex = -1;
+      chip.setAttribute("role", "button");
+      chip.setAttribute("aria-grabbed", "false");
+      chip.addEventListener("pointerdown", event => this.beginDrag(event, chip, VALUES_CHIP));
+      chip.addEventListener("keydown", event => this.handleKeydown(event, VALUES_CHIP, chip));
+      chip.addEventListener("focus", () => {
+        this.focusField = VALUES_CHIP;
+        this.refreshTabStops();
+      });
+
+      const label = document.createElement("span");
+      label.className = "pivot-chip__label";
+      label.textContent = this.labels.valuesChip;
+      chip.appendChild(label);
+
+      const grip = document.createElement("span");
+      grip.className = "pivot-chip__grip";
+      grip.dataset.action = "grip";
+      grip.textContent = "⠿";
+      grip.setAttribute("aria-hidden", "true");
+      chip.appendChild(grip);
+
+      return chip;
     }
 
     // Whether dragging `name` back to the available list would be accepted.
     // Mirrors what the × button allows, so the two gestures cannot disagree.
     canReturn(name) {
+      // The values cannot leave the grid as a block; each value chip can.
+      if (name === VALUES_CHIP) {
+        return false;
+      }
+
       const area = this.state.areaOf(name);
       if (area === "available") {
         return false;
@@ -2583,6 +2672,7 @@
 
   PivotFieldDesigner.instances = 0;
 
+  PivotFieldDesigner.VALUES_CHIP = VALUES_CHIP;
   PivotForge.PivotFieldDesigner = PivotFieldDesigner;
 
   if (typeof module !== "undefined" && module.exports) {

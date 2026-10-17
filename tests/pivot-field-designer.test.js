@@ -2585,3 +2585,67 @@ test("an unticked defer box applies edits at once but can be ticked", async () =
   await designer.apply(() => designer.state.remove("Quarter"));
   assert.equal(updates.length, 1);
 });
+
+// --- Σ Values chip ------------------------------------------------------------
+
+const VALUES_CHIP = PivotForge.PivotFieldDesigner.VALUES_CHIP;
+
+function buildWithTwoValues() {
+  const built = build();
+  built.designer.state.move("Quantity", "data");
+  built.designer.render();
+  return built;
+}
+
+test("the Σ Values chip appears only with two or more values, at the end of the columns", () => {
+  const one = build();
+  assert.equal(chips(one.host).some(chip => chip.dataset.field === VALUES_CHIP), false);
+
+  const { host } = buildWithTwoValues();
+  const columnChips = chips(zone(host, "column")).map(chip => chip.dataset.field);
+  assert.deepEqual(columnChips, ["Year", VALUES_CHIP]);
+  // It is not a field: no remove button, no settings.
+  const sigma = chips(host).find(chip => chip.dataset.field === VALUES_CHIP);
+  assert.equal(findByAction(sigma, "remove"), null);
+  assert.equal(findByAction(sigma, "settings"), null);
+});
+
+test("moving the Σ chip to the rows with the keyboard draws the values down the rows", async () => {
+  const { designer, host, updates } = buildWithTwoValues();
+
+  pressOn(host, VALUES_CHIP, " ");
+  pressOn(host, VALUES_CHIP, "ArrowRight");
+  pressOn(host, VALUES_CHIP, "Enter");
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(designer.state.valuesPosition, "rows");
+  assert.equal(updates.at(-1).valuesPosition, "rows");
+  assert.deepEqual(chips(zone(host, "row")).map(chip => chip.dataset.field), ["Region", VALUES_CHIP]);
+  // The fields stayed where they were.
+  assert.deepEqual(designer.state.getState().rows, ["Region"]);
+});
+
+test("the Σ chip goes only to the rows or the columns, and cannot be removed", () => {
+  const { designer, host, updates } = buildWithTwoValues();
+  const before = updates.length;
+
+  assert.equal(designer.canDropChip(VALUES_CHIP, "data"), false);
+  assert.equal(designer.canDropChip(VALUES_CHIP, "filter"), false);
+  assert.equal(designer.canReturn(VALUES_CHIP), false);
+
+  pressOn(host, VALUES_CHIP, "Delete");
+  pressOn(host, VALUES_CHIP, "Enter");
+
+  assert.equal(updates.length, before);
+  assert.equal(designer.settingsFor, null);
+  assert.equal(designer.state.valuesPosition, "columns");
+});
+
+test("a mouse drag of the Σ chip onto the rows zone moves it there", async () => {
+  const { designer, host } = buildWithTwoValues();
+
+  dragFieldTo(host, VALUES_CHIP, zone(host, "row"), "drop");
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(designer.state.valuesPosition, "rows");
+});

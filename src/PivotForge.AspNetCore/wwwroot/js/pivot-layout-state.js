@@ -61,6 +61,8 @@
     return { ...format };
   }
 
+  const VALUES_POSITIONS = ["columns", "rows"];
+
   class PivotLayoutState {
     constructor(catalog, layout = null) {
       const normalized = PivotForge.PivotRequestBuilder.normalizeFields(catalog ?? []);
@@ -121,6 +123,7 @@
       return {
         rows: inArea("row").map(field => field.key),
         columns: inArea("column").map(field => field.key),
+        valuesPosition: "columns",
         values: inArea("data").map(field => ({
           field: field.key,
           aggregation: this.defaultAggregation(field.key),
@@ -184,6 +187,9 @@
       return {
         rows: [...(layout.rows ?? [])],
         columns: [...(layout.columns ?? [])],
+        // A position this build does not know reads as the default rather than
+        // refusing the whole view: it changes how the grid is drawn, not what.
+        valuesPosition: VALUES_POSITIONS.includes(layout.valuesPosition) ? layout.valuesPosition : "columns",
         values: (layout.values ?? []).map(value => {
           // A stored format wins; otherwise the catalog's declaration applies,
           // so adopting a layout saved before formats existed still formats.
@@ -898,6 +904,7 @@
       return {
         rows: [...this.layout.rows],
         columns: [...this.layout.columns],
+        valuesPosition: this.layout.valuesPosition,
         values: this.layout.values.map(value => ({ ...value })),
         filters: this.layout.filters.map(filter => ({ ...filter, values: [...filter.values] })),
         available: [...this.catalog.keys()].filter(name => !placed.has(name)),
@@ -1034,8 +1041,37 @@
     toRequestState() {
       return {
         fields: this.toFields(),
-        filters: this.getState().filters.filter(PivotForge.PivotRequestBuilder.restricts)
+        filters: this.getState().filters.filter(PivotForge.PivotRequestBuilder.restricts),
+        valuesPosition: this.layout.valuesPosition
       };
+    }
+
+    // Which axis several values are drawn along -- where the designer's
+    // Σ Values chip sits. Part of the layout, as it is in Excel, so a saved view
+    // and a report file carry it with the rest.
+    get valuesPosition() {
+      return this.layout.valuesPosition;
+    }
+
+    setValuesPosition(position) {
+      if (!VALUES_POSITIONS.includes(position)) {
+        throw new Error(`Unknown values position "${position}". Expected one of: ${VALUES_POSITIONS.join(", ")}.`);
+      }
+
+      if (this.layout.valuesPosition === position) {
+        return;
+      }
+
+      this.layout.valuesPosition = position;
+      this.emitChange();
+    }
+
+    // The page's declaration, for a layout that did not bring one of its own:
+    // no change event, since nothing the reader did changed.
+    adoptValuesPosition(position) {
+      if (VALUES_POSITIONS.includes(position)) {
+        this.layout.valuesPosition = position;
+      }
     }
 
     on(eventName, handler) {
