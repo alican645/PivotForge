@@ -2856,6 +2856,15 @@ select {
   }
 }
 
+/* The Σ Values chip stands for every value at once rather than for a field:
+   told apart by a dashed edge and the accent colour, like Excel's own. */
+.pivot-chip.pivot-chip--values {
+  border-style: dashed;
+  border-color: var(--pt-accent);
+  color: var(--pt-accent-strong);
+  font-weight: 600;
+}
+
 .pivot-chip {
   display: flex;
   align-items: center;

@@ -285,6 +285,11 @@
         this.conditionalRules = restored.conditionalRules;
       }
 
+      // Which axis several values are drawn along. Declared through
+      // rendererOptions; once a designer's Σ Values chip moves it, the layout
+      // owns it and a stored view brings it back.
+      this.valuesPosition = restored?.layout?.valuesPosition ?? this.declaredValuesPosition();
+
       // Before the renderer, which is the first thing to put text on screen.
       this.locale = this.resolveLocale();
 
@@ -326,6 +331,9 @@
         }
 
         this.layoutState = this.createLayoutState(restored);
+        if (!restored?.layout?.valuesPosition) {
+          this.layoutState.adoptValuesPosition(this.valuesPosition);
+        }
 
         // The designer shows the restored layout, so the grid has to draw it
         // too. Without this the chips came back as saved while the first
@@ -373,6 +381,10 @@
       }
 
       return new PivotForge.PivotLayoutState(this.options.fields);
+    }
+
+    declaredValuesPosition() {
+      return this.options.rendererOptions?.valuesPosition === "rows" ? "rows" : "columns";
     }
 
     resolveStateStorage() {
@@ -531,6 +543,13 @@
               columns: layout.columns,
               values: layout.values,
               filters: layout.filters,
+              // Only when the reader moved the values away from where the page
+              // declared them, so a view saved before the Σ chip existed is
+              // byte-identical -- and one that left them there follows the
+              // declaration if the page later changes it.
+              ...(layout.valuesPosition !== this.declaredValuesPosition()
+                ? { valuesPosition: layout.valuesPosition }
+                : {}),
               // Before the placements on the way back in, which may seat them.
               ...(layout.calculatedFields.length > 0
                 ? { calculatedFields: layout.calculatedFields }
@@ -596,8 +615,13 @@
           groupSizes: report.groupSizes
         });
 
+        // A report silent about it left the values where the page declares them.
+        if (!report.layout.valuesPosition) {
+          state.adoptValuesPosition(this.declaredValuesPosition());
+        }
         this.options.fields = state.toFields();
         this.fields = PivotForge.PivotRequestBuilder.normalizeFields(this.options.fields);
+        this.valuesPosition = state.valuesPosition;
 
         if (this.layoutState) {
           this.layoutState = state;
@@ -792,6 +816,8 @@
         // captions are lost and a second data field disappears.
         values: this.valueDefinitions(),
         ...consumer,
+        // After the spread: the declaration seeds it, the Σ Values chip owns it.
+        valuesPosition: this.valuesPosition,
         // A cell activation always announces itself. The packaged detail modal
         // opens only when the consumer did not bring its own detail UI, so a
         // page with its own modal does not get two.
@@ -1622,7 +1648,7 @@
       this.container.appendChild(node);
     }
 
-    async update({ fields, filters, rowSort, columnSort } = {}) {
+    async update({ fields, filters, rowSort, columnSort, valuesPosition } = {}) {
       // One call, one refresh: a designer changes several pieces per interaction
       // and must not produce a request per piece.
       if (fields !== undefined) {
@@ -1654,6 +1680,13 @@
       if (columnSort !== undefined) {
         this.columnSort = columnSort;
         this.syncRendererSortState();
+      }
+
+      if (valuesPosition !== undefined && valuesPosition !== this.valuesPosition) {
+        this.valuesPosition = valuesPosition;
+        if (this.renderer?.options) {
+          this.renderer.options.valuesPosition = valuesPosition;
+        }
       }
 
       this.saveState();

@@ -16,6 +16,14 @@ change will require a new major version.
 
 ### Added
 
+- The field designer's **Σ Values** chip (`Σ Değerler` in Turkish): while
+  there are two or more values it sits at the end of the Columns or Rows
+  zone, and dragging it (or moving it with the keyboard) between the two
+  switches `valuesPosition`. It cannot be removed and has no settings. The
+  position is part of the layout -- `PivotLayoutState.valuesPosition` /
+  `setValuesPosition()`, `toRequestState().valuesPosition`, `update({
+  valuesPosition })` -- and is kept by `state-storing` and in report files
+  when it differs from the page's declaration. (AspNetCore)
 - `values-position="Rows"` / `ValuesPosition(PivotValuesPosition.Rows)` /
   `rendererOptions.valuesPosition: "rows"` draws several values down the rows
   instead of across the columns, as DevExtreme's `dataFieldArea: "row"`

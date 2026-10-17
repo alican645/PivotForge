@@ -1349,3 +1349,45 @@ test("a saved view brings its widths back before the placements that name them",
   });
   assert.deepEqual(lenient.getState().groupSizes, {});
 });
+
+// --- values position (the designer's Σ Values chip) --------------------------
+
+test("values are drawn across the columns until moved, and the move is part of the state", () => {
+  const state = create();
+  const changes = [];
+  state.on("change", snapshot => changes.push(snapshot.valuesPosition));
+
+  assert.equal(state.valuesPosition, "columns");
+  assert.equal(state.getState().valuesPosition, "columns");
+
+  state.setValuesPosition("rows");
+  // Setting it again changes nothing, so nothing is announced.
+  state.setValuesPosition("rows");
+
+  assert.equal(state.valuesPosition, "rows");
+  assert.deepEqual(changes, ["rows"]);
+  assert.equal(state.toRequestState().valuesPosition, "rows");
+  assert.throws(() => state.setValuesPosition("diagonal"), /Unknown values position/);
+});
+
+test("a saved layout brings its values position back; an unknown one reads as columns", () => {
+  const saved = create();
+  saved.setValuesPosition("rows");
+
+  assert.equal(new PivotForge.PivotLayoutState(catalog, saved.getState()).valuesPosition, "rows");
+  assert.equal(
+    new PivotForge.PivotLayoutState(catalog, { ...saved.getState(), valuesPosition: "diagonal" }).valuesPosition,
+    "columns");
+});
+
+test("adopting a declared position changes it without announcing a change", () => {
+  const state = create();
+  let announced = false;
+  state.on("change", () => { announced = true; });
+
+  state.adoptValuesPosition("rows");
+  state.adoptValuesPosition("diagonal");
+
+  assert.equal(state.valuesPosition, "rows");
+  assert.equal(announced, false);
+});
