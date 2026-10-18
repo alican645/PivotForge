@@ -45,7 +45,8 @@ public class PivotTagHelperTests
         PivotDataType? FieldType = null,
         PivotRunningTotal? RunningTotal = null,
         PivotSortBy? SortBy = null,
-        string? SortingMethod = null);
+        string? SortingMethod = null,
+        string? Selector = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -165,6 +166,12 @@ public class PivotTagHelperTests
         {
             helper.FieldType = fieldType;
             attributes.Add(new TagHelperAttribute("field-type", fieldType.ToString()));
+        }
+
+        if (spec.Selector is not null)
+        {
+            helper.Selector = spec.Selector;
+            attributes.Add(new TagHelperAttribute("selector", spec.Selector));
         }
 
         if (spec.SortBy is { } sortBy)
@@ -1214,6 +1221,22 @@ public class PivotTagHelperTests
             .DataField("Amount").Area(PivotArea.Data).SortBy(PivotSortBy.None).Build());
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Region").Area(PivotArea.Filter).SortingMethod("priority").Build());
+    }
+
+    [Fact]
+    public async Task WritesADeclaredSelectorAndRefusesItBesideAFormulaOrADataType()
+    {
+        var fields = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("FiscalYear", PivotArea.Row, Selector: "fiscalYear"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum))).GetProperty("fields");
+
+        Assert.Equal("fiscalYear", fields[0].GetProperty("selector").GetString());
+        Assert.False(fields[1].TryGetProperty("selector", out _));
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Year").Area(PivotArea.Row).Selector("fiscalYear").DataType(PivotDataType.Number).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Net").Area(PivotArea.Data).Selector("net").Expression("[Amount]").Build());
     }
 
     [Fact]

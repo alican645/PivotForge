@@ -17,13 +17,16 @@ internal static class PivotFieldAccess
     /// here, so a sort cannot reach a field this list has not already seen.
     /// A calculated value reads the fields its formula names, not its own name, so those are
     /// what it contributes: a formula typed in the browser can reach no field a header could not.
+    /// A field a registered selector works out is not read from the source at all -- the
+    /// selector, server code, decides what it reads -- so it is left out too.
     /// </remarks>
     public static IEnumerable<string> ReadFields(this PivotForgeRequest request) => request.Rows
         .Concat(request.Columns)
         .Select(level => level.Field)
         .Concat(request.Values.SelectMany(ValueFields))
         .Concat(request.Filters.Select(filter => filter.Field))
-        .Concat(request.DataTypes.Keys);
+        .Concat(request.DataTypes.Keys)
+        .Except(request.Selectors.Keys, StringComparer.OrdinalIgnoreCase);
 
     private static IEnumerable<string> ValueFields(PivotValueDefinition value)
     {

@@ -1439,3 +1439,14 @@ test("toFields carries sortBy and sortingMethod on the axes and drops them elsew
     { field: "Region", direction: "Ascending", sortBy: "None" }
   ]);
 });
+
+test("a selector travels with its column wherever it is placed", () => {
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "FiscalYear", caption: "Mali yıl", area: "row", selector: "fiscalYear" },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+  ]);
+
+  state.move("FiscalYear", "filter");
+  assert.deepEqual(
+    PivotForge.PivotRequestBuilder.buildRequest(state.toFields()).selectors, { FiscalYear: "fiscalYear" });
+});

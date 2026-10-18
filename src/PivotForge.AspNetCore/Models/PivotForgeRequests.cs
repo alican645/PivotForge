@@ -40,9 +40,16 @@ public class PivotForgeRequest
     public IReadOnlyDictionary<string, PivotDataType> DataTypes { get; init; } =
         new Dictionary<string, PivotDataType>();
 
+    /// <summary>Gets the fields a registered selector works out, naming the selector.</summary>
+    /// <remarks>See <see cref="PivotRequest.Selectors"/>. A name must be registered in
+    /// <see cref="PivotForgeOptions.CustomSelectors"/>.</remarks>
+    public IReadOnlyDictionary<string, string> Selectors { get; init; } =
+        new Dictionary<string, string>();
+
     internal PivotRequest ToPivotRequest() => new()
     {
         DataTypes = DataTypes,
+        Selectors = Selectors,
         HideEmptySummaryCells = HideEmptySummaryCells,
         Rows = Rows,
         Columns = Columns,
@@ -105,6 +112,11 @@ public sealed class PivotForgeFieldValuesRequest
     /// the list holds what the headers show.</summary>
     public IReadOnlyDictionary<string, PivotDataType> DataTypes { get; init; } =
         new Dictionary<string, PivotDataType>();
+
+    /// <summary>Gets the fields a registered selector works out, as the pivot request sends them,
+    /// so the list holds what the headers show; <see cref="Field"/> may be one of them.</summary>
+    public IReadOnlyDictionary<string, string> Selectors { get; init; } =
+        new Dictionary<string, string>();
 
     /// <summary>Gets the source-row hint passed to the configured data provider.</summary>
     public int SourceRowCount { get; init; } = 100_000;

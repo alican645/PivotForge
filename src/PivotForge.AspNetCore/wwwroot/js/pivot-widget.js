@@ -1831,7 +1831,11 @@
     // conversions the pivot request asks for.
     fieldValueDataTypes() {
       const types = PivotForge.PivotRequestBuilder.dataTypes(this.fields);
-      return Object.keys(types).length > 0 ? { dataTypes: types } : {};
+      const selectors = PivotForge.PivotRequestBuilder.selectors(this.fields);
+      return {
+        ...(Object.keys(types).length > 0 ? { dataTypes: types } : {}),
+        ...(Object.keys(selectors).length > 0 ? { selectors } : {})
+      };
     }
 
     // Translated by the request builder, so a grouped level's filter arrives as

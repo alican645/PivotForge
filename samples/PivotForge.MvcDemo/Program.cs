@@ -43,6 +43,14 @@ builder.Services.AddPivotForge<SalesRecord>(
 
         int Rank(string? region) =>
             Array.IndexOf(coastalFirst, region) is var rank and >= 0 ? rank : coastalFirst.Length;
+
+        // Fields whose value is worked out from the whole record:
+        // <pivot-field field="FiscalYear" area="Column" selector="fiscalYear" />.
+        // The fiscal year starts in October.
+        options.CustomSelectors["fiscalYear"] = record =>
+            ((SalesRecord)record.Source).OrderDate is var date && date.Month >= 10 ? date.Year + 1 : date.Year;
+        options.CustomSelectors["orderSize"] = record =>
+            (decimal)record["Amount"]! >= 100_000m ? "Büyük" : "Küçük";
     });
 
 var app = builder.Build();

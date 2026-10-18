@@ -207,6 +207,12 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("field-type")]
     public PivotDataType FieldType { get; set; }
 
+    /// <summary>Gets or sets the name of a selector registered in <see cref="PivotForgeOptions.CustomSelectors"/>.</summary>
+    /// <remarks>DevExtreme's <c>selector</c>, run on the server: the field's value is what the
+    /// selector works out from the whole record. Not with <c>expression</c> or <c>field-type</c>.</remarks>
+    [HtmlAttributeName("selector")]
+    public string? Selector { get; set; }
+
     /// <summary>Gets or sets the direction this value's running total accumulates in.</summary>
     /// <remarks>Non-nullable for the same reason as <see cref="GroupInterval"/>.</remarks>
     [HtmlAttributeName("running-total")]
@@ -400,6 +406,11 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (_writtenAttributes.Contains("field-type"))
         {
             builder.DataType(FieldType);
+        }
+
+        if (!string.IsNullOrWhiteSpace(Selector))
+        {
+            builder.Selector(Selector);
         }
 
         if (_writtenAttributes.Contains("running-total"))

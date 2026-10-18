@@ -38,6 +38,7 @@ public sealed class PivotFieldBuilder
     private string? _sortingMethod;
     private PivotGroupInterval? _groupInterval;
     private PivotDataType? _dataType;
+    private string? _selector;
     private PivotRunningTotal? _runningTotal;
     private decimal? _groupSize;
     private string? _expression;
@@ -527,6 +528,24 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Works this field's value out from the whole record with a selector registered on the server, DevExtreme's <c>selector</c>.</summary>
+    /// <remarks>
+    /// The name of an entry in <see cref="PivotForgeOptions.CustomSelectors"/>. The field then
+    /// groups, filters, lists and sums by what the selector returns: a fiscal year from an order
+    /// date, a segment from an amount. <see cref="DataField"/> may name a source column, whose values
+    /// the selector replaces, or a name of the selector's own. Valid in any area; not with
+    /// <see cref="Expression"/> or <see cref="DataType"/>. A name that is not registered is refused
+    /// when the grid asks for data.
+    /// </remarks>
+    /// <param name="name">The registered selector's name.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder Selector(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        _selector = name;
+        return this;
+    }
+
     /// <summary>Sets the width of each range for <see cref="PivotGroupInterval.Range"/>, such as 100.</summary>
     /// <remarks>
     /// A numeric field grouped with <c>GroupInterval(PivotGroupInterval.Range).GroupSize(100)</c>
@@ -689,6 +708,15 @@ public sealed class PivotFieldBuilder
                 "RunningTotal is only valid on fields whose Area is Data.");
         }
 
+        // A selected value is worked out rather than read: there is no source value
+        // to convert, and a formula already says how to compute it.
+        if (_selector is not null && (_expression is not null || _dataType is not null and not PivotDataType.Auto))
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets Selector together with {(_expression is not null ? "Expression" : "DataType")}. " +
+                "A selector works the field's value out itself.");
+        }
+
         // A formula's result is computed, not read, so there is nothing to convert.
         if (_expression is not null && _dataType is not null and not PivotDataType.Auto)
         {
@@ -764,6 +792,11 @@ public sealed class PivotFieldBuilder
         if (_groupInterval is { } groupInterval and not PivotGroupInterval.None)
         {
             field["groupInterval"] = ToCamelCase(groupInterval.ToString());
+        }
+
+        if (_selector is { } selector)
+        {
+            field["selector"] = selector;
         }
 
         if (_dataType is { } dataType and not PivotDataType.Auto)

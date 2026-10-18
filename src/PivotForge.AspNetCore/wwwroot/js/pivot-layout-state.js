@@ -1073,8 +1073,10 @@
         ...(field?.groupInterval ? { groupInterval: field.groupInterval } : {}),
         ...(field?.groupSize ? { groupSize: field.groupSize } : {}),
         ...(field?.expression ? { expression: field.expression } : {}),
-        // The column's type travels with it wherever it is placed.
-        ...(field?.dataType ? { dataType: field.dataType } : {})
+        // The column's type travels with it wherever it is placed, and so does
+        // the selector that works its value out.
+        ...(field?.dataType ? { dataType: field.dataType } : {}),
+        ...(field?.selector ? { selector: field.selector } : {})
       };
     }
 

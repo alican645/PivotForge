@@ -52,4 +52,13 @@ public sealed class PivotRequest
     /// case. A field left out, or typed <see cref="PivotDataType.Auto"/>, is read as it is.</remarks>
     public IReadOnlyDictionary<string, PivotDataType> DataTypes { get; init; } =
         new Dictionary<string, PivotDataType>();
+
+    /// <summary>Gets the fields whose values a registered <see cref="PivotSelector"/> works out,
+    /// keyed by field, naming the selector.</summary>
+    /// <remarks>DevExtreme's <c>selector</c>, by name: each entry names an entry in
+    /// <see cref="PivotEngine.CustomSelectors"/>, and an unknown name is refused. The field may be
+    /// one the source has, whose values the selector replaces, or a name of its own. Names match
+    /// ignoring case. A selected field takes no data type.</remarks>
+    public IReadOnlyDictionary<string, string> Selectors { get; init; } =
+        new Dictionary<string, string>();
 }

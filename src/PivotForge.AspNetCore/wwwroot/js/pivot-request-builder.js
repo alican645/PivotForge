@@ -524,6 +524,21 @@
       throw new Error(`"dataType" on field "${dataField}" cannot be combined with "expression".`);
     }
 
+    // DevExtreme's selector, by name: a function registered on the server
+    // (PivotForgeOptions.CustomSelectors) works the value out from the whole
+    // record, so there is neither a source value to convert nor a formula.
+    const selector = field.selector ?? null;
+    if (selector !== null) {
+      if (typeof selector !== "string" || selector.trim() === "") {
+        throw new Error(
+          `"selector" on field "${dataField}" must be the name of a selector registered on the server.`);
+      }
+      if (expression !== null || dataType !== null) {
+        throw new Error(
+          `"selector" on field "${dataField}" cannot be combined with "${expression !== null ? "expression" : "dataType"}".`);
+      }
+    }
+
     const groupInterval = isData ? null : field.groupInterval ?? null;
     if (groupInterval !== null && !GROUP_INTERVALS.includes(groupInterval)) {
       throw new Error(
@@ -609,6 +624,7 @@
       groupInterval,
       groupSize,
       dataType,
+      selector,
       area,
       role,
       areaIndex: areaIndex ?? null,
@@ -761,9 +777,32 @@
     return types;
   }
 
+  // The selector of every column the catalog works out on the server, keyed by
+  // column, the way dataTypes is: a year and a month level of one selected
+  // column are one entry, and two that name different selectors are a mistake.
+  function selectors(fields) {
+    const named = {};
+
+    for (const field of fields) {
+      if (field.selector === null || field.selector === undefined) {
+        continue;
+      }
+
+      if (named[field.dataField] && named[field.dataField] !== field.selector) {
+        throw new Error(
+          `Field "${field.dataField}" names both selector "${named[field.dataField]}" and "${field.selector}"; a column has one selector.`);
+      }
+
+      named[field.dataField] = field.selector;
+    }
+
+    return named;
+  }
+
   function buildRequest(fields, extras = {}) {
     const declared = normalizeFields(fields);
     const types = dataTypes(declared);
+    const selected = selectors(declared);
     const normalized = declared.filter(field => field.visible);
     const inArea = area => normalized.filter(field => field.area === area);
     const values = inArea("data");
@@ -836,7 +875,8 @@
       fieldSorts: fieldSorts(normalized, columnSort(extras.columnSort)),
       // Sent only when the catalog types a column, so every request written
       // before data types existed is unchanged.
-      ...(Object.keys(types).length > 0 ? { dataTypes: types } : {})
+      ...(Object.keys(types).length > 0 ? { dataTypes: types } : {}),
+      ...(Object.keys(selected).length > 0 ? { selectors: selected } : {})
     };
   }
 
@@ -977,7 +1017,7 @@
   }
 
   PivotForge.PivotRequestBuilder = {
-    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes,
+    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes, selectors,
     normalizeRankings, normalizeValueFilters, comparisonType, parseExpression,
     AGGREGATIONS, CALCULATED, DATA_TYPES, RUNNING_TOTALS, FORMULA_FUNCTIONS, RELATIVE_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
     FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS, VALUE_FILTER_OPERATORS

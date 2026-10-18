@@ -930,3 +930,34 @@ test("sortBy and sortingMethod are refused where they mean nothing", () => {
     () => PivotRequestBuilder.buildRequest([{ ...salesFields[0], sortingMethod: " " }, salesFields[2]]),
     /must be the name of a comparer registered on the server/);
 });
+
+test("a selector travels by column, and a column has one", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "FiscalYear", area: "row", selector: "fiscalYear" },
+    { dataField: "OrderDate", area: "column", groupInterval: "year", selector: "shipDate" },
+    { dataField: "OrderDate", area: "column", groupInterval: "month", selector: "shipDate" },
+    { dataField: "Net", area: "data", aggregation: "sum", selector: "net" }
+  ]);
+
+  assert.deepEqual(request.selectors, { FiscalYear: "fiscalYear", OrderDate: "shipDate", Net: "net" });
+  assert.equal(PivotRequestBuilder.buildRequest(salesFields).selectors, undefined);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([
+      { dataField: "OrderDate", area: "row", groupInterval: "year", selector: "a" },
+      { dataField: "OrderDate", area: "column", groupInterval: "month", selector: "b" },
+      salesFields[2]
+    ]),
+    /names both selector "a" and "b"/);
+});
+
+test("a selector works the value out itself, so it takes no formula and no data type", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([{ dataField: "x", area: "row", selector: "a", dataType: "number" }, salesFields[2]]),
+    /cannot be combined with "dataType"/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([salesFields[0], { dataField: "y", area: "data", selector: "a", expression: "[tutar]" }]),
+    /cannot be combined with "expression"/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([{ dataField: "x", area: "row", selector: "" }, salesFields[2]]),
+    /must be the name of a selector registered on the server/);
+});

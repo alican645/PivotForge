@@ -56,6 +56,15 @@ public sealed class PivotEngine
     public IReadOnlyDictionary<string, IComparer<string?>> CustomSorts { get; init; } =
         new Dictionary<string, IComparer<string?>>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Gets the selectors a request may map a field to in <see cref="PivotRequest.Selectors"/>.</summary>
+    /// <remarks>
+    /// DevExtreme's <c>selector</c>, registered by name because the records are read here rather
+    /// than in the browser: a request can pick one of these and nothing else. Supply a
+    /// case-insensitive dictionary to let a request spell the name in any case.
+    /// </remarks>
+    public IReadOnlyDictionary<string, PivotSelector> CustomSelectors { get; init; } =
+        new Dictionary<string, PivotSelector>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Builds a pivot result from strongly typed records.</summary>
     /// <typeparam name="T">The source record type.</typeparam>
     /// <param name="records">The source records.</param>
@@ -327,6 +336,8 @@ public sealed class PivotEngine
     /// <see cref="PivotGroupInterval.Range"/>.</param>
     /// <param name="dataTypes">The types source fields are converted to when read, as
     /// <see cref="PivotRequest.DataTypes"/>, so the list holds what the headers show.</param>
+    /// <param name="selectors">The fields a registered selector works out, as
+    /// <see cref="PivotRequest.Selectors"/>; <paramref name="field"/> may be one of them.</param>
     /// <returns>The distinct values the filtered records hold, in value order.</returns>
     public IReadOnlyList<string?> DistinctValues<T>(
         IEnumerable<T> records,
@@ -334,16 +345,18 @@ public sealed class PivotEngine
         IReadOnlyList<PivotFilter> filters,
         PivotGroupInterval interval = PivotGroupInterval.None,
         decimal? binSize = null,
-        IReadOnlyDictionary<string, PivotDataType>? dataTypes = null)
+        IReadOnlyDictionary<string, PivotDataType>? dataTypes = null,
+        IReadOnlyDictionary<string, string>? selectors = null)
     {
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(filters);
 
         return DistinctValuesCore(
-            records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture, interval, binSize, filters, dataTypes);
+            records.Cast<object>(), field, new ObjectRecordReader<T>(), Culture, interval, binSize, filters, dataTypes,
+            selectors);
     }
 
-    private static IReadOnlyList<string?> DistinctValuesCore(
+    private IReadOnlyList<string?> DistinctValuesCore(
         IEnumerable<object> records,
         string field,
         IRecordReader reader,
@@ -351,9 +364,12 @@ public sealed class PivotEngine
         PivotGroupInterval interval = PivotGroupInterval.None,
         decimal? binSize = null,
         IReadOnlyList<PivotFilter>? filters = null,
-        IReadOnlyDictionary<string, PivotDataType>? dataTypes = null)
+        IReadOnlyDictionary<string, PivotDataType>? dataTypes = null,
+        IReadOnlyDictionary<string, string>? selectors = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
+        // Before the checks below, so a field a selector works out is one the source has.
+        reader = SelectorRecordReader.Wrap(TypedRecordReader.Wrap(reader, dataTypes, culture), selectors, CustomSelectors);
 
         if (!reader.HasField(field))
         {
@@ -367,8 +383,6 @@ public sealed class PivotEngine
                 throw new PivotFieldNotFoundException(typed);
             }
         }
-
-        reader = TypedRecordReader.Wrap(reader, dataTypes, culture);
 
         if (filters is { Count: > 0 })
         {
@@ -457,8 +471,8 @@ public sealed class PivotEngine
         IRecordReader reader,
         CultureInfo culture)
     {
+        reader = PrepareReader(reader, request, culture);
         ValidateRequest(request, reader, CustomAggregates);
-        reader = TypedRecordReader.Wrap(reader, request.DataTypes, culture);
         ValidateDrillDownPath(rowPath, request.Rows, nameof(rowPath));
         ValidateDrillDownPath(columnPath, request.Columns, nameof(columnPath));
         var filters = CompileFilters(request.Filters);
@@ -511,9 +525,9 @@ public sealed class PivotEngine
         CultureInfo culture,
         CancellationToken cancellationToken)
     {
+        reader = PrepareReader(reader, request, culture);
         var plan = ValidateRequest(request, reader, CustomAggregates);
         ValidateSortingMethods(request);
-        reader = TypedRecordReader.Wrap(reader, request.DataTypes, culture);
 
         var scan = Scan(records, request, plan, reader, culture, null, cancellationToken);
 
@@ -2496,6 +2510,13 @@ public sealed class PivotEngine
             PivotGroupLabels.Order(DataTypeOf(field?.Field, dataTypes), culture) ??
             StringComparer.Create(culture, ignoreCase: true);
     }
+
+    // Declared types convert the source values first; selectors work out their fields from
+    // those, and answer for them everywhere -- validation included, so a field of the
+    // selector's own is one the source has.
+    private IRecordReader PrepareReader(IRecordReader reader, PivotRequest request, CultureInfo culture) =>
+        SelectorRecordReader.Wrap(
+            TypedRecordReader.Wrap(reader, request.DataTypes, culture), request.Selectors, CustomSelectors);
 
     private void ValidateSortingMethods(PivotRequest request)
     {

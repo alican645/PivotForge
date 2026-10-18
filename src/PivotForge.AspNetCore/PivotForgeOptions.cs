@@ -39,6 +39,19 @@ public sealed class PivotForgeOptions
     public IDictionary<string, IComparer<string?>> CustomSorts { get; } =
         new Dictionary<string, IComparer<string?>>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Gets the selectors a field may name to have its value worked out from the whole record.</summary>
+    /// <remarks>
+    /// DevExtreme's <c>selector</c>, registered by name, e.g.
+    /// <c>options.CustomSelectors["fiscalYear"] = record => ...</c>, and matched without regard to
+    /// case. A field naming one -- <c>selector="fiscalYear"</c> -- groups, filters, lists and sums
+    /// by what it returns; the field may be one the record has or a name of its own. A selector
+    /// runs on the server and may read any field of the record, including one
+    /// <see cref="AllowedFields"/> leaves out: what reaches the browser is what it returns, so a
+    /// selected field answers to that list only through what the selector itself reads.
+    /// </remarks>
+    public IDictionary<string, PivotSelector> CustomSelectors { get; } =
+        new Dictionary<string, PivotSelector>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Gets or sets the sliding expiration used for completed large pivot results.</summary>
     public TimeSpan CacheSlidingExpiration { get; set; } = TimeSpan.FromMinutes(5);
 

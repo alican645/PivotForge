@@ -47,6 +47,16 @@ change will require a new major version.
 
 ### Added
 
+- Fields worked out from the whole record, DevExtreme's `selector`, as a
+  function registered by name: `PivotEngine.CustomSelectors` /
+  `PivotForgeOptions.CustomSelectors` (`PivotSelector`, reading
+  `record["Field"]` or the typed `record.Source`), picked by
+  `PivotRequest.Selectors` / `selector` / `Selector(string)` /
+  `selector: "fiscalYear"`. Headers, filters, the value list, drill-down,
+  sorting, formulas and measures all read the selected value; a field the
+  source has is replaced, and a name of the selector's own needs no source
+  column or `AllowedFields` entry. An unregistered name is refused (400).
+  `DistinctValues` takes the same map. (Core, AspNetCore)
 - Which columns each value appears in, DevExtreme's `showValues` and a
   measure's `showTotals`: `show-values="false"` / `ShowValues(false)` /
   `showValues: false` leaves a value out of the detail columns, `show-totals`

@@ -466,6 +466,27 @@ attributes, `visible`, `area-index`, `sort-order`, `group-interval`, `field-type
 `show-values`, `show-totals`, `customize-text` and `allow-cross-group-calculation`. `area` defaults to `Data`, matching
 `PivotFieldBuilder`.
 
+`selector` names a function registered in `PivotForgeOptions.CustomSelectors` that
+works the field's value out from the whole record, DevExtreme's `selector`. The
+field groups, filters, lists and sums by what it returns, and `field` may be a name
+of the selector's own:
+
+```csharp
+options.CustomSelectors["fiscalYear"] = record =>
+    ((SalesRecord)record.Source).OrderDate is var date && date.Month >= 10 ? date.Year + 1 : date.Year;
+```
+
+```cshtml
+<pivot-field field="FiscalYear" area="Column" selector="fiscalYear" />
+```
+
+DevExtreme's `selector` is a browser function; here records are read on the server,
+so a page names a registered selector and nothing else, and an unknown name is
+refused with 400. A selected field is worked out rather than read, so it is not
+checked against `AllowedFields` -- the selector, being server code, decides what it
+reads. It takes no `expression` or `field-type`. In JavaScript it is
+`selector: "fiscalYear"`.
+
 With several values, each one decides which columns it appears in, as DevExtreme's
 `showValues`, `showTotals` and `showGrandTotals` on a measure do:
 `show-values="false"` leaves the value out of the detail columns, `show-totals="false"`

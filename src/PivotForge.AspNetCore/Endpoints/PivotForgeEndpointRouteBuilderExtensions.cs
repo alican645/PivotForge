@@ -109,6 +109,8 @@ public static class PivotForgeEndpointRouteBuilderExtensions
                     request.HideEmptySummaryCells,
                     // A typed field converts its values, which changes every number.
                     DataTypes = request.DataTypes.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase).ToArray(),
+                    // So does a selector: it is what the selected fields hold.
+                    Selectors = request.Selectors.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase).ToArray(),
                     SourceRowCount = sourceRowCount,
                     RequestScope = CreateRequestScopeIdentity(httpContext)
                 },
@@ -220,11 +222,11 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         var options = optionsAccessor.Value;
 
         // The narrowing filters read source fields too, so they answer to the same list.
-        if (!options.Allows([
-                request.Field,
-                .. request.Filters.Select(filter => filter.Field),
-                .. request.DataTypes.Keys
-            ]))
+        // A selected field is worked out by server code rather than read, as in a pivot request.
+        if (!options.Allows(new[] { request.Field }
+                .Concat(request.Filters.Select(filter => filter.Field))
+                .Concat(request.DataTypes.Keys)
+                .Except(request.Selectors.Keys, StringComparer.OrdinalIgnoreCase)))
         {
             return FieldNotAllowed();
         }
@@ -239,6 +241,7 @@ public static class PivotForgeEndpointRouteBuilderExtensions
                 request.BinSize,
                 request.Filters,
                 request.DataTypes,
+                request.Selectors,
                 sourceRowCount,
                 cancellationToken);
             var visibleValues = values.Take(options.FieldValueLimit).ToArray();
