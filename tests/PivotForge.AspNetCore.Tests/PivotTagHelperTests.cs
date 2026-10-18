@@ -28,6 +28,7 @@ public class PivotTagHelperTests
         bool? Expanded = null,
         bool? ShowTotals = null,
         bool? ShowGrandTotals = null,
+        bool? ShowValues = null,
         int? AreaIndex = null,
         PivotSortDirection? SortOrder = null,
         PivotGroupInterval? GroupInterval = null,
@@ -128,6 +129,12 @@ public class PivotTagHelperTests
         {
             helper.ShowGrandTotals = showGrandTotals;
             attributes.Add(new TagHelperAttribute("show-grand-totals", showGrandTotals));
+        }
+
+        if (spec.ShowValues is { } showValues)
+        {
+            helper.ShowValues = showValues;
+            attributes.Add(new TagHelperAttribute("show-values", showValues));
         }
 
         if (spec.AreaIndex is { } areaIndex)
@@ -1297,13 +1304,14 @@ public class PivotTagHelperTests
     [Fact]
     public void RefusesExpandedAndShowTotalsWhereTheyMeanNothing()
     {
-        // Collapsible groups and subtotals are drawn on both header axes only.
+        // Collapsible groups are drawn on both header axes only; subtotals there
+        // and, for a measure, in the subtotal columns.
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Category").Area(PivotArea.Filter).Expanded(false).Build());
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
-            .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build());
-        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Category").Area(PivotArea.Filter).ShowTotals(false).Build());
+        Assert.Equal(false, new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build()["showTotals"]);
 
         // The row and column areas accept both.
         new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
@@ -1325,6 +1333,23 @@ public class PivotTagHelperTests
         var fields = declared.GetProperty("fields");
         Assert.False(fields[1].GetProperty("showGrandTotals").GetBoolean());
         Assert.False(fields[2].TryGetProperty("showGrandTotals", out _));
+    }
+
+    [Fact]
+    public async Task WritesShowValuesOnlyWhenDeclaredAndOnlyOnAMeasure()
+    {
+        var fields = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum),
+            new FieldSpec("Share", PivotArea.Data, "Pay", PivotAggregation.Sum, ShowValues: false))).GetProperty("fields");
+
+        Assert.False(fields[1].TryGetProperty("showValues", out _));
+        Assert.False(fields[2].GetProperty("showValues").GetBoolean());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Row).ShowValues(false).Build());
+        new PivotFieldBuilder().DataField("Share").Area(PivotArea.Available).Role(PivotFieldRole.Measure)
+            .ShowValues(false).Build();
     }
 
     [Fact]

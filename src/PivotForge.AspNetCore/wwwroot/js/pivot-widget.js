@@ -922,6 +922,8 @@
           showAs: field.showAs,
           format: field.format,
           showGrandTotals: field.showGrandTotals,
+          showValues: field.showValues,
+          showTotals: field.showTotals,
           allowSorting: field.allowSorting,
           width: field.width,
           wordWrap: field.wordWrap,

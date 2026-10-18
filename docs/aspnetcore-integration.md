@@ -462,9 +462,26 @@ Anything not listed here still needs `rendererOptions` through
 `caption`, `area`, `role`, `aggregation`, `show-as`, the seven `format-*`
 attributes, `visible`, `area-index`, `sort-order`, `group-interval`, `field-type`,
 `allow-sorting`, `allow-filtering`, `width`, `word-wrap`, `display-folder`, and — on
-`Row` fields only — `expanded`, `show-totals` and `sort-by-value-key`, and — on `Data` fields only — `show-grand-totals`,
-`customize-text` and `allow-cross-group-calculation`. `area` defaults to `Data`, matching
+`Row` and `Column` fields — `expanded`, `show-totals`, `sort-by`, `sorting-method` and `sort-by-value-key`, and — on `Data` fields only — `show-grand-totals`,
+`show-values`, `show-totals`, `customize-text` and `allow-cross-group-calculation`. `area` defaults to `Data`, matching
 `PivotFieldBuilder`.
+
+With several values, each one decides which columns it appears in, as DevExtreme's
+`showValues`, `showTotals` and `showGrandTotals` on a measure do:
+`show-values="false"` leaves the value out of the detail columns, `show-totals="false"`
+out of the subtotal columns (and, with `show-values` left out, out of the detail columns
+too), and `show-grand-totals="false"` out of the total block on the right. The value
+leaves those columns outright, so a block is only as wide as the values it draws:
+
+```cshtml
+<pivot-field field="Amount" area="Data" aggregation="Sum" />
+<pivot-field field="Quantity" area="Data" aggregation="Sum" show-values="false" />
+```
+
+draws Amount in every quarter and Amount and Quantity in each year's total. A kind of
+column every value gives up keeps them all, so it never comes out empty. With
+`values-position="Rows"` the same settings pick the value rows under detail and
+subtotal rows. In JavaScript they are `showValues`, `showTotals` and `showGrandTotals`.
 
 `area-index` gives the field an explicit position among the fields sharing its
 area, instead of taking the declaration order. It is the opening order only:

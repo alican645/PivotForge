@@ -47,6 +47,14 @@ change will require a new major version.
 
 ### Added
 
+- Which columns each value appears in, DevExtreme's `showValues` and a
+  measure's `showTotals`: `show-values="false"` / `ShowValues(false)` /
+  `showValues: false` leaves a value out of the detail columns, `show-totals`
+  (now valid on a data field) out of the subtotal columns, and out of the
+  detail columns too while `showValues` is undeclared. The value leaves those
+  columns outright -- head, body, totals, virtual columns and Excel export --
+  and a kind of column every value gives up keeps them all. With values on
+  rows the same rules pick the value rows. (AspNetCore)
 - What a level is sorted by, DevExtreme's `sortBy` and `sortingMethod`:
   `PivotFieldSort.SortBy` (`PivotSortBy.Value`, `DisplayText`, `None`) /
   `sort-by` / `SortBy(PivotSortBy)` / `sortBy: "value" | "displayText" | "none"`,

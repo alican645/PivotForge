@@ -297,15 +297,28 @@ test("expanded is refused outside the row and column areas", () => {
   });
 });
 
-test("showTotals is refused outside the row and column areas", () => {
-  ["filter", "data"].forEach(area => {
-    assert.throws(
-      () => PivotForge.PivotRequestBuilder.normalizeFields([
-        { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension", showTotals: false }
-      ]),
-      /"showTotals" is only valid on a "row" or "column" field/,
-      `showTotals on ${area}`);
-  });
+test("showTotals is refused where there are no subtotals to leave", () => {
+  assert.throws(
+    () => PivotForge.PivotRequestBuilder.normalizeFields([
+      { dataField: "Region", area: "filter", showTotals: false }
+    ]),
+    /"showTotals" is only valid on a "row", "column" or "data" field/);
+});
+
+test("a measure carries showTotals and showValues, showValues left null when undeclared", () => {
+  const [plain, declared, totalsOnly] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Amount", area: "data", aggregation: "sum" },
+    { dataField: "Share", area: "data", aggregation: "sum", showValues: false },
+    { dataField: "Count", area: "data", aggregation: "count", showTotals: false }
+  ]);
+
+  assert.equal(plain.showTotals, true);
+  assert.equal(plain.showValues, null);
+  assert.equal(declared.showValues, false);
+  assert.equal(totalsOnly.showTotals, false);
+  assert.throws(
+    () => PivotForge.PivotRequestBuilder.normalizeFields([{ dataField: "Region", area: "row", showValues: false }]),
+    /"showValues" is only valid on a "data" field/);
 });
 
 test("a column field carries showTotals and expanded, defaulting to true", () => {

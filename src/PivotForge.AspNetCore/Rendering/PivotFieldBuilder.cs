@@ -25,6 +25,7 @@ public sealed class PivotFieldBuilder
     private bool? _expanded;
     private bool? _showTotals;
     private bool? _showGrandTotals;
+    private bool? _showValues;
     private bool? _allowSorting;
     private bool? _allowFiltering;
     private int? _width;
@@ -278,7 +279,9 @@ public sealed class PivotFieldBuilder
     /// uses when subtotals are switched off entirely — so a deep hierarchy can show totals at the
     /// levels worth totalling and nowhere else. Valid on <see cref="PivotArea.Row"/> fields, when
     /// the grid's own <c>subtotals</c> option is on, and on <see cref="PivotArea.Column"/> fields,
-    /// when its <c>columnSubtotals</c> option is on.
+    /// when its <c>columnSubtotals</c> option is on. On a <see cref="PivotArea.Data"/> field it
+    /// takes the value out of every subtotal column instead, DevExtreme's measure
+    /// <c>showTotals</c>; without <see cref="ShowValues"/> it leaves the detail columns too.
     /// </remarks>
     /// <param name="showTotals">False to suppress this level's subtotal rows or columns.</param>
     /// <returns>The same builder.</returns>
@@ -302,6 +305,23 @@ public sealed class PivotFieldBuilder
     public PivotFieldBuilder ShowGrandTotals(bool showGrandTotals)
     {
         _showGrandTotals = showGrandTotals;
+        return this;
+    }
+
+    /// <summary>Sets whether this data field's values appear in the detail columns, DevExtreme's <c>showValues</c>.</summary>
+    /// <remarks>
+    /// False leaves the value in the subtotal columns and the grand totals only -- a share shown
+    /// per year rather than per month. Left unset, a <see cref="ShowTotals"/> of false hides the
+    /// detail cells too, as in DevExtreme. When every value gives up a kind of column, the grid
+    /// draws them all there rather than leave it empty. Valid on <see cref="PivotArea.Data"/>
+    /// fields, and on <see cref="PivotArea.Available"/> fields whose <see cref="Role"/> is
+    /// <see cref="PivotFieldRole.Measure"/>.
+    /// </remarks>
+    /// <param name="showValues">False to leave this value out of the detail columns.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder ShowValues(bool showValues)
+    {
+        _showValues = showValues;
         return this;
     }
 
@@ -605,23 +625,31 @@ public sealed class PivotFieldBuilder
                 "Expanded is only valid on fields whose Area is Row or Column.");
         }
 
-        if (_area is not (PivotArea.Row or PivotArea.Column) && _showTotals is not null)
-        {
-            throw new InvalidOperationException(
-                $"Field \"{_dataField}\" sets ShowTotals, but its Area is \"{_area}\". " +
-                "ShowTotals is only valid on fields whose Area is Row or Column.");
-        }
-
         // A grand total is a measure summed over a whole axis, so a dimension has
         // none to switch off. A measure still in the field list may carry it,
         // ready for when the user drags it into the data area.
         var holdsGrandTotals = _area == PivotArea.Data ||
             (_area == PivotArea.Available && _role == PivotFieldRole.Measure);
+
+        if (_area is not (PivotArea.Row or PivotArea.Column) && !holdsGrandTotals && _showTotals is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets ShowTotals, but its Area is \"{_area}\". " +
+                "ShowTotals is only valid on fields whose Area is Row, Column or Data.");
+        }
+
         if (!holdsGrandTotals && _showGrandTotals is not null)
         {
             throw new InvalidOperationException(
                 $"Field \"{_dataField}\" sets ShowGrandTotals, but its Area is \"{_area}\". " +
                 "ShowGrandTotals is only valid on fields whose Area is Data, or Available with the Measure role.");
+        }
+
+        if (!holdsGrandTotals && _showValues is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets ShowValues, but its Area is \"{_area}\". " +
+                "ShowValues is only valid on fields whose Area is Data, or Available with the Measure role.");
         }
 
         // Only the row and column axes draw a header level to order.
@@ -766,6 +794,11 @@ public sealed class PivotFieldBuilder
         if (_showGrandTotals is { } showGrandTotals)
         {
             field["showGrandTotals"] = showGrandTotals;
+        }
+
+        if (_showValues is { } showValues)
+        {
+            field["showValues"] = showValues;
         }
 
         if (_allowSorting is { } allowSorting)

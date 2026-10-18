@@ -529,9 +529,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.selectionMetadata = new WeakMap();
     this.renderedDataStart = this.dataStart(rowDepth);
     this.renderedValueSpan = columnValues.length;
+    const fullColumnPlan = this.createColumnPlan(columnHeaders, settings);
+    // Which values each column position draws, and where it starts.
+    this.columnLayout = this.createColumnLayout(fullColumnPlan, columnValues);
     // Read before anything is drawn: head and body slice the same window.
-    this.activeColumnWindow = this.resolveColumnWindow(
-      this.createColumnPlan(columnHeaders, settings), columnValues.length, settings);
+    this.activeColumnWindow = this.resolveColumnWindow(fullColumnPlan, columnValues.length, settings);
     const table = document.createElement("table");
     // A tree is the compact layout drawn as a tree, so it carries both classes
     // and inherits every compact rule.
@@ -673,8 +675,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       return;
     }
 
-    const first = this.renderedDataStart + window.offset * this.renderedValueSpan;
-    const last = first + window.plan.length * this.renderedValueSpan;
+    const first = this.renderedDataStart + this.columnLayout.start(window.offset);
+    const last = this.renderedDataStart + this.columnLayout.start(window.offset + window.plan.length);
     let total = 0;
 
     for (const cell of row.cells) {
@@ -757,18 +759,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   // Undefined when the ordinary navigation can handle the move.
   moveAcrossColumnWindow(table, currentCell, step, settings) {
     const state = this.columnWindowState;
-    const valueSpan = this.renderedValueSpan;
+    const layout = this.columnLayout;
     const first = this.renderedDataStart;
     const desired = Number(currentCell.dataset.columnIndex) + step;
     const row = currentCell.closest("tr");
 
-    if (!state || !row || !(desired >= first && desired < first + state.total * valueSpan) ||
+    if (!state || !layout || !row || !(desired >= first && desired < first + layout.width) ||
         row.querySelector(`[data-column-index="${desired}"]`)) {
       return undefined;
     }
 
     const rowIndex = Array.from(table.tBodies[0]?.rows ?? []).indexOf(row);
-    const position = Math.floor((desired - first) / valueSpan);
+    const position = layout.positionOf(desired - first);
     const target = Math.max(0, position * state.width - (this.container.clientWidth - state.width) / 2);
     this.container.scrollLeft = PivotForge.isRtl(this.container) ? -target : target;
     this.rerenderForScroll();
@@ -1178,6 +1180,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         format: value.format ?? null,
         showAs: value.showAs ?? "normal",
         showGrandTotals: value.showGrandTotals !== false,
+        // Left as declared: an undeclared showValues follows showTotals.
+        showValues: value.showValues ?? null,
+        showTotals: value.showTotals !== false,
         allowSorting: value.allowSorting !== false,
         width: value.width ?? null,
         wordWrap: value.wordWrap === true,
@@ -1222,6 +1227,82 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     };
   }
 
+  // Whether a value draws its cells in one kind of column, DevExtreme's
+  // showValues / showTotals on a measure: a detail column (a collapsed group
+  // counts as one) or a subtotal column. Without showValues, a value that gives
+  // up its subtotals gives up its detail cells too, as in DevExtreme.
+  showsValueIn(value, kind) {
+    if (value.slot) {
+      return true;
+    }
+
+    return kind === "subtotal"
+      ? value.showTotals !== false
+      : value.showValues === true || (value.showValues !== false && value.showTotals !== false);
+  }
+
+  // The values one kind of column draws, each with its index among all of them.
+  // A kind every value gives up keeps them all: nothing would be left to read.
+  valuesShownIn(values, kind) {
+    const indexed = values.map((value, index) => ({ value, index }));
+    const kept = indexed.filter(({ value }) => this.showsValueIn(value, kind));
+    return kept.length > 0 ? kept : indexed;
+  }
+
+  // Which values each plan position draws and where its first column falls,
+  // counted from dataStart. Positions differ in width once a value gives up
+  // its detail or subtotal cells; the total block on the right starts at width.
+  createColumnLayout(plan, values) {
+    const byKind = {
+      detail: this.valuesShownIn(values, "detail"),
+      subtotal: this.valuesShownIn(values, "subtotal")
+    };
+    const count = Math.max(1, plan.length);
+    const drawn = [];
+    const starts = [];
+    let width = 0;
+
+    for (let position = 0; position < count; position++) {
+      const entry = plan[position];
+      const shown = entry?.type === "subtotal" && !entry.collapsed ? byKind.subtotal : byKind.detail;
+      starts.push(width);
+      drawn.push(shown);
+      width += shown.length;
+    }
+
+    starts.push(width);
+
+    return {
+      width,
+      valuesAt: position => drawn[position] ?? byKind.detail,
+      start: position => starts[Math.max(0, Math.min(position, count))],
+      // The position a column, counted from dataStart, belongs to.
+      positionOf: column => {
+        let position = 0;
+        while (position < count - 1 && starts[position + 1] <= column) {
+          position++;
+        }
+        return position;
+      }
+    };
+  }
+
+  // The values one position draws, read off the values a row or head was built
+  // with -- in a rows layout that is a single value, standing in the one slot.
+  drawnValues(position, values) {
+    return (this.columnLayout?.valuesAt(position) ?? values.map((value, index) => ({ value, index })))
+      .map(({ index }) => values[index])
+      .filter(Boolean);
+  }
+
+  columnStart(rowDepth, position) {
+    return this.dataStart(rowDepth) + (this.columnLayout?.start(position) ?? position * this.renderedValueSpan);
+  }
+
+  totalStart(rowDepth) {
+    return this.dataStart(rowDepth) + (this.columnLayout?.width ?? 0);
+  }
+
   // The index of the first data column: after the row headers and, in a rows
   // layout, the values column.
   dataStart(rowDepth) {
@@ -1247,9 +1328,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
   columnCount(rowDepth, columnHeaders, values, settings) {
     const window = this.activeColumnWindow;
+    const layout = this.columnLayout ?? this.createColumnLayout(this.createColumnPlan(columnHeaders, settings), values);
     const planColumns = window
-      ? window.plan.length * values.length + (window.before > 0 ? 1 : 0) + (window.after > 0 ? 1 : 0)
-      : Math.max(1, this.createColumnPlan(columnHeaders, settings).length) * values.length;
+      ? layout.start(window.offset + window.plan.length) - layout.start(window.offset) +
+        (window.before > 0 ? 1 : 0) + (window.after > 0 ? 1 : 0)
+      : layout.width;
 
     return this.dataStart(rowDepth) + planColumns + this.totalColumnValues(values, settings).length;
   }
@@ -1445,10 +1528,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
             : `${this.displayValue(group.value, settings)} ${settings.totalText}`;
           const header = this.createCell(
             "th", label, "pivot-table__column-header pivot-table__column-subtotal-header");
-          header.colSpan = valueSpan;
+          header.colSpan = this.drawnValues(offset + group.start, values).length;
           header.rowSpan = columnDepth - level;
           header.dataset.stickyRow = String(level);
-          header.dataset.columnStart = String(this.dataStart(rowDepth) + (offset + group.start) * valueSpan);
+          header.dataset.columnStart = String(this.columnStart(rowDepth, offset + group.start));
           if (measureDepth === 0 && values.length === 1 && !values[0].slot) {
             this.decorateSortableHeader(header, label, {
               mode: "RowTotalValue",
@@ -1466,9 +1549,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         }
 
         const header = this.createCell("th", this.displayValue(group.value, settings), "pivot-table__column-header");
-        header.colSpan = group.span * valueSpan;
+        header.colSpan = this.columnStart(rowDepth, offset + group.start + group.span) -
+          this.columnStart(rowDepth, offset + group.start);
         header.dataset.stickyRow = String(level);
-        header.dataset.columnStart = String(this.dataStart(rowDepth) + (offset + group.start) * valueSpan);
+        header.dataset.columnStart = String(this.columnStart(rowDepth, offset + group.start));
 
         if (group.value === null || group.value === undefined || group.value === "") {
           header.classList.add("is-empty");
@@ -1507,7 +1591,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         total.colSpan = totalValues.length;
         total.rowSpan = columnDepth;
         total.dataset.stickyRow = "0";
-        total.dataset.columnStart = String(this.dataStart(rowDepth) + planWidth * valueSpan);
+        total.dataset.columnStart = String(this.totalStart(rowDepth));
         if (measureDepth === 0 && values.length === 1 && !values[0].slot) {
           total.dataset.columnIndex = total.dataset.columnStart;
           this.decorateSortableHeader(total, settings.totalText, {
@@ -1543,7 +1627,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         const position = offset + index;
         const isSubtotal = entry?.type === "subtotal";
 
-        values.forEach((value, valueIndex) => {
+        this.drawnValues(position, values).forEach((value, valueIndex) => {
           const cell = this.createCell(
             "th",
             value.label,
@@ -1551,7 +1635,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
               ? "pivot-table__value-header pivot-table__column-subtotal-value-header"
               : "pivot-table__value-header");
           cell.dataset.stickyRow = String(columnDepth);
-          cell.dataset.columnIndex = String(this.dataStart(rowDepth) + position * valueSpan + valueIndex);
+          cell.dataset.columnIndex = String(this.columnStart(rowDepth, position) + valueIndex);
           cell.dataset.valueKey = value.key;
           // A subtotal column's path is its group's prefix, which the engine
           // reads as that group's subtotal.
@@ -1572,7 +1656,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       totalValues.forEach((value, valueIndex) => {
         const totalCell = this.createCell("th", value.label, "pivot-table__value-header pivot-table__total-value-header");
         totalCell.dataset.stickyRow = String(columnDepth);
-        totalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + planWidth * valueSpan + valueIndex);
+        totalCell.dataset.columnIndex = String(this.totalStart(rowDepth) + valueIndex);
         totalCell.dataset.valueKey = value.key;
         this.decorateSortableHeader(totalCell, value.label, {
           mode: "RowTotalValue",
@@ -1590,7 +1674,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // the row names an axis, not a coordinate, so there is nothing to line up
       // with underneath.
       const filler = this.createCell("th", "", "pivot-table__column-field-filler");
-      filler.colSpan = (columnWindow ? columnPlan.length : planWidth) * valueSpan + spacerCount + totalValues.length;
+      filler.colSpan = (columnWindow
+        ? this.columnStart(rowDepth, offset + columnPlan.length) - this.columnStart(rowDepth, offset)
+        : this.columnLayout.width) + spacerCount + totalValues.length;
       rowFieldRow.appendChild(filler);
       thead.appendChild(rowFieldRow);
     }
@@ -1694,7 +1780,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       if (this.measureColumns > 0) {
         // A group heading without totals holds no value, so one row of it.
-        this.appendMeasureRows(tbody, rowInfo.type === "group" ? [values[0]] : values, values, rowDepth, buildRow, {
+        const measureRows = rowInfo.type === "group"
+          ? [values[0]]
+          : this.valuesShownIn(values, rowInfo.type === "subtotal" ? "subtotal" : "detail").map(({ value }) => value);
+        this.appendMeasureRows(tbody, measureRows, values, rowDepth, buildRow, {
           blank: rowInfo.type === "group",
           settings
         });
@@ -1759,8 +1848,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // gave its own up leaves a blank cell, so the rows stay aligned.
       if (withTotal && this.totalColumnValues([value], settings).length === 0) {
         const empty = this.createCell("td", "", "pivot-table__row-total is-empty");
-        empty.dataset.columnIndex = String(
-          this.dataStart(rowDepth) + Math.max(1, this.createColumnPlan(this.lastResult?.columnHeaders, settings).length));
+        empty.dataset.columnIndex = String(this.totalStart(rowDepth));
         row.appendChild(empty);
       }
 
@@ -1848,8 +1936,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       }
 
       const columnIndex = entry.columnIndex;
+      const drawn = this.drawnValues(position, values);
 
-      values.forEach((valueDefinition, valueIndex) => {
+      values.forEach(valueDefinition => {
         const serverValue = rowInfo.type === "detail"
           ? lookup.get(`${rowInfo.rowIndexes[0]}:${columnIndex}`)?.[valueDefinition.key]
           : subtotalCells.get(`0:${columnIndex}`)?.[valueDefinition.key];
@@ -1867,6 +1956,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
           rowValuesByKey.get(valueDefinition.key).push(value);
         }
 
+        // Summed into the row's total either way; drawn only where it shows.
+        const valueIndex = drawn.indexOf(valueDefinition);
+        if (valueIndex < 0) {
+          return;
+        }
+
         const cell = this.createCell(
           "td",
           this.formatValue(value, settings, valueDefinition),
@@ -1876,7 +1971,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
           cell.classList.add("is-empty");
         }
 
-        cell.dataset.columnIndex = String(this.dataStart(rowDepth) + position * values.length + valueIndex);
+        cell.dataset.columnIndex = String(this.columnStart(rowDepth, position) + valueIndex);
         this.registerSelectionTarget(cell, this.createCellSelection(rowSelection, {
           kind: "column",
           columnIndex,
@@ -1907,7 +2002,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       if (totalValue === null || totalValue === undefined) {
         totalCell.classList.add("is-empty");
       }
-      totalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + Math.max(1, columns.width) * values.length + valueIndex);
+      totalCell.dataset.columnIndex = String(this.totalStart(rowDepth) + valueIndex);
       this.registerSelectionTarget(totalCell, this.createCellSelection(rowSelection, {
         kind: "rowTotal",
         columnIndex: null,
@@ -1961,7 +2056,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const key = this.createSubtotalKey(entry.columnHeader);
     const server = columns.subtotals.get(key);
 
-    values.forEach((valueDefinition, valueIndex) => {
+    this.drawnValues(position, values).forEach((valueDefinition, valueIndex) => {
       let value = null;
 
       if (rowInfo.type !== "group") {
@@ -1981,7 +2076,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         cell.classList.add("is-empty");
       }
 
-      cell.dataset.columnIndex = String(this.dataStart(rowDepth) + position * values.length + valueIndex);
+      cell.dataset.columnIndex = String(this.columnStart(rowDepth, position) + valueIndex);
       this.registerSelectionTarget(cell, this.createCellSelection(rowSelection, {
         kind: "columnSubtotal",
         columnIndex: null,
@@ -3289,7 +3384,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       const position = entry.position ?? index;
 
       if (entry.type === "subtotal") {
-        values.forEach((valueDefinition, valueIndex) => {
+        this.drawnValues(position, values).forEach((valueDefinition, valueIndex) => {
           const totalValue = columns.serverSubtotals
             ? columns.subtotals.get(this.createSubtotalKey(entry.columnHeader))?.totals?.[valueDefinition.key] ?? null
             : this.summarizeColumnGroup(rowSelection.rowIndexes, entry.columnIndexes, lookup, valueDefinition);
@@ -3297,7 +3392,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
             "td",
             this.formatValue(totalValue, settings, valueDefinition),
             "pivot-table__column-total pivot-table__column-subtotal");
-          totalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + position * values.length + valueIndex);
+          totalCell.dataset.columnIndex = String(this.columnStart(rowDepth, position) + valueIndex);
           this.registerSelectionTarget(totalCell, this.createCellSelection(rowSelection, {
             kind: "columnSubtotal",
             columnIndex: null,
@@ -3312,7 +3407,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       const columnIndex = entry.columnIndex;
 
-      values.forEach((valueDefinition, valueIndex) => {
+      this.drawnValues(position, values).forEach((valueDefinition, valueIndex) => {
         const columnValues = [];
 
         rowHeaders.forEach((_, rowIndex) => {
@@ -3333,7 +3428,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
           "td",
           this.formatValue(totalValue, settings, valueDefinition),
           "pivot-table__column-total");
-        totalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + position * values.length + valueIndex);
+        totalCell.dataset.columnIndex = String(this.columnStart(rowDepth, position) + valueIndex);
         this.registerSelectionTarget(totalCell, this.createCellSelection(rowSelection, {
           kind: "column",
           columnIndex,
@@ -3352,7 +3447,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         "td",
         this.formatValue(grandTotals[valueDefinition.key], settings, valueDefinition),
         "pivot-table__grand-total");
-      grandTotalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + Math.max(1, columns.width) * values.length + valueIndex);
+      grandTotalCell.dataset.columnIndex = String(this.totalStart(rowDepth) + valueIndex);
       this.registerSelectionTarget(grandTotalCell, this.createCellSelection(rowSelection, {
         kind: "rowTotal",
         columnIndex: null,
@@ -3534,18 +3629,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       });
     }
 
-    const valueSpan = values.length;
     for (let position = 0; position < planWidth; position++) {
-      values.forEach((value, valueIndex) => {
+      this.drawnValues(position, values).forEach((value, valueIndex) => {
         if (value.width > 0) {
-          widths.set(this.dataStart(rowDepth) + position * valueSpan + valueIndex, value.width);
+          widths.set(this.columnStart(rowDepth, position) + valueIndex, value.width);
         }
       });
     }
 
     this.totalColumnValues(values, settings).forEach((value, valueIndex) => {
       if (value.width > 0) {
-        widths.set(this.dataStart(rowDepth) + planWidth * valueSpan + valueIndex, value.width);
+        widths.set(this.totalStart(rowDepth) + valueIndex, value.width);
       }
     });
 

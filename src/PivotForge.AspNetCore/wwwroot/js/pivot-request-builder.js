@@ -431,20 +431,28 @@
         `"expanded" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
       );
     }
-    if (!isRow && !isColumn && field.showTotals !== undefined) {
-      throw new Error(
-        `"showTotals" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
-      );
-    }
-
     // A grand total belongs to a measure: it is that value summed over the whole
     // row or column axis. A dimension has no such total to switch off. A measure
     // still waiting in the field list may declare it, because the catalog is the
     // only place it can live until the user drags it into the data area.
     const holdsGrandTotals = isData || (area === "available" && role === "measure");
+    // On a dimension showTotals switches its level's subtotals off; on a measure
+    // it takes the measure out of every subtotal column (DevExtreme's showTotals).
+    if (!isRow && !isColumn && !holdsGrandTotals && field.showTotals !== undefined) {
+      throw new Error(
+        `"showTotals" is only valid on a "row", "column" or "data" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
     if (!holdsGrandTotals && field.showGrandTotals !== undefined) {
       throw new Error(
         `"showGrandTotals" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+    // DevExtreme's showValues: false takes the measure out of the detail columns,
+    // leaving it in the subtotals and the grand total.
+    if (!holdsGrandTotals && field.showValues !== undefined) {
+      throw new Error(
+        `"showValues" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
       );
     }
 
@@ -620,8 +628,13 @@
       // Default true, so an undeclared field behaves exactly as it did before
       // these existed.
       expanded: isRow || isColumn ? field.expanded !== false : null,
-      showTotals: isRow || isColumn ? field.showTotals !== false : null,
+      showTotals: isRow || isColumn || holdsGrandTotals ? field.showTotals !== false : null,
       showGrandTotals: holdsGrandTotals ? field.showGrandTotals !== false : null,
+      // Null when undeclared, which is what lets showTotals: false hide the
+      // detail cells too, as DevExtreme does.
+      showValues: holdsGrandTotals && field.showValues !== undefined && field.showValues !== null
+        ? field.showValues !== false
+        : null,
       // Default true: the grid-wide allowSorting / allowFiltering still decide
       // first, and a field can only take its own controls away.
       allowSorting: field.allowSorting !== false,

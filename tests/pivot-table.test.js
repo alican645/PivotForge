@@ -1369,3 +1369,48 @@ test("a percent display mode without a declared format reads as a percentage, on
   assert.equal(renderer.getExcelNumberFormat({ showAs: "normal" }), "#,##0.00");
   assert.equal(renderer.formatNumber(0.5, settings, { showAs: "percentOfGrandTotal", format: { type: "number", decimals: 1 } }), "0.5");
 });
+
+test("a value giving up its detail or subtotal cells narrows those columns alone", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const headers = [["2025", "Q1"], ["2025", "Q2"], ["2026", "Q1"]];
+  const plan = renderer.createColumnPlan(headers, { columnSubtotals: true });
+  const amount = { key: "amount" };
+  const share = { key: "share", showValues: false };
+  const count = { key: "count", showTotals: false };
+  const layout = renderer.createColumnLayout(plan, [amount, share, count]);
+  const keys = position => layout.valuesAt(position).map(({ value }) => value.key);
+
+  // 2025/Q1, 2025/Q2, 2025 total, 2026/Q1, 2026 total.
+  assert.deepEqual(plan.map(entry => entry.type), ["detail", "detail", "subtotal", "detail", "subtotal"]);
+  // showTotals: false without showValues takes the detail cells too, as in DevExtreme.
+  assert.deepEqual(keys(0), ["amount"]);
+  assert.deepEqual(keys(2), ["amount", "share"]);
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(layout.start), [0, 1, 2, 4, 5, 7]);
+  assert.equal(layout.width, 7);
+  assert.equal(layout.positionOf(3), 2);
+  assert.equal(layout.positionOf(4), 3);
+
+  renderer.columnLayout = layout;
+  assert.equal(renderer.columnCount(1, headers, [amount, share, count], {}), 1 + 7 + 3);
+});
+
+test("showValues: true keeps the detail cells of a value without subtotals", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const values = [{ key: "amount" }, { key: "count", showTotals: false, showValues: true }];
+
+  assert.deepEqual(renderer.valuesShownIn(values, "detail").map(({ index }) => index), [0, 1]);
+  assert.deepEqual(renderer.valuesShownIn(values, "subtotal").map(({ index }) => index), [0]);
+});
+
+test("a kind of column every value gives up keeps them all", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const values = [{ key: "amount", showValues: false }, { key: "count", showValues: false }];
+
+  assert.deepEqual(renderer.valuesShownIn(values, "detail").map(({ index }) => index), [0, 1]);
+  // A collapsed group is a detail column, and the one slot of a rows layout shows everywhere.
+  const layout = renderer.createColumnLayout(
+    [{ type: "subtotal", collapsed: true, columnHeader: ["2025"] }],
+    [{ key: "amount", showValues: false }, { key: "count" }]);
+  assert.deepEqual(layout.valuesAt(0).map(({ value }) => value.key), ["count"]);
+  assert.equal(renderer.showsValueIn({ slot: true, showValues: false }, "detail"), true);
+});

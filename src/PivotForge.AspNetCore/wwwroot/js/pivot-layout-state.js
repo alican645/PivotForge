@@ -1024,6 +1024,10 @@
           // Only a data field may hold it, so it rides along with this area
           // alone: the same measure dragged out to a row drops it.
           ...(this.field(value.field).showGrandTotals === false ? { showGrandTotals: false } : {}),
+          ...(this.field(value.field).showTotals === false ? { showTotals: false } : {}),
+          ...(typeof this.field(value.field).showValues === "boolean"
+            ? { showValues: this.field(value.field).showValues }
+            : {}),
           ...(this.field(value.field).allowCrossGroupCalculation === false
             ? { allowCrossGroupCalculation: false }
             : {}),
