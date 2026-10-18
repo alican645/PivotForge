@@ -45,6 +45,17 @@ public sealed class PivotEngine
     public IReadOnlyDictionary<string, PivotCustomAggregate> CustomAggregates { get; init; } =
         new Dictionary<string, PivotCustomAggregate>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Gets the comparers a field sort may name as its <see cref="PivotFieldSort.SortingMethod"/>.</summary>
+    /// <remarks>
+    /// DevExtreme's <c>sortingMethod</c>, registered by name because the ordering runs here rather
+    /// than in the browser: a request can pick one of these and nothing else. A comparer receives
+    /// two header labels of one level -- a blank group's label is null -- and the level's
+    /// direction is applied to what it returns. Supply a case-insensitive dictionary to let a
+    /// request spell the name in any case.
+    /// </remarks>
+    public IReadOnlyDictionary<string, IComparer<string?>> CustomSorts { get; init; } =
+        new Dictionary<string, IComparer<string?>>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Builds a pivot result from strongly typed records.</summary>
     /// <typeparam name="T">The source record type.</typeparam>
     /// <param name="records">The source records.</param>
@@ -501,6 +512,7 @@ public sealed class PivotEngine
         CancellationToken cancellationToken)
     {
         var plan = ValidateRequest(request, reader, CustomAggregates);
+        ValidateSortingMethods(request);
         reader = TypedRecordReader.Wrap(reader, request.DataTypes, culture);
 
         var scan = Scan(records, request, plan, reader, culture, null, cancellationToken);
@@ -530,15 +542,19 @@ public sealed class PivotEngine
         var grandTotalBucket = scan.GrandTotal;
         var columnLevelValues = scan.ColumnLevelValues;
         var sourceRowCount = scan.SourceRowCount;
+        var rowOrder = AxisOrder.ForRows(
+            request.Rows, ResolveLevelSorts(request.Rows, request.FieldSorts), scan.RowKinds,
+            request.DataTypes, CustomSorts, culture, rowIndex.Headers);
+        var columnOrder = AxisOrder.ForColumns(
+            request.Columns, ResolveLevelSorts(request.Columns, request.FieldSorts), scan.ColumnKinds,
+            request.DataTypes, CustomSorts, culture, columnLevelValues);
 
         var columnHeaders = CreateColumnHeaders(
             columnIndex.Headers,
             columnLevelValues,
             request.Columns,
-            request.Values.Any(IsVariation)
-                ? request.Columns.Select(_ => (PivotSortDirection?)PivotSortDirection.Ascending).ToArray()
-                : ResolveLevelDirections(request.Columns, request.FieldSorts),
-            request.DataTypes,
+            columnOrder,
+            neutral: request.Values.Any(IsVariation),
             culture);
         var columnLookup = CreateHeaderLookup(columnHeaders);
         var rawCells = buckets
@@ -578,7 +594,7 @@ public sealed class PivotEngine
             columnHeaders,
             request.Rows,
             request.Columns,
-            level => LevelComparer(request.Rows, level, request.DataTypes, culture));
+            rowOrder.Neutral);
         var transformed = TransformValues(
             rowIndex.Headers,
             columnHeaders,
@@ -597,7 +613,7 @@ public sealed class PivotEngine
 
         // Columns first and rows second: each only renumbers its own axis, and both read
         // their summaries by header path, so neither disturbs what the other compares.
-        populated = SortColumns(populated, request, culture, columnIndex.Headers);
+        populated = SortColumns(populated, request, columnOrder, columnIndex.Headers);
         var lookup = new Lazy<SummaryLookup>(() => new SummaryLookup(
             populated.RowHeaders, populated.ColumnHeaders, populated.Values));
         var sortedRows = SortRows(
@@ -607,7 +623,7 @@ public sealed class PivotEngine
             populated.Values.ColumnSubtotals,
             lookup,
             request,
-            culture);
+            rowOrder);
         cancellationToken.ThrowIfCancellationRequested();
 
         // Last of all: a running total accumulates in the order the result is drawn.
@@ -645,6 +661,8 @@ public sealed class PivotEngine
         var rowIndex = new HeaderIndex();
         var columnIndex = new HeaderIndex();
         var columnLevelValues = CreateColumnLevelValueLists(request.Columns.Count);
+        var rowKinds = new LevelKinds(request.Rows);
+        var columnKinds = new LevelKinds(request.Columns);
         var buckets = new Dictionary<CellKey, AggregateBucket>();
         var rowTotalBuckets = new Dictionary<int, AggregateBucket>();
         var columnTotalBuckets = new Dictionary<int, AggregateBucket>();
@@ -681,6 +699,8 @@ public sealed class PivotEngine
 
             var columnValues = ReadHeaderValues(record, request.Columns, reader, culture);
             TrackColumnLevelValues(columnLevelValues, columnValues);
+            rowKinds.Observe(record, reader);
+            columnKinds.Observe(record, reader);
             var row = rowIndex.GetOrAdd(rowValues);
             var column = columnIndex.GetOrAdd(columnValues);
             var key = new CellKey(row, column);
@@ -744,7 +764,9 @@ public sealed class PivotEngine
             subtotalBuckets,
             columnSubtotalBuckets,
             grandTotalBucket,
-            sourceRowCount);
+            sourceRowCount,
+            rowKinds,
+            columnKinds);
     }
 
     /// <summary>The row groups a value filter or a ranking leaves out, as header prefixes.</summary>
@@ -889,7 +911,9 @@ public sealed class PivotEngine
         Dictionary<HeaderKey, SubtotalBuckets> Subtotals,
         Dictionary<HeaderKey, ColumnSubtotalBuckets> ColumnSubtotals,
         AggregateBucket GrandTotal,
-        int SourceRowCount);
+        int SourceRowCount,
+        LevelKinds RowKinds,
+        LevelKinds ColumnKinds);
 
     private static List<object> Materialize<T>(IEnumerable<T> records, CancellationToken cancellationToken)
     {
@@ -1828,8 +1852,8 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> observedHeaders,
         IReadOnlyList<IReadOnlyList<string?>> columnLevelValues,
         IReadOnlyList<PivotFieldRef> fields,
-        IReadOnlyList<PivotSortDirection?> directions,
-        IReadOnlyDictionary<string, PivotDataType> dataTypes,
+        AxisOrder order,
+        bool neutral,
         CultureInfo culture)
     {
         if (observedHeaders.Count == 0)
@@ -1839,7 +1863,7 @@ public sealed class PivotEngine
 
         var headers = new List<IReadOnlyList<string?>>();
         AppendColumnHeaderProducts(
-            headers, OrderColumnLevels(columnLevelValues, fields, directions, dataTypes, culture), [], 0);
+            headers, OrderColumnLevels(columnLevelValues, fields, order, neutral, culture), [], 0);
         return headers;
     }
 
@@ -1848,29 +1872,38 @@ public sealed class PivotEngine
     /// intent the engine cannot see — a query's own ORDER BY on month number, for instance,
     /// which alphabetical ordering would destroy. A grouped level is the exception: the engine
     /// produced those labels itself and knows what order they run in, so it applies it rather
-    /// than trusting an arrival order it no longer reflects.</remarks>
+    /// than trusting an arrival order it no longer reflects. The neutral order a variation is
+    /// calculated in ascends every level by value, or by its sorting method.</remarks>
     private static IReadOnlyList<IReadOnlyList<string?>> OrderColumnLevels(
         IReadOnlyList<IReadOnlyList<string?>> columnLevelValues,
         IReadOnlyList<PivotFieldRef> fields,
-        IReadOnlyList<PivotSortDirection?> directions,
-        IReadOnlyDictionary<string, PivotDataType> dataTypes,
+        AxisOrder order,
+        bool neutral,
         CultureInfo culture)
     {
         return columnLevelValues
             .Select((values, level) =>
             {
+                if (neutral)
+                {
+                    return (IReadOnlyList<string?>)values.OrderBy(value => value, order.Neutral(level)).ToArray();
+                }
+
                 var interval = fields.ElementAtOrDefault(level)?.Interval ?? PivotGroupInterval.None;
                 var intervalOrder = PivotGroupLabels.Order(interval, culture);
-                // A typed level sorts by its values when asked to sort, but like any
-                // undeclared level it keeps the order the data arrived in otherwise.
-                var comparer = intervalOrder ?? LevelComparer(fields, level, dataTypes, culture);
 
-                return directions.ElementAtOrDefault(level) switch
+                // A typed level sorts by its values when asked to sort, but like any
+                // undeclared level it keeps the order the data arrived in otherwise. A
+                // level sorted by "none" keeps it too, reversed when descending.
+                return order.Direction(level) switch
                 {
-                    PivotSortDirection.Ascending =>
-                        (IReadOnlyList<string?>)values.OrderBy(value => value, comparer).ToArray(),
-                    PivotSortDirection.Descending =>
-                        values.OrderByDescending(value => value, comparer).ToArray(),
+                    PivotSortDirection direction => order.Labels(level) is { } comparer
+                        ? direction == PivotSortDirection.Descending
+                            ? values.OrderByDescending(value => value, comparer).ToArray()
+                            : values.OrderBy(value => value, comparer).ToArray()
+                        : direction == PivotSortDirection.Descending
+                            ? values.Reverse().ToArray()
+                            : values,
                     _ => intervalOrder is null
                         ? values
                         : values.OrderBy(value => value, intervalOrder).ToArray()
@@ -1926,7 +1959,7 @@ public sealed class PivotEngine
         IReadOnlyList<PivotColumnSubtotal> columnSubtotals,
         Lazy<SummaryLookup> lookup,
         PivotRequest request,
-        CultureInfo culture)
+        AxisOrder order)
     {
         if (rowHeaders.Count == 0)
         {
@@ -1937,10 +1970,10 @@ public sealed class PivotEngine
         var sort = request.RowSort;
 
         rowOrder = sort is null
-            ? SortRowsByLevel(rowOrder, rowHeaders, ResolveLevelSorts(request.Rows, request.FieldSorts), lookup, request, culture)
+            ? SortRowsByLevel(rowOrder, rowHeaders, ResolveLevelSorts(request.Rows, request.FieldSorts), lookup, request, order)
             : sort.Mode switch
         {
-            PivotSortMode.RowLabel => SortRowsByLabel(rowOrder, rowHeaders, request.Rows, sort, request.DataTypes, culture),
+            PivotSortMode.RowLabel => SortRowsByLabel(rowOrder, rowHeaders, request.Rows, sort, order),
             // Every level by the same value, each inside its parent: sorting the rows as one
             // flat list would pull a group's rows apart and leave its subtotal nowhere to go.
             PivotSortMode.RowTotalValue when !string.IsNullOrWhiteSpace(sort.ValueKey) =>
@@ -1953,7 +1986,7 @@ public sealed class PivotEngine
                         .ToArray(),
                     lookup,
                     request,
-                    culture),
+                    order),
             _ => rowOrder
         };
 
@@ -1995,13 +2028,13 @@ public sealed class PivotEngine
         IReadOnlyList<PivotFieldSort?> levelSorts,
         Lazy<SummaryLookup> lookup,
         PivotRequest request,
-        CultureInfo culture)
+        AxisOrder order)
     {
         // Resolved once rather than inside the comparer, which runs n log n times.
         var groupValues = ResolveGroupValues(rowHeaders, levelSorts, lookup, request, axisIsRows: true);
 
         int Compare(int left, int right) =>
-            CompareRows(left, right, rowHeaders, request.Rows, levelSorts, groupValues, request.DataTypes, culture);
+            CompareRows(left, right, rowHeaders, levelSorts, groupValues, order);
         return groupValues.Any(level => level?.Any(value => value.IsNaN) == true)
             ? SortSiblingGroups(rowOrder, rowHeaders, Compare)
             : rowOrder.OrderBy(row => row, Comparer<int>.Create(Compare)).ToArray();
@@ -2027,11 +2060,9 @@ public sealed class PivotEngine
         int left,
         int right,
         IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
-        IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotFieldSort?> levelSorts,
         IReadOnlyList<SummarySortValue[]?> groupValues,
-        IReadOnlyDictionary<string, PivotDataType> dataTypes,
-        CultureInfo culture)
+        AxisOrder order)
     {
         var leftHeader = rowHeaders[left];
         var rightHeader = rowHeaders[right];
@@ -2043,7 +2074,7 @@ public sealed class PivotEngine
             // order while the plain levels around it stay collated.
             var leftLabel = leftHeader.ElementAtOrDefault(level);
             var rightLabel = rightHeader.ElementAtOrDefault(level);
-            var labelComparison = LevelComparer(fields, level, dataTypes, culture).Compare(leftLabel, rightLabel);
+            var labelComparison = order.Compare(leftHeader, rightHeader, level);
 
             // Groups are identified ordinally everywhere else, so "abc" and "ABC" are two
             // groups the collation calls equal. Separating them here keeps each group's
@@ -2149,7 +2180,7 @@ public sealed class PivotEngine
     /// <remarks>The columns arrive already in label order, level by level, so a level without a
     /// value sort keeps the order its groups already have, and a tie between two values does the
     /// same. Every index into the column axis is renumbered together with the headers.</remarks>
-    private static PopulatedResult SortColumns(PopulatedResult populated, PivotRequest request, CultureInfo culture, IReadOnlyList<IReadOnlyList<string?>> observedHeaders)
+    private static PopulatedResult SortColumns(PopulatedResult populated, PivotRequest request, AxisOrder columnOrder, IReadOnlyList<IReadOnlyList<string?>> observedHeaders)
     {
         var columnHeaders = populated.ColumnHeaders;
         var levelSorts = ResolveLevelSorts(request.Columns, request.FieldSorts);
@@ -2181,8 +2212,7 @@ public sealed class PivotEngine
                 var positional = left.CompareTo(right);
                 if (levelSorts.ElementAtOrDefault(level) is { } labelSort)
                 {
-                    positional = LevelComparer(request.Columns, level, request.DataTypes, culture)
-                        .Compare(leftHeader[level], rightHeader[level]);
+                    positional = columnOrder.Compare(leftHeader, rightHeader, level);
                     if (labelSort.Direction == PivotSortDirection.Descending)
                     {
                         positional = -positional;
@@ -2425,27 +2455,21 @@ public sealed class PivotEngine
             .ToArray();
     }
 
-    private static IReadOnlyList<PivotSortDirection?> ResolveLevelDirections(
-        IReadOnlyList<PivotFieldRef> fields,
-        IReadOnlyList<PivotFieldSort> fieldSorts) =>
-        ResolveLevelSorts(fields, fieldSorts).Select(sort => sort?.Direction).ToArray();
-
     private static int[] SortRowsByLabel(
         int[] rowOrder,
         IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
         IReadOnlyList<PivotFieldRef> rowFields,
         PivotSort sort,
-        IReadOnlyDictionary<string, PivotDataType> dataTypes,
-        CultureInfo culture)
+        AxisOrder order)
     {
         var level = ResolveRowFieldLevel(rowFields, sort.Field);
         // A grouped level sorts the way its interval runs even when the reader
         // asked for a label sort: alphabetical month names are not what anyone
-        // means by sorting a month column.
-        var comparer = LevelComparer(rowFields, level, dataTypes, culture);
-
+        // means by sorting a month column -- unless the level says displayText.
         return ApplyDirection(
-            rowOrder.OrderBy(row => rowHeaders[row].ElementAtOrDefault(level), comparer),
+            rowOrder.OrderBy(
+                row => row,
+                Comparer<int>.Create((left, right) => order.Compare(rowHeaders[left], rowHeaders[right], level))),
             sort.Direction);
     }
 
@@ -2457,20 +2481,206 @@ public sealed class PivotEngine
         string.Equals(name, field.Key, StringComparison.Ordinal) ||
         string.Equals(name, field.Field, StringComparison.Ordinal);
 
-    /// <summary>The comparer a header level is ordered by: its interval's, its declared type's,
-    /// or the culture's.</summary>
-    private static IComparer<string?> LevelComparer(
-        IReadOnlyList<PivotFieldRef> fields,
-        int level,
+    /// <summary>The comparer a header level's values run in: its interval's, the type its values
+    /// arrived as, its declared type's, or the culture's.</summary>
+    private static IComparer<string?> ValueComparer(
+        PivotFieldRef? field,
+        PivotDataType observed,
         IReadOnlyDictionary<string, PivotDataType> dataTypes,
         CultureInfo culture)
     {
-        var field = fields.ElementAtOrDefault(level);
         var interval = field?.Interval ?? PivotGroupInterval.None;
 
         return PivotGroupLabels.Order(interval, culture) ??
+            PivotGroupLabels.Order(observed, culture) ??
             PivotGroupLabels.Order(DataTypeOf(field?.Field, dataTypes), culture) ??
             StringComparer.Create(culture, ignoreCase: true);
+    }
+
+    private void ValidateSortingMethods(PivotRequest request)
+    {
+        foreach (var sort in request.FieldSorts)
+        {
+            if (!Enum.IsDefined(sort.SortBy))
+            {
+                throw new ArgumentException("A pivot field sort needs a known sortBy.", nameof(request));
+            }
+
+            // Refused rather than ignored: a misspelled name would otherwise sort by value
+            // and look like the comparer itself being wrong.
+            if (sort.SortingMethod is { } name && !CustomSorts.ContainsKey(name))
+            {
+                throw new ArgumentException(
+                    $"The sorting method \"{name}\" is not registered.", nameof(request));
+            }
+        }
+    }
+
+    /// <summary>How one axis' levels compare, resolved once per request.</summary>
+    /// <remarks>DevExtreme's sortBy and sortingMethod: a registered comparer replaces the
+    /// criterion; "value" compares what the label stands for, "displayText" its text and "none"
+    /// the order the groups arrived in. The neutral order a display calculation walks ignores
+    /// sortBy but keeps a sorting method. Directions are applied by the callers.</remarks>
+    private sealed class AxisOrder
+    {
+        private readonly IComparer<string?>?[] _labels;
+        private readonly IComparer<string?>[] _neutral;
+        private readonly IReadOnlyList<PivotFieldSort?> _sorts;
+        private readonly Func<IReadOnlyList<string?>, int, int> _arrival;
+        private readonly IComparer<string?> _fallback;
+
+        private AxisOrder(
+            IReadOnlyList<PivotFieldRef> fields,
+            IReadOnlyList<PivotFieldSort?> sorts,
+            LevelKinds kinds,
+            IReadOnlyDictionary<string, PivotDataType> dataTypes,
+            IReadOnlyDictionary<string, IComparer<string?>> customSorts,
+            CultureInfo culture,
+            Func<IReadOnlyList<string?>, int, int> arrival)
+        {
+            _sorts = sorts;
+            _arrival = arrival;
+            _fallback = StringComparer.Create(culture, ignoreCase: true);
+            _neutral = new IComparer<string?>[fields.Count];
+            _labels = new IComparer<string?>?[fields.Count];
+
+            for (var level = 0; level < fields.Count; level++)
+            {
+                var sort = sorts.ElementAtOrDefault(level);
+                var custom = sort?.SortingMethod is { } name ? customSorts[name] : null;
+                var value = ValueComparer(fields[level], kinds.Kind(level), dataTypes, culture);
+
+                _neutral[level] = custom ?? value;
+                _labels[level] = custom ?? (sort?.SortBy switch
+                {
+                    PivotSortBy.DisplayText => _fallback,
+                    PivotSortBy.None => null,
+                    _ => value
+                });
+            }
+        }
+
+        /// <summary>Rows arrive in the order their headers were first met, so a group's
+        /// arrival is the first row under it.</summary>
+        public static AxisOrder ForRows(
+            IReadOnlyList<PivotFieldRef> fields,
+            IReadOnlyList<PivotFieldSort?> sorts,
+            LevelKinds kinds,
+            IReadOnlyDictionary<string, PivotDataType> dataTypes,
+            IReadOnlyDictionary<string, IComparer<string?>> customSorts,
+            CultureInfo culture,
+            IReadOnlyList<IReadOnlyList<string?>> arrivedHeaders)
+        {
+            var firstSeen = new Lazy<Dictionary<HeaderKey, int>>(() =>
+            {
+                var groups = new Dictionary<HeaderKey, int>();
+                for (var index = 0; index < arrivedHeaders.Count; index++)
+                {
+                    for (var depth = 1; depth <= arrivedHeaders[index].Count; depth++)
+                    {
+                        groups.TryAdd(new HeaderKey(arrivedHeaders[index].Take(depth).ToArray()), index);
+                    }
+                }
+
+                return groups;
+            });
+
+            return new AxisOrder(fields, sorts, kinds, dataTypes, customSorts, culture,
+                (path, level) => firstSeen.Value.GetValueOrDefault(
+                    new HeaderKey(path.Take(level + 1).ToArray()), int.MaxValue));
+        }
+
+        /// <summary>Columns are every combination of each level's values, so a value's arrival
+        /// is its place among that level's values.</summary>
+        public static AxisOrder ForColumns(
+            IReadOnlyList<PivotFieldRef> fields,
+            IReadOnlyList<PivotFieldSort?> sorts,
+            LevelKinds kinds,
+            IReadOnlyDictionary<string, PivotDataType> dataTypes,
+            IReadOnlyDictionary<string, IComparer<string?>> customSorts,
+            CultureInfo culture,
+            IReadOnlyList<IReadOnlyList<string?>> levelValues)
+        {
+            var ranks = levelValues
+                .Select(values =>
+                {
+                    var rank = new Dictionary<string, int>(StringComparer.Ordinal);
+                    var blank = int.MaxValue;
+                    for (var index = 0; index < values.Count; index++)
+                    {
+                        if (values[index] is { } value)
+                        {
+                            rank.TryAdd(value, index);
+                        }
+                        else
+                        {
+                            blank = Math.Min(blank, index);
+                        }
+                    }
+
+                    return (rank, blank);
+                })
+                .ToArray();
+
+            return new AxisOrder(fields, sorts, kinds, dataTypes, customSorts, culture,
+                (path, level) => path.ElementAtOrDefault(level) is { } value
+                    ? ranks[level].rank.GetValueOrDefault(value, int.MaxValue)
+                    : ranks[level].blank);
+        }
+
+        public PivotSortDirection? Direction(int level) => _sorts.ElementAtOrDefault(level)?.Direction;
+
+        /// <summary>The comparer for a level's labels, or null when it keeps arrival order.</summary>
+        public IComparer<string?>? Labels(int level) => level < _labels.Length ? _labels[level] : _fallback;
+
+        public IComparer<string?> Neutral(int level) => level < _neutral.Length ? _neutral[level] : _fallback;
+
+        /// <summary>Compares two headers' labels at one level, without the direction.</summary>
+        public int Compare(IReadOnlyList<string?> left, IReadOnlyList<string?> right, int level) =>
+            Labels(level) is { } comparer
+                ? comparer.Compare(left.ElementAtOrDefault(level), right.ElementAtOrDefault(level))
+                : _arrival(left, level).CompareTo(_arrival(right, level));
+    }
+
+    /// <summary>The type each plain level's values arrived as, read from the first one that is not
+    /// blank.</summary>
+    /// <remarks>Labels are text, so without this a numeric or date column would order as text
+    /// -- "10" before "9" -- where DevExtreme orders it by value. Read after the declared types
+    /// are applied, so a declared type is what is observed.</remarks>
+    private sealed class LevelKinds(IReadOnlyList<PivotFieldRef> fields)
+    {
+        private readonly PivotDataType?[] _kinds = fields
+            .Select(field => field.Interval == PivotGroupInterval.None ? (PivotDataType?)null : PivotDataType.Auto)
+            .ToArray();
+        private int _pending = fields.Count(field => field.Interval == PivotGroupInterval.None);
+
+        public void Observe(object record, IRecordReader reader)
+        {
+            for (var level = 0; _pending > 0 && level < _kinds.Length; level++)
+            {
+                if (_kinds[level] is not null)
+                {
+                    continue;
+                }
+
+                var kind = reader.GetValue(record, fields[level].Field) switch
+                {
+                    null or "" => (PivotDataType?)null,
+                    DateTime or DateTimeOffset or DateOnly => PivotDataType.Date,
+                    byte or sbyte or short or ushort or int or uint or long or ulong or decimal or double or float =>
+                        PivotDataType.Number,
+                    _ => PivotDataType.Auto
+                };
+
+                if (kind is not null)
+                {
+                    _kinds[level] = kind;
+                    _pending--;
+                }
+            }
+        }
+
+        public PivotDataType Kind(int level) => _kinds.ElementAtOrDefault(level) ?? PivotDataType.Auto;
     }
 
     // Matched ignoring case, as every field name is.

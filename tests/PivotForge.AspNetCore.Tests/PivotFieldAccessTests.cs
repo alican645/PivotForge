@@ -374,4 +374,49 @@ public sealed class PivotFieldAccessTests
             await app.StopAsync();
         }
     }
+
+    private static string SortedPivot(string sortingMethod) => $$"""
+        {
+          "rows": ["Department"],
+          "values": [{ "field": "Salary", "aggregation": "sum" }],
+          "fieldSorts": [{ "field": "Department", "direction": "Ascending", "sortingMethod": {{JsonSerializer.Serialize(sortingMethod)}} }]
+        }
+        """;
+
+    [Fact]
+    public async Task ARegisteredSortingMethodOrdersTheLevelAndAnUnknownOneIsRefused()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Employee>(
+            (_, _) => ValueTask.FromResult<IReadOnlyList<Employee>>(People),
+            options => options.CustomSorts["SupportFirst"] = Comparer<string?>.Create((left, right) =>
+                (left != "Support").CompareTo(right != "Support")));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            using var sorted = await client.PostAsync("/pivotforge/pivot", Json(SortedPivot("supportfirst")));
+            sorted.EnsureSuccessStatusCode();
+            var headers = (await ReadAsync(sorted)).GetProperty("rowHeaders");
+            Assert.Equal("Support", headers[0][0].GetString());
+            Assert.Equal("Sales", headers[1][0].GetString());
+
+            using var refused = await client.PostAsync("/pivotforge/pivot", Json(SortedPivot("Missing")));
+            // Refused like any other invalid request, rather than quietly sorting by value.
+            Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
 }

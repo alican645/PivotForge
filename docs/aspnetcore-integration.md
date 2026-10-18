@@ -494,6 +494,31 @@ ascending and last descending, and equal values break on the label in the same
 direction. Row fields only. A sort
 the reader picks from the cell menu still wins.
 
+`sort-by` (`Value`, `DisplayText`, `None`) is DevExtreme's `sortBy`: what a row
+or column level's labels are compared by. `Value`, the default, orders numbers
+and dates by value and a grouped month by its place in the year; `DisplayText`
+orders the text, so month names run alphabetically; `None` keeps the order the
+source yielded the groups in. `sorting-method` names a comparer registered on the
+server and replaces `sort-by`; `sort-order` still applies to both, and with
+`sort-by-value-key` they break ties between equal summaries:
+
+```csharp
+builder.Services.AddPivotForge<SalesRecord>(provider, options =>
+    options.CustomSorts["coastalFirst"] = Comparer<string?>.Create(CompareRegions));
+```
+
+```cshtml
+<pivot-field field="Region" area="Row" sorting-method="coastalFirst" />
+<pivot-field field="OrderDate" area="Column" group-interval="Month" sort-by="DisplayText" />
+```
+
+DevExtreme's `sortingMethod` is a browser function; here the ordering runs on the
+server, so a page can name a registered comparer and nothing else, and a name that
+is not registered is refused with 400. In JavaScript the same options are
+`sortBy: "value" | "displayText" | "none"` and `sortingMethod: "coastalFirst"`.
+Display calculations (difference from previous, `Prev`…) walk the columns in
+value order whatever `sort-by` says, but follow a sorting method.
+
 `group-interval` (`Year`, `Quarter`, `Month`, `Day`, `DayOfWeek`) collapses a
 date column into header groups — see [Date grouping](#date-grouping) — and
 `group-interval="Range"` with `group-size` splits a numeric one into ranges — see

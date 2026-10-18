@@ -66,6 +66,9 @@
   // A value's running total, DevExtreme's runningTotal: along each row or down
   // each column, after the display mode.
   const RUNNING_TOTALS = ["row", "column"];
+  // What a row or column level's labels are compared by, DevExtreme's sortBy:
+  // the value behind the label, its text, or the order the source yielded them.
+  const SORT_BYS = ["value", "displayText", "none"];
 
   const TOP_N_MODES = ["Top", "Bottom"];
   // How a value filter compares a group's summary value. The two ranges read a
@@ -538,6 +541,30 @@
       );
     }
 
+    for (const option of ["sortBy", "sortingMethod"]) {
+      if (!isDimensionAxis && field[option] !== undefined) {
+        throw new Error(
+          `"${option}" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
+        );
+      }
+    }
+
+    const sortBy = isDimensionAxis ? field.sortBy ?? null : null;
+    if (sortBy !== null && !SORT_BYS.includes(sortBy)) {
+      throw new Error(
+        `Unknown sortBy "${sortBy}" on field "${dataField}". Expected one of: ${SORT_BYS.join(", ")}.`
+      );
+    }
+
+    // The name of a comparer registered on the server (PivotForgeOptions.CustomSorts):
+    // DevExtreme's sortingMethod is a function, but the ordering runs on the server.
+    const sortingMethod = isDimensionAxis ? field.sortingMethod ?? null : null;
+    if (sortingMethod !== null && (typeof sortingMethod !== "string" || sortingMethod.trim() === "")) {
+      throw new Error(
+        `"sortingMethod" on field "${dataField}" must be the name of a comparer registered on the server.`
+      );
+    }
+
     // Ordering a level by a summary value works on both axes: a row level by
     // its row totals, a column level by its column totals.
     if (!isDimensionAxis && field.sortByValueKey !== undefined) {
@@ -578,6 +605,8 @@
       role,
       areaIndex: areaIndex ?? null,
       sortOrder,
+      sortBy,
+      sortingMethod,
       sortByValueKey: isDimensionAxis && field.sortByValueKey ? String(field.sortByValueKey) : null,
       sortBySummaryPath: sortBySummaryPath === null || sortBySummaryPath.length === 0
         ? null
@@ -818,22 +847,34 @@
     return normalized
       .filter(field => field.area === "row" || field.area === "column")
       .map(field => {
+        // A level's criterion: what its labels compare by, and what breaks a tie
+        // between two equal summaries.
+        const criterion = {
+          ...(field.sortBy !== null && field.sortBy !== "value"
+            ? { sortBy: field.sortBy === "displayText" ? "DisplayText" : "None" }
+            : {}),
+          ...(field.sortingMethod !== null ? { sortingMethod: field.sortingMethod } : {})
+        };
+
         if (columnValueSort && field.area === "column") {
           return {
             field: field.key,
             direction: columnValueSort.direction,
             valueKey: columnValueSort.valueKey,
-            ...(columnValueSort.rowPath ? { summaryPath: columnValueSort.rowPath } : {})
+            ...(columnValueSort.rowPath ? { summaryPath: columnValueSort.rowPath } : {}),
+            ...criterion
           };
         }
 
-        if (field.sortOrder === null && field.sortByValueKey === null) {
+        if (field.sortOrder === null && field.sortByValueKey === null &&
+          field.sortBy === null && field.sortingMethod === null) {
           return null;
         }
 
         return {
           field: field.key,
           direction: field.sortOrder ?? "Ascending",
+          ...criterion,
           ...(field.sortByValueKey !== null ? { valueKey: field.sortByValueKey } : {}),
           ...(field.sortByValueKey !== null && field.sortBySummaryPath !== null
             ? { summaryPath: field.sortBySummaryPath }

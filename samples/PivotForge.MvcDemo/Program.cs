@@ -34,6 +34,15 @@ builder.Services.AddPivotForge<SalesRecord>(
             var middle = sorted.Length / 2;
             return sorted.Length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
         };
+
+        // A row or column field can name it as its sorting method:
+        // <pivot-field field="Region" area="Row" sorting-method="coastalFirst" />.
+        string[] coastalFirst = ["Karadeniz", "Marmara", "Ege", "Akdeniz", "İç Anadolu", "Doğu Anadolu"];
+        options.CustomSorts["coastalFirst"] = Comparer<string?>.Create((left, right) =>
+            Rank(left).CompareTo(Rank(right)));
+
+        int Rank(string? region) =>
+            Array.IndexOf(coastalFirst, region) is var rank and >= 0 ? rank : coastalFirst.Length;
     });
 
 var app = builder.Build();

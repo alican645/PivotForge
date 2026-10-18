@@ -84,17 +84,23 @@ internal static class PivotGroupLabels
     /// <param name="type">The field's declared type.</param>
     /// <param name="culture">The culture a date label is read in.</param>
     /// <returns>A comparer, or null when the type orders as text.</returns>
-    /// <remarks>A converted number is labelled with its invariant text and a converted date with
-    /// its invariant date text, so the label reads back as the value it came from. A blank or
-    /// unreadable label goes last.</remarks>
+    /// <remarks>A number is labelled with its invariant text and a date with its invariant date
+    /// text, so the label reads back as the value it came from. A blank or unreadable label goes
+    /// last.</remarks>
     public static IComparer<string?>? Order(PivotDataType type, CultureInfo culture) => type switch
     {
         PivotDataType.Number => new NumberComparer(label =>
             decimal.TryParse(label, NumberStyles.Number | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out var number)
                 ? number
                 : null),
+        // Invariant first: a date label is the value's invariant text, which the reader's
+        // culture can misread -- "03/04/2026" is the 4th of March, not the 3rd of April.
         PivotDataType.Date => new NumberComparer(label =>
-            !string.IsNullOrEmpty(label) && TryConvertToDate(label, culture, out var date) ? date.Ticks : null),
+            !string.IsNullOrEmpty(label) &&
+            (DateTime.TryParse(label, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
+             TryConvertToDate(label, culture, out date))
+                ? date.Ticks
+                : null),
         _ => null
     };
 

@@ -42,7 +42,9 @@ public class PivotTagHelperTests
         string? DisplayFolder = null,
         decimal? GroupSize = null,
         PivotDataType? FieldType = null,
-        PivotRunningTotal? RunningTotal = null);
+        PivotRunningTotal? RunningTotal = null,
+        PivotSortBy? SortBy = null,
+        string? SortingMethod = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -156,6 +158,18 @@ public class PivotTagHelperTests
         {
             helper.FieldType = fieldType;
             attributes.Add(new TagHelperAttribute("field-type", fieldType.ToString()));
+        }
+
+        if (spec.SortBy is { } sortBy)
+        {
+            helper.SortBy = sortBy;
+            attributes.Add(new TagHelperAttribute("sort-by", sortBy.ToString()));
+        }
+
+        if (spec.SortingMethod is not null)
+        {
+            helper.SortingMethod = spec.SortingMethod;
+            attributes.Add(new TagHelperAttribute("sorting-method", spec.SortingMethod));
         }
 
         if (spec.SortByValueKey is not null)
@@ -1169,6 +1183,30 @@ public class PivotTagHelperTests
         Assert.False(config.GetProperty("fields")[0].TryGetProperty("runningTotal", out _));
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Region").Area(PivotArea.Row).RunningTotal(PivotRunningTotal.Row).Build());
+    }
+
+    [Fact]
+    public async Task WritesADeclaredSortByAndSortingMethodOnTheAxesAndRefusesThemElsewhere()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Month", PivotArea.Row, SortBy: PivotSortBy.DisplayText),
+            new FieldSpec("Priority", PivotArea.Column, SortingMethod: "priority"),
+            new FieldSpec("Region", PivotArea.Row, SortBy: PivotSortBy.Value),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var fields = config.GetProperty("fields");
+
+        Assert.Equal("displayText", fields[0].GetProperty("sortBy").GetString());
+        Assert.Equal("priority", fields[1].GetProperty("sortingMethod").GetString());
+        Assert.False(fields[1].TryGetProperty("sortBy", out _));
+        // Value is the enum's default, so only the written attribute declares it.
+        Assert.Equal("value", fields[2].GetProperty("sortBy").GetString());
+        Assert.False(fields[3].TryGetProperty("sortBy", out _));
+
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Data).SortBy(PivotSortBy.None).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Filter).SortingMethod("priority").Build());
     }
 
     [Fact]

@@ -984,7 +984,9 @@
             : {}),
           ...((isRow || area === "column") && field.sortOrder
             ? { sortOrder: field.sortOrder }
-            : {})
+            : {}),
+          ...((isRow || area === "column") && field.sortBy ? { sortBy: field.sortBy } : {}),
+          ...((isRow || area === "column") && field.sortingMethod ? { sortingMethod: field.sortingMethod } : {})
         };
       };
 

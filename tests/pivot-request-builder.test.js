@@ -875,3 +875,45 @@ test("the formula parser reads the relative functions the engine does", () => {
     assert.throws(() => parse(formula), error => error.code === code, formula);
   }
 });
+
+test("sortBy and sortingMethod travel in the level's field sort", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "urun", area: "row", sortBy: "displayText" },
+    { dataField: "yil", area: "column", sortBy: "none", sortOrder: "Descending" },
+    { dataField: "oncelik", area: "row", sortingMethod: "priority" },
+    { dataField: "bolge", area: "row", sortBy: "value" },
+    salesFields[2]
+  ]);
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "urun", direction: "Ascending", sortBy: "DisplayText" },
+    { field: "yil", direction: "Descending", sortBy: "None" },
+    { field: "oncelik", direction: "Ascending", sortingMethod: "priority" },
+    // "value" is the default, so it says nothing of its own.
+    { field: "bolge", direction: "Ascending" }
+  ]);
+});
+
+test("a column value sort keeps the level's criterion as its tie-break", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    salesFields[0],
+    { ...salesFields[1], sortingMethod: "fiscal" },
+    salesFields[2]
+  ], { columnSort: { valueKey: "tutar_sum", direction: "Descending" } });
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "yil", direction: "Descending", valueKey: "tutar_sum", sortingMethod: "fiscal" }
+  ]);
+});
+
+test("sortBy and sortingMethod are refused where they mean nothing", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([salesFields[0], { ...salesFields[2], sortBy: "none" }]),
+    /"sortBy" is only valid on a "row" or "column" field/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([{ ...salesFields[0], sortBy: "text" }, salesFields[2]]),
+    /Unknown sortBy "text"/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([{ ...salesFields[0], sortingMethod: " " }, salesFields[2]]),
+    /must be the name of a comparer registered on the server/);
+});

@@ -13,7 +13,9 @@ internal sealed class PivotForgeDataExecutor<TRecord>(
     private PivotEngine CreateEngine() => new()
     {
         CustomAggregates = new Dictionary<string, PivotCustomAggregate>(
-            options.Value.CustomAggregates, StringComparer.OrdinalIgnoreCase)
+            options.Value.CustomAggregates, StringComparer.OrdinalIgnoreCase),
+        CustomSorts = new Dictionary<string, IComparer<string?>>(
+            options.Value.CustomSorts, StringComparer.OrdinalIgnoreCase)
     };
 
     public async ValueTask<PivotResult> ExecuteAsync(

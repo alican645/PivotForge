@@ -1420,3 +1420,22 @@ test("a value's running total is set, cleared and carried into the fields", () =
   assert.equal("runningTotal" in state.toFields().find(field => field.dataField === "Amount"), false);
   assert.throws(() => state.setRunningTotal("Amount", "diagonal"), /Unknown runningTotal/);
 });
+
+test("toFields carries sortBy and sortingMethod on the axes and drops them elsewhere", () => {
+  const state = new PivotForge.PivotLayoutState([
+    { dataField: "Region", caption: "Bölge", area: "row", sortBy: "none" },
+    { dataField: "Priority", caption: "Öncelik", area: "column", sortingMethod: "priority" },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.deepEqual(PivotForge.PivotRequestBuilder.buildRequest(state.toFields()).fieldSorts, [
+    { field: "Region", direction: "Ascending", sortBy: "None" },
+    { field: "Priority", direction: "Ascending", sortingMethod: "priority" }
+  ]);
+
+  // Dragged into the filter zone, a field has no level to order.
+  state.move("Priority", "filter");
+  assert.deepEqual(PivotForge.PivotRequestBuilder.buildRequest(state.toFields()).fieldSorts, [
+    { field: "Region", direction: "Ascending", sortBy: "None" }
+  ]);
+});

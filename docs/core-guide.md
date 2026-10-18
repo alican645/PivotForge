@@ -90,6 +90,32 @@ var byColumn = PivotSort.RowColumnValue(
 
 Only row order changes. Column headers keep their calculated order.
 
+`PivotFieldSort` orders one level of either axis inside its parent group. Its `SortBy` is DevExtreme's `sortBy`: `Value` (the default) compares what the label stands for -- a number by number, a date by date, a month by its place in the year, even without a declared data type, because the engine notes the type the values arrived as -- `DisplayText` compares the text in the engine's culture, and `None` keeps the order the source yielded the groups in. `SortingMethod` names a comparer in `PivotEngine.CustomSorts` and replaces `SortBy`; the direction applies to all of them, and with a `ValueKey` they break ties between equal summaries:
+
+```csharp
+var engine = new PivotEngine
+{
+    CustomSorts = new Dictionary<string, IComparer<string?>>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["priority"] = Comparer<string?>.Create((left, right) => Rank(left).CompareTo(Rank(right)))
+    }
+};
+
+var request = new PivotRequest
+{
+    Rows = ["Priority"],
+    Columns = [new PivotFieldRef("OrderDate", PivotGroupInterval.Month)],
+    Values = [PivotValueDefinition.Sum("Amount")],
+    FieldSorts =
+    [
+        new PivotFieldSort("Priority", PivotSortDirection.Ascending, SortingMethod: "priority"),
+        new PivotFieldSort("OrderDate", PivotSortDirection.Ascending, SortBy: PivotSortBy.DisplayText)
+    ]
+};
+```
+
+A comparer receives two labels of one level; a blank group's label is null. A name that is not registered is refused with an `ArgumentException`. Variations and formulas that read other cells walk the levels in value order whatever `SortBy` says, but follow a `SortingMethod`.
+
 ## Numeric Ranges
 
 A level grouped by `PivotGroupInterval.Range` splits a numeric field into ranges of `BinSize`, labelled `0 – 1.000`, `1.000 – 2.000` and so on (bounds in the engine's culture), ordered by where each starts:

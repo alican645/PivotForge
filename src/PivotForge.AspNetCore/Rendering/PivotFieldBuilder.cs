@@ -33,6 +33,8 @@ public sealed class PivotFieldBuilder
     private PivotSortDirection? _sortOrder;
     private string? _sortByValueKey;
     private IReadOnlyList<string?>? _sortBySummaryPath;
+    private PivotSortBy? _sortBy;
+    private string? _sortingMethod;
     private PivotGroupInterval? _groupInterval;
     private PivotDataType? _dataType;
     private PivotRunningTotal? _runningTotal;
@@ -427,6 +429,39 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Sets what this field's labels are compared by, DevExtreme's <c>sortBy</c>.</summary>
+    /// <remarks>
+    /// <see cref="PivotSortBy.Value"/> (the default) orders numbers and dates by value and a grouped
+    /// date by its place in the year; <see cref="PivotSortBy.DisplayText"/> orders the text, so
+    /// month names run alphabetically; <see cref="PivotSortBy.None"/> keeps the order the source
+    /// yielded them in. With <see cref="SortByValueKey"/> it breaks ties between equal summaries.
+    /// Valid on <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/> fields only.
+    /// </remarks>
+    /// <param name="sortBy">The criterion.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder SortBy(PivotSortBy sortBy)
+    {
+        _sortBy = sortBy;
+        return this;
+    }
+
+    /// <summary>Orders this field's labels with a comparer registered on the server, DevExtreme's <c>sortingMethod</c>.</summary>
+    /// <remarks>
+    /// The name of an entry in <see cref="PivotForgeOptions.CustomSorts"/>; the ordering runs on the
+    /// server, so a page can pick a registered comparer and nothing else. It replaces
+    /// <see cref="SortBy"/>, and <see cref="SortOrder"/> still applies. A name that is not registered
+    /// is refused when the grid asks for data. Valid on <see cref="PivotArea.Row"/> and
+    /// <see cref="PivotArea.Column"/> fields only.
+    /// </remarks>
+    /// <param name="name">The registered comparer's name.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder SortingMethod(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        _sortingMethod = name;
+        return this;
+    }
+
     /// <summary>Collapses a field's values into date groups (year, quarter, month, day, weekday) or numeric ranges.</summary>
     /// <remarks>
     /// Grouping happens where the header is read, so no second source column is needed — and the
@@ -604,6 +639,13 @@ public sealed class PivotFieldBuilder
                 "SortByValueKey is only valid on fields whose Area is Row or Column.");
         }
 
+        if (_area is not (PivotArea.Row or PivotArea.Column) && (_sortBy is not null || _sortingMethod is not null))
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets {(_sortBy is not null ? "SortBy" : "SortingMethod")}, but its Area is \"{_area}\". " +
+                "SortBy and SortingMethod are only valid on fields whose Area is Row or Column.");
+        }
+
         // A path says where to read the value, so without a value there is nothing to read.
         if (_sortBySummaryPath is not null && _sortByValueKey is null)
         {
@@ -764,6 +806,16 @@ public sealed class PivotFieldBuilder
         if (_sortBySummaryPath is { } sortBySummaryPath)
         {
             field["sortBySummaryPath"] = sortBySummaryPath.ToArray();
+        }
+
+        if (_sortBy is { } sortBy)
+        {
+            field["sortBy"] = ToCamelCase(sortBy.ToString());
+        }
+
+        if (_sortingMethod is { } sortingMethod)
+        {
+            field["sortingMethod"] = sortingMethod;
         }
 
         if (HasFormat)

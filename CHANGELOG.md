@@ -36,8 +36,26 @@ change will require a new major version.
   sorting, including sibling column subtotals. Sparse dictionary records treat
   an omitted known field as empty while unknown schema fields still fail. (Core)
 
+### Changed
+
+- A row or column level whose values are numbers or dates now orders by value
+  (9 before 10, dates by date) even without a declared data type, as
+  DevExtreme's default `sortBy: "value"` does; it used to order their text.
+  `DataTypes = String` or `SortBy = DisplayText` keeps the text order. Date
+  labels are read invariantly first when ordered, so a culture such as tr-TR no
+  longer swaps day and month. (Core)
+
 ### Added
 
+- What a level is sorted by, DevExtreme's `sortBy` and `sortingMethod`:
+  `PivotFieldSort.SortBy` (`PivotSortBy.Value`, `DisplayText`, `None`) /
+  `sort-by` / `SortBy(PivotSortBy)` / `sortBy: "value" | "displayText" | "none"`,
+  and `SortingMethod`, the name of a comparer registered in
+  `PivotEngine.CustomSorts` / `PivotForgeOptions.CustomSorts` /
+  `sorting-method` / `SortingMethod(string)` / `sortingMethod`. Both axes, with
+  the direction applied; `None` keeps the source's order; with a summary sort
+  they break ties. An unregistered name is refused (400). Display calculations
+  keep value order but follow a sorting method. (Core, AspNetCore)
 - Formulas that read other cells, DevExtreme's cell API: `Prev(x)` / `Next(x)`
   (previous / next column), `PrevRow(x)` / `NextRow(x)`, `ParentRow(x)` /
   `ParentColumn(x)`, `RowTotal(x)` / `ColumnTotal(x)` / `GrandTotal(x)` and

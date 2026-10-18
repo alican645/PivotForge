@@ -75,11 +75,33 @@ public sealed record PivotSort(
 /// <param name="SummaryPath">
 /// The header path on the other axis whose summary is compared, or null for the grand total.
 /// </param>
+/// <param name="SortBy">
+/// What the level's labels are compared by (DevExtreme <c>sortBy</c>); with a
+/// <paramref name="ValueKey"/>, what breaks a tie between two equal summaries.
+/// </param>
+/// <param name="SortingMethod">
+/// The name of a comparer registered in <see cref="PivotEngine.CustomSorts"/> (DevExtreme
+/// <c>sortingMethod</c>). It replaces <paramref name="SortBy"/>, and the direction still applies.
+/// </param>
 public sealed record PivotFieldSort(
     string Field,
     PivotSortDirection Direction,
     string? ValueKey = null,
-    IReadOnlyList<string?>? SummaryPath = null);
+    IReadOnlyList<string?>? SummaryPath = null,
+    PivotSortBy SortBy = PivotSortBy.Value,
+    string? SortingMethod = null);
+
+/// <summary>Specifies what a header level's labels are compared by.</summary>
+public enum PivotSortBy
+{
+    /// <summary>The value behind the label: a number by number, a date by date, a month by
+    /// its place in the year; anything else by its text.</summary>
+    Value,
+    /// <summary>The label's text in the engine's culture, so month names run alphabetically.</summary>
+    DisplayText,
+    /// <summary>The order the source yielded the groups in.</summary>
+    None
+}
 
 /// <summary>Specifies the source used to order pivot rows.</summary>
 public enum PivotSortMode

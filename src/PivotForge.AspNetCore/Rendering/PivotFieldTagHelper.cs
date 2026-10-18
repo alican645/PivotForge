@@ -169,6 +169,17 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("sort-by-summary-path")]
     public string? SortBySummaryPath { get; set; }
 
+    /// <summary>Gets or sets what this field's labels are compared by: <c>Value</c>, <c>DisplayText</c> or <c>None</c>.</summary>
+    /// <remarks>DevExtreme's <c>sortBy</c>. Non-nullable for the same reason as <see cref="GroupInterval"/>.
+    /// Valid on <c>Row</c> and <c>Column</c> fields.</remarks>
+    [HtmlAttributeName("sort-by")]
+    public PivotSortBy SortBy { get; set; }
+
+    /// <summary>Gets or sets the name of a comparer registered in <see cref="PivotForgeOptions.CustomSorts"/>.</summary>
+    /// <remarks>DevExtreme's <c>sortingMethod</c>, run on the server. Valid on <c>Row</c> and <c>Column</c> fields.</remarks>
+    [HtmlAttributeName("sorting-method")]
+    public string? SortingMethod { get; set; }
+
     /// <summary>Gets or sets the date interval this field's values are grouped into.</summary>
     /// <remarks>
     /// Collapses dates to their year, quarter, month, day or weekday. The same column may be
@@ -406,6 +417,16 @@ public sealed class PivotFieldTagHelper : TagHelper
         {
             builder.SortBySummaryPath(SortBySummaryPath
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
+        if (_writtenAttributes.Contains("sort-by"))
+        {
+            builder.SortBy(SortBy);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SortingMethod))
+        {
+            builder.SortingMethod(SortingMethod);
         }
     }
 }
