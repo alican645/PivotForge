@@ -85,13 +85,16 @@ test("a reload keeps the previous table on screen, dimmed under the panel", asyn
   await expect(page.locator(pane)).toBeVisible();
   const table = page.locator(scratch(".pivot-table__table"));
   await expect(table).toBeVisible();
-  expect(Number(await table.evaluate(node => getComputedStyle(node).opacity))).toBeLessThan(1);
+  // Polled: the dimming is a short transition, so a read the moment the panel
+  // appears can still see it at full opacity.
+  const opacity = () => table.evaluate(node => Number(getComputedStyle(node).opacity));
+  await expect.poll(opacity).toBeLessThan(1);
 
   release();
   await settled(page);
 
   await expect(page.locator(panel)).toHaveCount(0);
-  expect(Number(await table.evaluate(node => getComputedStyle(node).opacity))).toBe(1);
+  await expect.poll(opacity).toBe(1);
 });
 
 test("a fast answer never flashes the panel", async ({ page }) => {

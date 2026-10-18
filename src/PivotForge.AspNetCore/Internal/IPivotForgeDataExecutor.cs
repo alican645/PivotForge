@@ -15,6 +15,7 @@ internal interface IPivotForgeDataExecutor
         decimal? binSize,
         IReadOnlyList<PivotFilter> filters,
         IReadOnlyDictionary<string, PivotDataType> dataTypes,
+        IReadOnlyDictionary<string, string> selectors,
         int? sourceRowCount,
         CancellationToken cancellationToken);
 

@@ -28,6 +28,7 @@ public class PivotTagHelperTests
         bool? Expanded = null,
         bool? ShowTotals = null,
         bool? ShowGrandTotals = null,
+        bool? ShowValues = null,
         int? AreaIndex = null,
         PivotSortDirection? SortOrder = null,
         PivotGroupInterval? GroupInterval = null,
@@ -42,7 +43,10 @@ public class PivotTagHelperTests
         string? DisplayFolder = null,
         decimal? GroupSize = null,
         PivotDataType? FieldType = null,
-        PivotRunningTotal? RunningTotal = null);
+        PivotRunningTotal? RunningTotal = null,
+        PivotSortBy? SortBy = null,
+        string? SortingMethod = null,
+        string? Selector = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -128,6 +132,12 @@ public class PivotTagHelperTests
             attributes.Add(new TagHelperAttribute("show-grand-totals", showGrandTotals));
         }
 
+        if (spec.ShowValues is { } showValues)
+        {
+            helper.ShowValues = showValues;
+            attributes.Add(new TagHelperAttribute("show-values", showValues));
+        }
+
         if (spec.AreaIndex is { } areaIndex)
         {
             helper.AreaIndex = areaIndex;
@@ -156,6 +166,24 @@ public class PivotTagHelperTests
         {
             helper.FieldType = fieldType;
             attributes.Add(new TagHelperAttribute("field-type", fieldType.ToString()));
+        }
+
+        if (spec.Selector is not null)
+        {
+            helper.Selector = spec.Selector;
+            attributes.Add(new TagHelperAttribute("selector", spec.Selector));
+        }
+
+        if (spec.SortBy is { } sortBy)
+        {
+            helper.SortBy = sortBy;
+            attributes.Add(new TagHelperAttribute("sort-by", sortBy.ToString()));
+        }
+
+        if (spec.SortingMethod is not null)
+        {
+            helper.SortingMethod = spec.SortingMethod;
+            attributes.Add(new TagHelperAttribute("sorting-method", spec.SortingMethod));
         }
 
         if (spec.SortByValueKey is not null)
@@ -1172,6 +1200,46 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesADeclaredSortByAndSortingMethodOnTheAxesAndRefusesThemElsewhere()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Month", PivotArea.Row, SortBy: PivotSortBy.DisplayText),
+            new FieldSpec("Priority", PivotArea.Column, SortingMethod: "priority"),
+            new FieldSpec("Region", PivotArea.Row, SortBy: PivotSortBy.Value),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var fields = config.GetProperty("fields");
+
+        Assert.Equal("displayText", fields[0].GetProperty("sortBy").GetString());
+        Assert.Equal("priority", fields[1].GetProperty("sortingMethod").GetString());
+        Assert.False(fields[1].TryGetProperty("sortBy", out _));
+        // Value is the enum's default, so only the written attribute declares it.
+        Assert.Equal("value", fields[2].GetProperty("sortBy").GetString());
+        Assert.False(fields[3].TryGetProperty("sortBy", out _));
+
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Data).SortBy(PivotSortBy.None).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Filter).SortingMethod("priority").Build());
+    }
+
+    [Fact]
+    public async Task WritesADeclaredSelectorAndRefusesItBesideAFormulaOrADataType()
+    {
+        var fields = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("FiscalYear", PivotArea.Row, Selector: "fiscalYear"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum))).GetProperty("fields");
+
+        Assert.Equal("fiscalYear", fields[0].GetProperty("selector").GetString());
+        Assert.False(fields[1].TryGetProperty("selector", out _));
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Year").Area(PivotArea.Row).Selector("fiscalYear").DataType(PivotDataType.Number).Build());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Net").Area(PivotArea.Data).Selector("net").Expression("[Amount]").Build());
+    }
+
+    [Fact]
     public void RefusesADataTypeOnACalculatedField()
     {
         var builder = new PivotFieldBuilder()
@@ -1259,13 +1327,14 @@ public class PivotTagHelperTests
     [Fact]
     public void RefusesExpandedAndShowTotalsWhereTheyMeanNothing()
     {
-        // Collapsible groups and subtotals are drawn on both header axes only.
+        // Collapsible groups are drawn on both header axes only; subtotals there
+        // and, for a measure, in the subtotal columns.
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Category").Area(PivotArea.Filter).Expanded(false).Build());
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
-            .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build());
-        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Category").Area(PivotArea.Filter).ShowTotals(false).Build());
+        Assert.Equal(false, new PivotFieldBuilder()
+            .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build()["showTotals"]);
 
         // The row and column areas accept both.
         new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
@@ -1287,6 +1356,23 @@ public class PivotTagHelperTests
         var fields = declared.GetProperty("fields");
         Assert.False(fields[1].GetProperty("showGrandTotals").GetBoolean());
         Assert.False(fields[2].TryGetProperty("showGrandTotals", out _));
+    }
+
+    [Fact]
+    public async Task WritesShowValuesOnlyWhenDeclaredAndOnlyOnAMeasure()
+    {
+        var fields = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row, "Bölge"),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum),
+            new FieldSpec("Share", PivotArea.Data, "Pay", PivotAggregation.Sum, ShowValues: false))).GetProperty("fields");
+
+        Assert.False(fields[1].TryGetProperty("showValues", out _));
+        Assert.False(fields[2].GetProperty("showValues").GetBoolean());
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Row).ShowValues(false).Build());
+        new PivotFieldBuilder().DataField("Share").Area(PivotArea.Available).Role(PivotFieldRole.Measure)
+            .ShowValues(false).Build();
     }
 
     [Fact]
@@ -1486,6 +1572,27 @@ public class PivotTagHelperTests
             "app.colorNegatives",
             ConfigOf(fromTagHelper).GetProperty("events").GetProperty("exporting").GetString());
         Assert.Throws<ArgumentException>(() => new PivotGridBuilder().OnExporting(" "));
+    }
+
+    [Fact]
+    public async Task WritesTheCellEventHandlersUnderEvents()
+    {
+        var events = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                OnCellPrepared = "app.markNegatives",
+                OnCellClick = "app.onClick",
+                OnContextMenuPreparing = "app.menu",
+                OnExpandValueChanging = "app.onExpand"
+            },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum))).GetProperty("events");
+
+        Assert.Equal("app.markNegatives", events.GetProperty("cellPrepared").GetString());
+        Assert.Equal("app.onClick", events.GetProperty("cellClick").GetString());
+        Assert.Equal("app.menu", events.GetProperty("contextMenuPreparing").GetString());
+        Assert.Equal("app.onExpand", events.GetProperty("expandValueChanging").GetString());
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().OnCellClick(""));
     }
 
     [Fact]
@@ -2124,6 +2231,34 @@ public class PivotTagHelperTests
             new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
 
         Assert.False(config.TryGetProperty("stateKey", out _));
+    }
+
+    [Fact]
+    public async Task WritesCustomStateStorageWithItsFunctionsAndNoKey()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                StateStoring = PivotStateStorage.Custom,
+                StateCustomLoad = "app.state.load",
+                StateCustomSave = "app.state.save",
+                StateSavingTimeout = 2000,
+                StateKey = "ignored"
+            },
+            MinimalFields));
+
+        Assert.Equal("custom", config.GetProperty("stateStoring").GetString());
+        Assert.Equal("app.state.load", config.GetProperty("customLoad").GetString());
+        Assert.Equal("app.state.save", config.GetProperty("customSave").GetString());
+        Assert.Equal(2000, config.GetProperty("stateSavingTimeout").GetInt32());
+        Assert.False(config.TryGetProperty("stateKey", out _));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", StateStoring = PivotStateStorage.Custom, StateCustomLoad = "app.load" },
+            MinimalFields));
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().StateStoring(PivotStateStorage.Custom));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotGridBuilder().StateSavingTimeout(-1));
     }
 
     [Fact]

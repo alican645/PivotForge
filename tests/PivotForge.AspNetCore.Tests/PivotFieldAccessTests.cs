@@ -35,6 +35,9 @@ public sealed class PivotFieldAccessTests
                 {
                     options.AllowedFields.Add(field);
                 }
+
+                // Reads Salary, which a request naming "Band" never names itself.
+                options.CustomSelectors["band"] = record => (decimal)record["Salary"]! >= 150m ? "High" : "Low";
             });
 
         await using var app = builder.Build();
@@ -368,6 +371,93 @@ public sealed class PivotFieldAccessTests
             response.EnsureSuccessStatusCode();
             var result = await ReadAsync(response);
             Assert.Equal(100m, result.GetProperty("grandTotals").GetProperty("Ratio_calculated").GetDecimal());
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    private static string BandPivot(string selector, string field = "Band") => $$"""
+        {
+          "rows": [{{JsonSerializer.Serialize(field)}}],
+          "values": [{ "field": "Salary", "aggregation": "sum" }],
+          "selectors": { {{JsonSerializer.Serialize(field)}}: {{JsonSerializer.Serialize(selector)}} }
+        }
+        """;
+
+    [Fact]
+    public async Task ASelectedFieldGroupsByTheRegisteredSelectorAndAnswersToTheAllowList()
+    {
+        await WithAppAsync(["Department", "Salary"], async client =>
+        {
+            using var grouped = await client.PostAsync("/pivotforge/pivot", Json(BandPivot("BAND")));
+            grouped.EnsureSuccessStatusCode();
+            var headers = (await ReadAsync(grouped)).GetProperty("rowHeaders");
+            Assert.Equal(["High", "Low"], headers.EnumerateArray().Select(header => header[0].GetString()).Order());
+
+            // A selector's own name is no source field, so the allow-list does not stand in its way...
+            using var values = await client.PostAsync("/pivotforge/field-values", Json("""
+                { "field": "Band", "selectors": { "Band": "band" } }
+                """));
+            values.EnsureSuccessStatusCode();
+            Assert.Equal(
+                ["High", "Low"],
+                (await ReadAsync(values)).GetProperty("values").EnumerateArray().Select(value => value.GetString()));
+
+            // ...while a field it leaves out is still out, selector or not elsewhere in the request.
+            using var hidden = await client.PostAsync("/pivotforge/pivot", Json("""
+                {
+                  "rows": ["PasswordHash"],
+                  "values": [{ "field": "Salary", "aggregation": "sum" }],
+                  "selectors": { "Band": "band" }
+                }
+                """));
+            Assert.Equal(HttpStatusCode.BadRequest, hidden.StatusCode);
+
+            using var unknown = await client.PostAsync("/pivotforge/pivot", Json(BandPivot("bands")));
+            Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+        });
+    }
+
+    private static string SortedPivot(string sortingMethod) => $$"""
+        {
+          "rows": ["Department"],
+          "values": [{ "field": "Salary", "aggregation": "sum" }],
+          "fieldSorts": [{ "field": "Department", "direction": "Ascending", "sortingMethod": {{JsonSerializer.Serialize(sortingMethod)}} }]
+        }
+        """;
+
+    [Fact]
+    public async Task ARegisteredSortingMethodOrdersTheLevelAndAnUnknownOneIsRefused()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<Employee>(
+            (_, _) => ValueTask.FromResult<IReadOnlyList<Employee>>(People),
+            options => options.CustomSorts["SupportFirst"] = Comparer<string?>.Create((left, right) =>
+                (left != "Support").CompareTo(right != "Support")));
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            using var sorted = await client.PostAsync("/pivotforge/pivot", Json(SortedPivot("supportfirst")));
+            sorted.EnsureSuccessStatusCode();
+            var headers = (await ReadAsync(sorted)).GetProperty("rowHeaders");
+            Assert.Equal("Support", headers[0][0].GetString());
+            Assert.Equal("Sales", headers[1][0].GetString());
+
+            using var refused = await client.PostAsync("/pivotforge/pivot", Json(SortedPivot("Missing")));
+            // Refused like any other invalid request, rather than quietly sorting by value.
+            Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
         }
         finally
         {

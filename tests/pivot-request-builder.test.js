@@ -297,15 +297,28 @@ test("expanded is refused outside the row and column areas", () => {
   });
 });
 
-test("showTotals is refused outside the row and column areas", () => {
-  ["filter", "data"].forEach(area => {
-    assert.throws(
-      () => PivotForge.PivotRequestBuilder.normalizeFields([
-        { dataField: "Amount", area, role: area === "data" ? "measure" : "dimension", showTotals: false }
-      ]),
-      /"showTotals" is only valid on a "row" or "column" field/,
-      `showTotals on ${area}`);
-  });
+test("showTotals is refused where there are no subtotals to leave", () => {
+  assert.throws(
+    () => PivotForge.PivotRequestBuilder.normalizeFields([
+      { dataField: "Region", area: "filter", showTotals: false }
+    ]),
+    /"showTotals" is only valid on a "row", "column" or "data" field/);
+});
+
+test("a measure carries showTotals and showValues, showValues left null when undeclared", () => {
+  const [plain, declared, totalsOnly] = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Amount", area: "data", aggregation: "sum" },
+    { dataField: "Share", area: "data", aggregation: "sum", showValues: false },
+    { dataField: "Count", area: "data", aggregation: "count", showTotals: false }
+  ]);
+
+  assert.equal(plain.showTotals, true);
+  assert.equal(plain.showValues, null);
+  assert.equal(declared.showValues, false);
+  assert.equal(totalsOnly.showTotals, false);
+  assert.throws(
+    () => PivotForge.PivotRequestBuilder.normalizeFields([{ dataField: "Region", area: "row", showValues: false }]),
+    /"showValues" is only valid on a "data" field/);
 });
 
 test("a column field carries showTotals and expanded, defaulting to true", () => {
@@ -874,4 +887,77 @@ test("the formula parser reads the relative functions the engine does", () => {
   ]) {
     assert.throws(() => parse(formula), error => error.code === code, formula);
   }
+});
+
+test("sortBy and sortingMethod travel in the level's field sort", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "urun", area: "row", sortBy: "displayText" },
+    { dataField: "yil", area: "column", sortBy: "none", sortOrder: "Descending" },
+    { dataField: "oncelik", area: "row", sortingMethod: "priority" },
+    { dataField: "bolge", area: "row", sortBy: "value" },
+    salesFields[2]
+  ]);
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "urun", direction: "Ascending", sortBy: "DisplayText" },
+    { field: "yil", direction: "Descending", sortBy: "None" },
+    { field: "oncelik", direction: "Ascending", sortingMethod: "priority" },
+    // "value" is the default, so it says nothing of its own.
+    { field: "bolge", direction: "Ascending" }
+  ]);
+});
+
+test("a column value sort keeps the level's criterion as its tie-break", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    salesFields[0],
+    { ...salesFields[1], sortingMethod: "fiscal" },
+    salesFields[2]
+  ], { columnSort: { valueKey: "tutar_sum", direction: "Descending" } });
+
+  assert.deepEqual(request.fieldSorts, [
+    { field: "yil", direction: "Descending", valueKey: "tutar_sum", sortingMethod: "fiscal" }
+  ]);
+});
+
+test("sortBy and sortingMethod are refused where they mean nothing", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([salesFields[0], { ...salesFields[2], sortBy: "none" }]),
+    /"sortBy" is only valid on a "row" or "column" field/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([{ ...salesFields[0], sortBy: "text" }, salesFields[2]]),
+    /Unknown sortBy "text"/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([{ ...salesFields[0], sortingMethod: " " }, salesFields[2]]),
+    /must be the name of a comparer registered on the server/);
+});
+
+test("a selector travels by column, and a column has one", () => {
+  const request = PivotRequestBuilder.buildRequest([
+    { dataField: "FiscalYear", area: "row", selector: "fiscalYear" },
+    { dataField: "OrderDate", area: "column", groupInterval: "year", selector: "shipDate" },
+    { dataField: "OrderDate", area: "column", groupInterval: "month", selector: "shipDate" },
+    { dataField: "Net", area: "data", aggregation: "sum", selector: "net" }
+  ]);
+
+  assert.deepEqual(request.selectors, { FiscalYear: "fiscalYear", OrderDate: "shipDate", Net: "net" });
+  assert.equal(PivotRequestBuilder.buildRequest(salesFields).selectors, undefined);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([
+      { dataField: "OrderDate", area: "row", groupInterval: "year", selector: "a" },
+      { dataField: "OrderDate", area: "column", groupInterval: "month", selector: "b" },
+      salesFields[2]
+    ]),
+    /names both selector "a" and "b"/);
+});
+
+test("a selector works the value out itself, so it takes no formula and no data type", () => {
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([{ dataField: "x", area: "row", selector: "a", dataType: "number" }, salesFields[2]]),
+    /cannot be combined with "dataType"/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([salesFields[0], { dataField: "y", area: "data", selector: "a", expression: "[tutar]" }]),
+    /cannot be combined with "expression"/);
+  assert.throws(
+    () => PivotRequestBuilder.buildRequest([{ dataField: "x", area: "row", selector: "" }, salesFields[2]]),
+    /must be the name of a selector registered on the server/);
 });

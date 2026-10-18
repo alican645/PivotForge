@@ -108,7 +108,8 @@ public sealed class PivotFieldTagHelper : TagHelper
     /// <summary>Gets or sets whether this field's groups carry a total row, or a total column.</summary>
     /// <remarks>
     /// Valid on <c>Row</c> fields when the grid's <c>subtotals</c> are on, and on <c>Column</c>
-    /// fields when its <c>column-subtotals</c> are on.
+    /// fields when its <c>column-subtotals</c> are on. On a <c>Data</c> field, false takes the
+    /// value out of the subtotal columns (and, without <c>show-values</c>, the detail columns).
     /// </remarks>
     [HtmlAttributeName("show-totals")]
     public bool? ShowTotals { get; set; }
@@ -117,6 +118,12 @@ public sealed class PivotFieldTagHelper : TagHelper
     /// <remarks>Valid on <c>Data</c> fields, and on <c>Available</c> fields with the <c>Measure</c> role.</remarks>
     [HtmlAttributeName("show-grand-totals")]
     public bool? ShowGrandTotals { get; set; }
+
+    /// <summary>Gets or sets whether this data field's values appear in the detail columns.</summary>
+    /// <remarks>DevExtreme's <c>showValues</c>: false keeps the value in the subtotals and grand
+    /// totals only. Valid on <c>Data</c> fields, and on <c>Available</c> fields with the <c>Measure</c> role.</remarks>
+    [HtmlAttributeName("show-values")]
+    public bool? ShowValues { get; set; }
 
     /// <summary>Gets or sets whether the reader may sort by this field.</summary>
     /// <remarks>False takes away this field's own sort arrow, or a data field's value-header sort.</remarks>
@@ -169,6 +176,17 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("sort-by-summary-path")]
     public string? SortBySummaryPath { get; set; }
 
+    /// <summary>Gets or sets what this field's labels are compared by: <c>Value</c>, <c>DisplayText</c> or <c>None</c>.</summary>
+    /// <remarks>DevExtreme's <c>sortBy</c>. Non-nullable for the same reason as <see cref="GroupInterval"/>.
+    /// Valid on <c>Row</c> and <c>Column</c> fields.</remarks>
+    [HtmlAttributeName("sort-by")]
+    public PivotSortBy SortBy { get; set; }
+
+    /// <summary>Gets or sets the name of a comparer registered in <see cref="PivotForgeOptions.CustomSorts"/>.</summary>
+    /// <remarks>DevExtreme's <c>sortingMethod</c>, run on the server. Valid on <c>Row</c> and <c>Column</c> fields.</remarks>
+    [HtmlAttributeName("sorting-method")]
+    public string? SortingMethod { get; set; }
+
     /// <summary>Gets or sets the date interval this field's values are grouped into.</summary>
     /// <remarks>
     /// Collapses dates to their year, quarter, month, day or weekday. The same column may be
@@ -188,6 +206,12 @@ public sealed class PivotFieldTagHelper : TagHelper
     /// </remarks>
     [HtmlAttributeName("field-type")]
     public PivotDataType FieldType { get; set; }
+
+    /// <summary>Gets or sets the name of a selector registered in <see cref="PivotForgeOptions.CustomSelectors"/>.</summary>
+    /// <remarks>DevExtreme's <c>selector</c>, run on the server: the field's value is what the
+    /// selector works out from the whole record. Not with <c>expression</c> or <c>field-type</c>.</remarks>
+    [HtmlAttributeName("selector")]
+    public string? Selector { get; set; }
 
     /// <summary>Gets or sets the direction this value's running total accumulates in.</summary>
     /// <remarks>Non-nullable for the same reason as <see cref="GroupInterval"/>.</remarks>
@@ -342,6 +366,11 @@ public sealed class PivotFieldTagHelper : TagHelper
             builder.ShowGrandTotals(showGrandTotals);
         }
 
+        if (ShowValues is { } showValues)
+        {
+            builder.ShowValues(showValues);
+        }
+
         if (AllowSorting is { } allowSorting)
         {
             builder.AllowSorting(allowSorting);
@@ -379,6 +408,11 @@ public sealed class PivotFieldTagHelper : TagHelper
             builder.DataType(FieldType);
         }
 
+        if (!string.IsNullOrWhiteSpace(Selector))
+        {
+            builder.Selector(Selector);
+        }
+
         if (_writtenAttributes.Contains("running-total"))
         {
             builder.RunningTotal(RunningTotal);
@@ -406,6 +440,16 @@ public sealed class PivotFieldTagHelper : TagHelper
         {
             builder.SortBySummaryPath(SortBySummaryPath
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
+        if (_writtenAttributes.Contains("sort-by"))
+        {
+            builder.SortBy(SortBy);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SortingMethod))
+        {
+            builder.SortingMethod(SortingMethod);
         }
     }
 }

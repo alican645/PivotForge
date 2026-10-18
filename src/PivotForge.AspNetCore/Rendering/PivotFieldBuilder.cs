@@ -25,6 +25,7 @@ public sealed class PivotFieldBuilder
     private bool? _expanded;
     private bool? _showTotals;
     private bool? _showGrandTotals;
+    private bool? _showValues;
     private bool? _allowSorting;
     private bool? _allowFiltering;
     private int? _width;
@@ -33,8 +34,11 @@ public sealed class PivotFieldBuilder
     private PivotSortDirection? _sortOrder;
     private string? _sortByValueKey;
     private IReadOnlyList<string?>? _sortBySummaryPath;
+    private PivotSortBy? _sortBy;
+    private string? _sortingMethod;
     private PivotGroupInterval? _groupInterval;
     private PivotDataType? _dataType;
+    private string? _selector;
     private PivotRunningTotal? _runningTotal;
     private decimal? _groupSize;
     private string? _expression;
@@ -276,7 +280,9 @@ public sealed class PivotFieldBuilder
     /// uses when subtotals are switched off entirely — so a deep hierarchy can show totals at the
     /// levels worth totalling and nowhere else. Valid on <see cref="PivotArea.Row"/> fields, when
     /// the grid's own <c>subtotals</c> option is on, and on <see cref="PivotArea.Column"/> fields,
-    /// when its <c>columnSubtotals</c> option is on.
+    /// when its <c>columnSubtotals</c> option is on. On a <see cref="PivotArea.Data"/> field it
+    /// takes the value out of every subtotal column instead, DevExtreme's measure
+    /// <c>showTotals</c>; without <see cref="ShowValues"/> it leaves the detail columns too.
     /// </remarks>
     /// <param name="showTotals">False to suppress this level's subtotal rows or columns.</param>
     /// <returns>The same builder.</returns>
@@ -300,6 +306,23 @@ public sealed class PivotFieldBuilder
     public PivotFieldBuilder ShowGrandTotals(bool showGrandTotals)
     {
         _showGrandTotals = showGrandTotals;
+        return this;
+    }
+
+    /// <summary>Sets whether this data field's values appear in the detail columns, DevExtreme's <c>showValues</c>.</summary>
+    /// <remarks>
+    /// False leaves the value in the subtotal columns and the grand totals only -- a share shown
+    /// per year rather than per month. Left unset, a <see cref="ShowTotals"/> of false hides the
+    /// detail cells too, as in DevExtreme. When every value gives up a kind of column, the grid
+    /// draws them all there rather than leave it empty. Valid on <see cref="PivotArea.Data"/>
+    /// fields, and on <see cref="PivotArea.Available"/> fields whose <see cref="Role"/> is
+    /// <see cref="PivotFieldRole.Measure"/>.
+    /// </remarks>
+    /// <param name="showValues">False to leave this value out of the detail columns.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder ShowValues(bool showValues)
+    {
+        _showValues = showValues;
         return this;
     }
 
@@ -427,6 +450,39 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Sets what this field's labels are compared by, DevExtreme's <c>sortBy</c>.</summary>
+    /// <remarks>
+    /// <see cref="PivotSortBy.Value"/> (the default) orders numbers and dates by value and a grouped
+    /// date by its place in the year; <see cref="PivotSortBy.DisplayText"/> orders the text, so
+    /// month names run alphabetically; <see cref="PivotSortBy.None"/> keeps the order the source
+    /// yielded them in. With <see cref="SortByValueKey"/> it breaks ties between equal summaries.
+    /// Valid on <see cref="PivotArea.Row"/> and <see cref="PivotArea.Column"/> fields only.
+    /// </remarks>
+    /// <param name="sortBy">The criterion.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder SortBy(PivotSortBy sortBy)
+    {
+        _sortBy = sortBy;
+        return this;
+    }
+
+    /// <summary>Orders this field's labels with a comparer registered on the server, DevExtreme's <c>sortingMethod</c>.</summary>
+    /// <remarks>
+    /// The name of an entry in <see cref="PivotForgeOptions.CustomSorts"/>; the ordering runs on the
+    /// server, so a page can pick a registered comparer and nothing else. It replaces
+    /// <see cref="SortBy"/>, and <see cref="SortOrder"/> still applies. A name that is not registered
+    /// is refused when the grid asks for data. Valid on <see cref="PivotArea.Row"/> and
+    /// <see cref="PivotArea.Column"/> fields only.
+    /// </remarks>
+    /// <param name="name">The registered comparer's name.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder SortingMethod(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        _sortingMethod = name;
+        return this;
+    }
+
     /// <summary>Collapses a field's values into date groups (year, quarter, month, day, weekday) or numeric ranges.</summary>
     /// <remarks>
     /// Grouping happens where the header is read, so no second source column is needed — and the
@@ -469,6 +525,24 @@ public sealed class PivotFieldBuilder
     public PivotFieldBuilder DataType(PivotDataType type)
     {
         _dataType = type;
+        return this;
+    }
+
+    /// <summary>Works this field's value out from the whole record with a selector registered on the server, DevExtreme's <c>selector</c>.</summary>
+    /// <remarks>
+    /// The name of an entry in <see cref="PivotForgeOptions.CustomSelectors"/>. The field then
+    /// groups, filters, lists and sums by what the selector returns: a fiscal year from an order
+    /// date, a segment from an amount. <see cref="DataField"/> may name a source column, whose values
+    /// the selector replaces, or a name of the selector's own. Valid in any area; not with
+    /// <see cref="Expression"/> or <see cref="DataType"/>. A name that is not registered is refused
+    /// when the grid asks for data.
+    /// </remarks>
+    /// <param name="name">The registered selector's name.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder Selector(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        _selector = name;
         return this;
     }
 
@@ -570,23 +644,31 @@ public sealed class PivotFieldBuilder
                 "Expanded is only valid on fields whose Area is Row or Column.");
         }
 
-        if (_area is not (PivotArea.Row or PivotArea.Column) && _showTotals is not null)
-        {
-            throw new InvalidOperationException(
-                $"Field \"{_dataField}\" sets ShowTotals, but its Area is \"{_area}\". " +
-                "ShowTotals is only valid on fields whose Area is Row or Column.");
-        }
-
         // A grand total is a measure summed over a whole axis, so a dimension has
         // none to switch off. A measure still in the field list may carry it,
         // ready for when the user drags it into the data area.
         var holdsGrandTotals = _area == PivotArea.Data ||
             (_area == PivotArea.Available && _role == PivotFieldRole.Measure);
+
+        if (_area is not (PivotArea.Row or PivotArea.Column) && !holdsGrandTotals && _showTotals is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets ShowTotals, but its Area is \"{_area}\". " +
+                "ShowTotals is only valid on fields whose Area is Row, Column or Data.");
+        }
+
         if (!holdsGrandTotals && _showGrandTotals is not null)
         {
             throw new InvalidOperationException(
                 $"Field \"{_dataField}\" sets ShowGrandTotals, but its Area is \"{_area}\". " +
                 "ShowGrandTotals is only valid on fields whose Area is Data, or Available with the Measure role.");
+        }
+
+        if (!holdsGrandTotals && _showValues is not null)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets ShowValues, but its Area is \"{_area}\". " +
+                "ShowValues is only valid on fields whose Area is Data, or Available with the Measure role.");
         }
 
         // Only the row and column axes draw a header level to order.
@@ -604,6 +686,13 @@ public sealed class PivotFieldBuilder
                 "SortByValueKey is only valid on fields whose Area is Row or Column.");
         }
 
+        if (_area is not (PivotArea.Row or PivotArea.Column) && (_sortBy is not null || _sortingMethod is not null))
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets {(_sortBy is not null ? "SortBy" : "SortingMethod")}, but its Area is \"{_area}\". " +
+                "SortBy and SortingMethod are only valid on fields whose Area is Row or Column.");
+        }
+
         // A path says where to read the value, so without a value there is nothing to read.
         if (_sortBySummaryPath is not null && _sortByValueKey is null)
         {
@@ -617,6 +706,15 @@ public sealed class PivotFieldBuilder
             throw new InvalidOperationException(
                 $"Field \"{_dataField}\" sets RunningTotal, but its Area is \"{_area}\". " +
                 "RunningTotal is only valid on fields whose Area is Data.");
+        }
+
+        // A selected value is worked out rather than read: there is no source value
+        // to convert, and a formula already says how to compute it.
+        if (_selector is not null && (_expression is not null || _dataType is not null and not PivotDataType.Auto))
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets Selector together with {(_expression is not null ? "Expression" : "DataType")}. " +
+                "A selector works the field's value out itself.");
         }
 
         // A formula's result is computed, not read, so there is nothing to convert.
@@ -696,6 +794,11 @@ public sealed class PivotFieldBuilder
             field["groupInterval"] = ToCamelCase(groupInterval.ToString());
         }
 
+        if (_selector is { } selector)
+        {
+            field["selector"] = selector;
+        }
+
         if (_dataType is { } dataType and not PivotDataType.Auto)
         {
             field["dataType"] = ToCamelCase(dataType.ToString());
@@ -724,6 +827,11 @@ public sealed class PivotFieldBuilder
         if (_showGrandTotals is { } showGrandTotals)
         {
             field["showGrandTotals"] = showGrandTotals;
+        }
+
+        if (_showValues is { } showValues)
+        {
+            field["showValues"] = showValues;
         }
 
         if (_allowSorting is { } allowSorting)
@@ -764,6 +872,16 @@ public sealed class PivotFieldBuilder
         if (_sortBySummaryPath is { } sortBySummaryPath)
         {
             field["sortBySummaryPath"] = sortBySummaryPath.ToArray();
+        }
+
+        if (_sortBy is { } sortBy)
+        {
+            field["sortBy"] = ToCamelCase(sortBy.ToString());
+        }
+
+        if (_sortingMethod is { } sortingMethod)
+        {
+            field["sortingMethod"] = sortingMethod;
         }
 
         if (HasFormat)

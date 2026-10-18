@@ -36,8 +36,57 @@ change will require a new major version.
   sorting, including sibling column subtotals. Sparse dictionary records treat
   an omitted known field as empty while unknown schema fields still fail. (Core)
 
+### Changed
+
+- A row or column level whose values are numbers or dates now orders by value
+  (9 before 10, dates by date) even without a declared data type, as
+  DevExtreme's default `sortBy: "value"` does; it used to order their text.
+  `DataTypes = String` or `SortBy = DisplayText` keeps the text order. Date
+  labels are read invariantly first when ordered, so a culture such as tr-TR no
+  longer swaps day and month. (Core)
+
 ### Added
 
+- DevExtreme's cell events: `cellPrepared` (every drawn cell, with its area,
+  text, value and paths; what a handler adds stays and is exported),
+  `cellClick` (cancel stops selecting and folding), `contextMenuPreparing`
+  (edit `items`, add `{ label, onClick }`, empty opens no menu) and
+  `expandValueChanging` (cancel keeps the group as it is), through `on()`,
+  `events`, `rendererOptions` and `on-cell-prepared` / `on-cell-click` /
+  `on-context-menu-preparing` / `on-expand-value-changing`. (AspNetCore)
+- Custom state storage, DevExtreme's `customLoad` / `customSave`:
+  `state-storing="Custom"` with `state-custom-load` / `state-custom-save` /
+  `CustomStateStorage(load, save)` / `stateStoring: "custom"`; a promised load
+  is waited for by the first request. `state-saving-timeout` /
+  `StateSavingTimeout(ms)` / `stateSavingTimeout` delays saves, flushing on
+  page hide and dispose. (AspNetCore)
+- Fields worked out from the whole record, DevExtreme's `selector`, as a
+  function registered by name: `PivotEngine.CustomSelectors` /
+  `PivotForgeOptions.CustomSelectors` (`PivotSelector`, reading
+  `record["Field"]` or the typed `record.Source`), picked by
+  `PivotRequest.Selectors` / `selector` / `Selector(string)` /
+  `selector: "fiscalYear"`. Headers, filters, the value list, drill-down,
+  sorting, formulas and measures all read the selected value; a field the
+  source has is replaced, and a name of the selector's own needs no source
+  column or `AllowedFields` entry. An unregistered name is refused (400).
+  `DistinctValues` takes the same map. (Core, AspNetCore)
+- Which columns each value appears in, DevExtreme's `showValues` and a
+  measure's `showTotals`: `show-values="false"` / `ShowValues(false)` /
+  `showValues: false` leaves a value out of the detail columns, `show-totals`
+  (now valid on a data field) out of the subtotal columns, and out of the
+  detail columns too while `showValues` is undeclared. The value leaves those
+  columns outright -- head, body, totals, virtual columns and Excel export --
+  and a kind of column every value gives up keeps them all. With values on
+  rows the same rules pick the value rows. (AspNetCore)
+- What a level is sorted by, DevExtreme's `sortBy` and `sortingMethod`:
+  `PivotFieldSort.SortBy` (`PivotSortBy.Value`, `DisplayText`, `None`) /
+  `sort-by` / `SortBy(PivotSortBy)` / `sortBy: "value" | "displayText" | "none"`,
+  and `SortingMethod`, the name of a comparer registered in
+  `PivotEngine.CustomSorts` / `PivotForgeOptions.CustomSorts` /
+  `sorting-method` / `SortingMethod(string)` / `sortingMethod`. Both axes, with
+  the direction applied; `None` keeps the source's order; with a summary sort
+  they break ties. An unregistered name is refused (400). Display calculations
+  keep value order but follow a sorting method. (Core, AspNetCore)
 - Formulas that read other cells, DevExtreme's cell API: `Prev(x)` / `Next(x)`
   (previous / next column), `PrevRow(x)` / `NextRow(x)`, `ParentRow(x)` /
   `ParentColumn(x)`, `RowTotal(x)` / `ColumnTotal(x)` / `GrandTotal(x)` and

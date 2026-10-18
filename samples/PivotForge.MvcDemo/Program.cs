@@ -34,6 +34,23 @@ builder.Services.AddPivotForge<SalesRecord>(
             var middle = sorted.Length / 2;
             return sorted.Length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
         };
+
+        // A row or column field can name it as its sorting method:
+        // <pivot-field field="Region" area="Row" sorting-method="coastalFirst" />.
+        string[] coastalFirst = ["Karadeniz", "Marmara", "Ege", "Akdeniz", "İç Anadolu", "Doğu Anadolu"];
+        options.CustomSorts["coastalFirst"] = Comparer<string?>.Create((left, right) =>
+            Rank(left).CompareTo(Rank(right)));
+
+        int Rank(string? region) =>
+            Array.IndexOf(coastalFirst, region) is var rank and >= 0 ? rank : coastalFirst.Length;
+
+        // Fields whose value is worked out from the whole record:
+        // <pivot-field field="FiscalYear" area="Column" selector="fiscalYear" />.
+        // The fiscal year starts in October.
+        options.CustomSelectors["fiscalYear"] = record =>
+            ((SalesRecord)record.Source).OrderDate is var date && date.Month >= 10 ? date.Year + 1 : date.Year;
+        options.CustomSelectors["orderSize"] = record =>
+            (decimal)record["Amount"]! >= 100_000m ? "Büyük" : "Küçük";
     });
 
 var app = builder.Build();

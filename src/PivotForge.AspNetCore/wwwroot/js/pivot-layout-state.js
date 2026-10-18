@@ -984,7 +984,9 @@
             : {}),
           ...((isRow || area === "column") && field.sortOrder
             ? { sortOrder: field.sortOrder }
-            : {})
+            : {}),
+          ...((isRow || area === "column") && field.sortBy ? { sortBy: field.sortBy } : {}),
+          ...((isRow || area === "column") && field.sortingMethod ? { sortingMethod: field.sortingMethod } : {})
         };
       };
 
@@ -1022,6 +1024,10 @@
           // Only a data field may hold it, so it rides along with this area
           // alone: the same measure dragged out to a row drops it.
           ...(this.field(value.field).showGrandTotals === false ? { showGrandTotals: false } : {}),
+          ...(this.field(value.field).showTotals === false ? { showTotals: false } : {}),
+          ...(typeof this.field(value.field).showValues === "boolean"
+            ? { showValues: this.field(value.field).showValues }
+            : {}),
           ...(this.field(value.field).allowCrossGroupCalculation === false
             ? { allowCrossGroupCalculation: false }
             : {}),
@@ -1067,8 +1073,10 @@
         ...(field?.groupInterval ? { groupInterval: field.groupInterval } : {}),
         ...(field?.groupSize ? { groupSize: field.groupSize } : {}),
         ...(field?.expression ? { expression: field.expression } : {}),
-        // The column's type travels with it wherever it is placed.
-        ...(field?.dataType ? { dataType: field.dataType } : {})
+        // The column's type travels with it wherever it is placed, and so does
+        // the selector that works its value out.
+        ...(field?.dataType ? { dataType: field.dataType } : {}),
+        ...(field?.selector ? { selector: field.selector } : {})
       };
     }
 

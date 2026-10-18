@@ -28,6 +28,30 @@ public sealed class PivotForgeOptions
     public IDictionary<string, PivotCustomAggregate> CustomAggregates { get; } =
         new Dictionary<string, PivotCustomAggregate>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Gets the comparers a row or column field may name as its sorting method.</summary>
+    /// <remarks>
+    /// DevExtreme's <c>sortingMethod</c>, registered by name, e.g.
+    /// <c>options.CustomSorts["priority"] = Comparer&lt;string?&gt;.Create(...)</c>, and matched without
+    /// regard to case. A comparer receives two header labels of one level (a blank group's is null)
+    /// and the field's sort order is applied to its answer. Ordering runs on the server, so a request
+    /// can name a registered comparer and nothing else; an unknown name is refused.
+    /// </remarks>
+    public IDictionary<string, IComparer<string?>> CustomSorts { get; } =
+        new Dictionary<string, IComparer<string?>>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Gets the selectors a field may name to have its value worked out from the whole record.</summary>
+    /// <remarks>
+    /// DevExtreme's <c>selector</c>, registered by name, e.g.
+    /// <c>options.CustomSelectors["fiscalYear"] = record => ...</c>, and matched without regard to
+    /// case. A field naming one -- <c>selector="fiscalYear"</c> -- groups, filters, lists and sums
+    /// by what it returns; the field may be one the record has or a name of its own. A selector
+    /// runs on the server and may read any field of the record, including one
+    /// <see cref="AllowedFields"/> leaves out: what reaches the browser is what it returns, so a
+    /// selected field answers to that list only through what the selector itself reads.
+    /// </remarks>
+    public IDictionary<string, PivotSelector> CustomSelectors { get; } =
+        new Dictionary<string, PivotSelector>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Gets or sets the sliding expiration used for completed large pivot results.</summary>
     public TimeSpan CacheSlidingExpiration { get; set; } = TimeSpan.FromMinutes(5);
 

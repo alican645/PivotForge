@@ -52,6 +52,32 @@ var request = new PivotRequest
 
 Each value is converted where it is read, so aggregation, grouping, filters, `DistinctValues` (which takes the same map) and drill-down all see it, and a converted value behaves exactly like a typed `decimal` or `DateTime`. `Number` reads text invariantly, then in the engine's culture; `Date` reads it in the engine's culture, then invariantly; `String` takes the invariant text, so a numeric code orders as text. A value that does not convert is blank. A `Number` or `Date` level sorts by its values when it is sorted. Typing a field the source does not have is refused like any other unknown field.
 
+### Selectors
+
+A field whose value is worked out from the whole record -- a fiscal year from an order date, a segment from an amount -- names a selector registered on the engine, DevExtreme's `selector`:
+
+```csharp
+var engine = new PivotEngine
+{
+    CustomSelectors = new Dictionary<string, PivotSelector>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["fiscalYear"] = record => ((Sale)record.Source).OrderDate is var date && date.Month >= 10
+            ? date.Year + 1
+            : date.Year,
+        ["net"] = record => (decimal)record["Amount"]! - (decimal)record["Discount"]!
+    }
+};
+
+var request = new PivotRequest
+{
+    Rows = ["FiscalYear"],
+    Values = [PivotValueDefinition.Sum("Net")],
+    Selectors = new Dictionary<string, string> { ["FiscalYear"] = "fiscalYear", ["Net"] = "net" }
+};
+```
+
+`record.Source` is the record itself; `record["Field"]` reads a field the way the engine does, from a typed record, a `DataRow` or a dictionary, after any declared data type. Every path reads a selected field through its selector -- headers, filters, `DistinctValues` (which takes the same map), drill-down, sorting, formulas and the values a measure sums -- so a field of the selector's own name behaves like a source column, and one the source has is replaced. An interval applies to what the selector returns. A name that is not registered is refused with an `ArgumentException`.
+
 ## Configure a Pivot
 
 ```csharp
@@ -89,6 +115,32 @@ var byColumn = PivotSort.RowColumnValue(
 ```
 
 Only row order changes. Column headers keep their calculated order.
+
+`PivotFieldSort` orders one level of either axis inside its parent group. Its `SortBy` is DevExtreme's `sortBy`: `Value` (the default) compares what the label stands for -- a number by number, a date by date, a month by its place in the year, even without a declared data type, because the engine notes the type the values arrived as -- `DisplayText` compares the text in the engine's culture, and `None` keeps the order the source yielded the groups in. `SortingMethod` names a comparer in `PivotEngine.CustomSorts` and replaces `SortBy`; the direction applies to all of them, and with a `ValueKey` they break ties between equal summaries:
+
+```csharp
+var engine = new PivotEngine
+{
+    CustomSorts = new Dictionary<string, IComparer<string?>>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["priority"] = Comparer<string?>.Create((left, right) => Rank(left).CompareTo(Rank(right)))
+    }
+};
+
+var request = new PivotRequest
+{
+    Rows = ["Priority"],
+    Columns = [new PivotFieldRef("OrderDate", PivotGroupInterval.Month)],
+    Values = [PivotValueDefinition.Sum("Amount")],
+    FieldSorts =
+    [
+        new PivotFieldSort("Priority", PivotSortDirection.Ascending, SortingMethod: "priority"),
+        new PivotFieldSort("OrderDate", PivotSortDirection.Ascending, SortBy: PivotSortBy.DisplayText)
+    ]
+};
+```
+
+A comparer receives two labels of one level; a blank group's label is null. A name that is not registered is refused with an `ArgumentException`. Variations and formulas that read other cells walk the levels in value order whatever `SortBy` says, but follow a `SortingMethod`.
 
 ## Numeric Ranges
 

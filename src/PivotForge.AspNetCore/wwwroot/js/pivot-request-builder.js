@@ -66,6 +66,9 @@
   // A value's running total, DevExtreme's runningTotal: along each row or down
   // each column, after the display mode.
   const RUNNING_TOTALS = ["row", "column"];
+  // What a row or column level's labels are compared by, DevExtreme's sortBy:
+  // the value behind the label, its text, or the order the source yielded them.
+  const SORT_BYS = ["value", "displayText", "none"];
 
   const TOP_N_MODES = ["Top", "Bottom"];
   // How a value filter compares a group's summary value. The two ranges read a
@@ -428,20 +431,28 @@
         `"expanded" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
       );
     }
-    if (!isRow && !isColumn && field.showTotals !== undefined) {
-      throw new Error(
-        `"showTotals" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
-      );
-    }
-
     // A grand total belongs to a measure: it is that value summed over the whole
     // row or column axis. A dimension has no such total to switch off. A measure
     // still waiting in the field list may declare it, because the catalog is the
     // only place it can live until the user drags it into the data area.
     const holdsGrandTotals = isData || (area === "available" && role === "measure");
+    // On a dimension showTotals switches its level's subtotals off; on a measure
+    // it takes the measure out of every subtotal column (DevExtreme's showTotals).
+    if (!isRow && !isColumn && !holdsGrandTotals && field.showTotals !== undefined) {
+      throw new Error(
+        `"showTotals" is only valid on a "row", "column" or "data" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
     if (!holdsGrandTotals && field.showGrandTotals !== undefined) {
       throw new Error(
         `"showGrandTotals" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+    // DevExtreme's showValues: false takes the measure out of the detail columns,
+    // leaving it in the subtotals and the grand total.
+    if (!holdsGrandTotals && field.showValues !== undefined) {
+      throw new Error(
+        `"showValues" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
       );
     }
 
@@ -513,6 +524,21 @@
       throw new Error(`"dataType" on field "${dataField}" cannot be combined with "expression".`);
     }
 
+    // DevExtreme's selector, by name: a function registered on the server
+    // (PivotForgeOptions.CustomSelectors) works the value out from the whole
+    // record, so there is neither a source value to convert nor a formula.
+    const selector = field.selector ?? null;
+    if (selector !== null) {
+      if (typeof selector !== "string" || selector.trim() === "") {
+        throw new Error(
+          `"selector" on field "${dataField}" must be the name of a selector registered on the server.`);
+      }
+      if (expression !== null || dataType !== null) {
+        throw new Error(
+          `"selector" on field "${dataField}" cannot be combined with "${expression !== null ? "expression" : "dataType"}".`);
+      }
+    }
+
     const groupInterval = isData ? null : field.groupInterval ?? null;
     if (groupInterval !== null && !GROUP_INTERVALS.includes(groupInterval)) {
       throw new Error(
@@ -535,6 +561,30 @@
     if (sortOrder !== null && !SORT_ORDERS.includes(sortOrder)) {
       throw new Error(
         `Unknown sortOrder "${sortOrder}" on field "${dataField}". Expected one of: ${SORT_ORDERS.join(", ")}.`
+      );
+    }
+
+    for (const option of ["sortBy", "sortingMethod"]) {
+      if (!isDimensionAxis && field[option] !== undefined) {
+        throw new Error(
+          `"${option}" is only valid on a "row" or "column" field, but was set on "${dataField}" in area "${area}".`
+        );
+      }
+    }
+
+    const sortBy = isDimensionAxis ? field.sortBy ?? null : null;
+    if (sortBy !== null && !SORT_BYS.includes(sortBy)) {
+      throw new Error(
+        `Unknown sortBy "${sortBy}" on field "${dataField}". Expected one of: ${SORT_BYS.join(", ")}.`
+      );
+    }
+
+    // The name of a comparer registered on the server (PivotForgeOptions.CustomSorts):
+    // DevExtreme's sortingMethod is a function, but the ordering runs on the server.
+    const sortingMethod = isDimensionAxis ? field.sortingMethod ?? null : null;
+    if (sortingMethod !== null && (typeof sortingMethod !== "string" || sortingMethod.trim() === "")) {
+      throw new Error(
+        `"sortingMethod" on field "${dataField}" must be the name of a comparer registered on the server.`
       );
     }
 
@@ -574,10 +624,13 @@
       groupInterval,
       groupSize,
       dataType,
+      selector,
       area,
       role,
       areaIndex: areaIndex ?? null,
       sortOrder,
+      sortBy,
+      sortingMethod,
       sortByValueKey: isDimensionAxis && field.sortByValueKey ? String(field.sortByValueKey) : null,
       sortBySummaryPath: sortBySummaryPath === null || sortBySummaryPath.length === 0
         ? null
@@ -591,8 +644,13 @@
       // Default true, so an undeclared field behaves exactly as it did before
       // these existed.
       expanded: isRow || isColumn ? field.expanded !== false : null,
-      showTotals: isRow || isColumn ? field.showTotals !== false : null,
+      showTotals: isRow || isColumn || holdsGrandTotals ? field.showTotals !== false : null,
       showGrandTotals: holdsGrandTotals ? field.showGrandTotals !== false : null,
+      // Null when undeclared, which is what lets showTotals: false hide the
+      // detail cells too, as DevExtreme does.
+      showValues: holdsGrandTotals && field.showValues !== undefined && field.showValues !== null
+        ? field.showValues !== false
+        : null,
       // Default true: the grid-wide allowSorting / allowFiltering still decide
       // first, and a field can only take its own controls away.
       allowSorting: field.allowSorting !== false,
@@ -719,9 +777,32 @@
     return types;
   }
 
+  // The selector of every column the catalog works out on the server, keyed by
+  // column, the way dataTypes is: a year and a month level of one selected
+  // column are one entry, and two that name different selectors are a mistake.
+  function selectors(fields) {
+    const named = {};
+
+    for (const field of fields) {
+      if (field.selector === null || field.selector === undefined) {
+        continue;
+      }
+
+      if (named[field.dataField] && named[field.dataField] !== field.selector) {
+        throw new Error(
+          `Field "${field.dataField}" names both selector "${named[field.dataField]}" and "${field.selector}"; a column has one selector.`);
+      }
+
+      named[field.dataField] = field.selector;
+    }
+
+    return named;
+  }
+
   function buildRequest(fields, extras = {}) {
     const declared = normalizeFields(fields);
     const types = dataTypes(declared);
+    const selected = selectors(declared);
     const normalized = declared.filter(field => field.visible);
     const inArea = area => normalized.filter(field => field.area === area);
     const values = inArea("data");
@@ -794,7 +875,8 @@
       fieldSorts: fieldSorts(normalized, columnSort(extras.columnSort)),
       // Sent only when the catalog types a column, so every request written
       // before data types existed is unchanged.
-      ...(Object.keys(types).length > 0 ? { dataTypes: types } : {})
+      ...(Object.keys(types).length > 0 ? { dataTypes: types } : {}),
+      ...(Object.keys(selected).length > 0 ? { selectors: selected } : {})
     };
   }
 
@@ -818,22 +900,34 @@
     return normalized
       .filter(field => field.area === "row" || field.area === "column")
       .map(field => {
+        // A level's criterion: what its labels compare by, and what breaks a tie
+        // between two equal summaries.
+        const criterion = {
+          ...(field.sortBy !== null && field.sortBy !== "value"
+            ? { sortBy: field.sortBy === "displayText" ? "DisplayText" : "None" }
+            : {}),
+          ...(field.sortingMethod !== null ? { sortingMethod: field.sortingMethod } : {})
+        };
+
         if (columnValueSort && field.area === "column") {
           return {
             field: field.key,
             direction: columnValueSort.direction,
             valueKey: columnValueSort.valueKey,
-            ...(columnValueSort.rowPath ? { summaryPath: columnValueSort.rowPath } : {})
+            ...(columnValueSort.rowPath ? { summaryPath: columnValueSort.rowPath } : {}),
+            ...criterion
           };
         }
 
-        if (field.sortOrder === null && field.sortByValueKey === null) {
+        if (field.sortOrder === null && field.sortByValueKey === null &&
+          field.sortBy === null && field.sortingMethod === null) {
           return null;
         }
 
         return {
           field: field.key,
           direction: field.sortOrder ?? "Ascending",
+          ...criterion,
           ...(field.sortByValueKey !== null ? { valueKey: field.sortByValueKey } : {}),
           ...(field.sortByValueKey !== null && field.sortBySummaryPath !== null
             ? { summaryPath: field.sortBySummaryPath }
@@ -923,7 +1017,7 @@
   }
 
   PivotForge.PivotRequestBuilder = {
-    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes,
+    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes, selectors,
     normalizeRankings, normalizeValueFilters, comparisonType, parseExpression,
     AGGREGATIONS, CALCULATED, DATA_TYPES, RUNNING_TOTALS, FORMULA_FUNCTIONS, RELATIVE_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
     FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS, VALUE_FILTER_OPERATORS

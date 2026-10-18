@@ -13,7 +13,11 @@ internal sealed class PivotForgeDataExecutor<TRecord>(
     private PivotEngine CreateEngine() => new()
     {
         CustomAggregates = new Dictionary<string, PivotCustomAggregate>(
-            options.Value.CustomAggregates, StringComparer.OrdinalIgnoreCase)
+            options.Value.CustomAggregates, StringComparer.OrdinalIgnoreCase),
+        CustomSorts = new Dictionary<string, IComparer<string?>>(
+            options.Value.CustomSorts, StringComparer.OrdinalIgnoreCase),
+        CustomSelectors = new Dictionary<string, PivotSelector>(
+            options.Value.CustomSelectors, StringComparer.OrdinalIgnoreCase)
     };
 
     public async ValueTask<PivotResult> ExecuteAsync(
@@ -34,13 +38,14 @@ internal sealed class PivotForgeDataExecutor<TRecord>(
         decimal? binSize,
         IReadOnlyList<PivotFilter> filters,
         IReadOnlyDictionary<string, PivotDataType> dataTypes,
+        IReadOnlyDictionary<string, string> selectors,
         int? sourceRowCount,
         CancellationToken cancellationToken)
     {
         var records = await GetRecordsAsync(sourceRowCount, cancellationToken);
 
         return await Task.Run(
-            () => new PivotEngine().DistinctValues(records, field, filters, interval, binSize, dataTypes),
+            () => CreateEngine().DistinctValues(records, field, filters, interval, binSize, dataTypes, selectors),
             cancellationToken);
     }
 
