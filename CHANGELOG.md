@@ -14,6 +14,12 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.9.0-preview.1] — 2026-10-18
+
+The field chooser popup in DevExtreme's three layouts, field header rows and
+header merging in Excel and CSV exports, and bindChart for feeding an external
+chart.
+
 ### Added
 
 - DevExtreme's field chooser popup: `field-chooser` / `FieldChooser(...)` /
@@ -923,7 +929,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.8.0-preview.1...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.9.0-preview.1...HEAD
+[0.9.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.8.0-preview.1...v0.9.0-preview.1
 [0.8.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.7.0-preview.1...v0.8.0-preview.1
 [0.7.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.6...v0.7.0-preview.1
 [0.6.0-preview.6]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.5...v0.6.0-preview.6
