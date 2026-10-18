@@ -190,3 +190,27 @@ test.describe("on a phone", () => {
     await expectAlignedRows(page);
   });
 });
+
+test("the toolbar's collapse all folds the column groups too, and expand all opens them", async ({ page }) => {
+  await page.evaluate(async fields => {
+    document.querySelector("#scratchPivot")?.remove();
+    const host = document.createElement("div");
+    host.id = "scratchPivot";
+    document.body.prepend(host);
+    window.scratchWidget = PivotForge.create(host, { fields, autoLoad: false, toolbar: ["expandAll", "collapseAll"] });
+    await window.scratchWidget.refresh();
+  }, FIELDS);
+  await page.waitForSelector(scratch(".pivot-table__table td"));
+  const quarters = scratch("thead .pivot-table__column-header:not(.pivot-table__column-subtotal-header)");
+  const before = await page.locator(quarters).count();
+
+  await page.locator('.pivot-toolbar__button[data-toolbar-item="collapseAll"]').first().click();
+  // Only the years are left, each folded into one column.
+  await expect(page.locator(scratch("thead .pivot-table__toggle.is-column[aria-expanded='false']"))).not.toHaveCount(0);
+  await expect(page.locator(scratch("thead .pivot-table__toggle.is-column[aria-expanded='true']"))).toHaveCount(0);
+  await expectAlignedRows(page);
+
+  await page.locator('.pivot-toolbar__button[data-toolbar-item="expandAll"]').first().click();
+  await expect(page.locator(quarters)).toHaveCount(before);
+  expect(page.errors).toEqual([]);
+});

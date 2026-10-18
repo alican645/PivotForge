@@ -39,8 +39,8 @@ const rendererCalls = [];
 PivotForge.PivotTableRenderer = class {
   constructor() { this.options = {}; }
   render() {}
-  expandAll() { rendererCalls.push("expandAll"); }
-  collapseAll() { rendererCalls.push("collapseAll"); }
+  expandAll(options) { rendererCalls.push(["expandAll", options?.axis]); }
+  collapseAll(options) { rendererCalls.push(["collapseAll", options?.axis]); }
   getExcelExportModel(options) { return { rows: [], ...options }; }
   closeContextMenu() {}
 };
@@ -113,7 +113,8 @@ test("expand and collapse go to the renderer", async () => {
   await buttons.collapseAll.click();
   await buttons.expandAll.click();
 
-  assert.deepEqual(rendererCalls, ["collapseAll", "expandAll"]);
+  // Both axes: the column groups fold as well as the row groups.
+  assert.deepEqual(rendererCalls, [["collapseAll", "all"], ["expandAll", "all"]]);
   widget.dispose();
 });
 

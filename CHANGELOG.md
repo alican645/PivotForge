@@ -39,7 +39,8 @@ change will require a new major version.
   starts that level collapsed. The collapsed set is part of the renderer's
   view state (`collapsedColumnGroups`, next to `collapsedGroups`) and of
   saved views; `expandAll` / `collapseAll` take `{ axis: "column" }` or
-  `{ axis: "all" }` and still reach the rows only by default. The header's
+  `{ axis: "all" }` and still reach the rows only by default; the toolbar's
+  Expand all / Collapse all buttons reach both axes. The header's
   sort arrow on a collapsed column orders the rows by that group's total.
   (AspNetCore)
 

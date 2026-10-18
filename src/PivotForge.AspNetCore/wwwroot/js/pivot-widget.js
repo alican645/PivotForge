@@ -1556,10 +1556,11 @@
             this.print(title ? { title } : {});
             break;
           case "expandAll":
-            this.renderer.expandAll();
+            // Both axes: the button says "all", and the column groups fold too.
+            this.renderer.expandAll({ axis: "all" });
             break;
           case "collapseAll":
-            this.renderer.collapseAll();
+            this.renderer.collapseAll({ axis: "all" });
             break;
           case "saveReport":
             PivotForge.download(this.exportReport());
