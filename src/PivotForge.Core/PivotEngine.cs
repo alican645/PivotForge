@@ -3,6 +3,7 @@ using System.Globalization;
 using PivotForge.Core.Grouping;
 using PivotForge.Core.Aggregation;
 using PivotForge.Core.Records;
+using PivotForge.Core.Sorting;
 
 namespace PivotForge.Core;
 
@@ -534,7 +535,9 @@ public sealed class PivotEngine
             columnIndex.Headers,
             columnLevelValues,
             request.Columns,
-            ResolveLevelDirections(request.Columns, request.FieldSorts),
+            request.Values.Any(IsVariation)
+                ? request.Columns.Select(_ => (PivotSortDirection?)PivotSortDirection.Ascending).ToArray()
+                : ResolveLevelDirections(request.Columns, request.FieldSorts),
             request.DataTypes,
             culture);
         var columnLookup = CreateHeaderLookup(columnHeaders);
@@ -594,7 +597,7 @@ public sealed class PivotEngine
 
         // Columns first and rows second: each only renumbers its own axis, and both read
         // their summaries by header path, so neither disturbs what the other compares.
-        populated = SortColumns(populated, request, culture);
+        populated = SortColumns(populated, request, culture, columnIndex.Headers);
         var lookup = new Lazy<SummaryLookup>(() => new SummaryLookup(
             populated.RowHeaders, populated.ColumnHeaders, populated.Values));
         var sortedRows = SortRows(
@@ -1013,8 +1016,8 @@ public sealed class PivotEngine
             transformedColumnSubtotals,
             transformedGrandTotals);
 
-        return definitions.Any(IsParentShare)
-            ? ApplyParentShares(
+        return definitions.Any(definition => IsParentShare(definition) || IsVariation(definition))
+            ? ApplyNavigatedCalculations(
                 result,
                 definitions,
                 new ParentShareSource(
@@ -1029,21 +1032,24 @@ public sealed class PivotEngine
             : result;
     }
 
+    private static bool IsVariation(PivotValueDefinition definition) =>
+        definition.ShowAs is PivotShowAs.DifferenceFromPrevious or PivotShowAs.PercentDifferenceFromPrevious;
+
     private static bool IsParentShare(PivotValueDefinition definition) =>
         definition.ShowAs is PivotShowAs.PercentOfParentRowTotal or PivotShowAs.PercentOfParentColumnTotal;
 
-    // Percent of the parent group. Every value in the result sits where one row reference
+    // Parent shares and variations navigate the raw result. Every value sits where one row reference
     // crosses one column reference, each a single header, a group (a header prefix) or the
     // axis' root (the totals). The parent of a reference is the group one level up; the
     // parent of a top-level one is the root. A value is divided by the value at its parent on
     // the chosen axis and its own reference on the other -- which is why this runs over the
     // raw result after the other transforms: a parent is a different part of the result.
-    private static TransformedResult ApplyParentShares(
+    private static TransformedResult ApplyNavigatedCalculations(
         TransformedResult result,
         IReadOnlyList<PivotValueDefinition> definitions,
         ParentShareSource source)
     {
-        var shares = definitions.Where(IsParentShare).ToArray();
+        var shares = definitions.Where(definition => IsParentShare(definition) || IsVariation(definition)).ToArray();
 
         IReadOnlyDictionary<string, decimal?> Share(
             IReadOnlyDictionary<string, decimal?> transformed, AxisRef row, AxisRef column)
@@ -1053,6 +1059,16 @@ public sealed class PivotEngine
             foreach (var definition in shares)
             {
                 var raw = source.Value(row, column, definition.Key);
+                if (IsVariation(definition))
+                {
+                    var previousColumn = source.PreviousColumn(column, definition.AllowCrossGroupCalculation);
+                    var previous = previousColumn is null ? null : source.Value(row, previousColumn, definition.Key);
+                    var difference = Difference(raw, previous);
+                    values[definition.Key] = definition.ShowAs == PivotShowAs.DifferenceFromPrevious
+                        ? difference : Divide(difference, previous);
+                    continue;
+                }
+
                 var parent = definition.ShowAs == PivotShowAs.PercentOfParentRowTotal
                     ? row.Parent is { } rowParent ? source.Value(rowParent, column, definition.Key) : null
                     : column.Parent is { } columnParent ? source.Value(row, columnParent, definition.Key) : null;
@@ -1156,6 +1172,7 @@ public sealed class PivotEngine
     // Indexed once, so a result with many groups is not scanned per value.
     private sealed class ParentShareSource
     {
+        private readonly Dictionary<HeaderKey, AxisRef?> _previousColumns = [];
         private readonly IReadOnlyList<IReadOnlyList<string?>> _rowHeaders;
         private readonly IReadOnlyList<IReadOnlyList<string?>> _columnHeaders;
         private readonly IReadOnlyDictionary<CellKey, IReadOnlyDictionary<string, decimal?>> _cells;
@@ -1185,6 +1202,24 @@ public sealed class PivotEngine
             _columnTotals = columnTotals;
             _grandTotals = grandTotals;
 
+            // Each depth is its own sibling series, in neutral value order.
+            var byDepth = new Dictionary<int, AxisRef>();
+            for (var index = 0; index < columnHeaders.Count; index++)
+            {
+                var path = columnHeaders[index];
+                for (var depth = 1; depth <= path.Count; depth++)
+                {
+                    var prefix = path.Take(depth).ToArray();
+                    var key = new HeaderKey(prefix);
+                    if (_previousColumns.ContainsKey(key))
+                    {
+                        continue;
+                    }
+                    _previousColumns[key] = byDepth.GetValueOrDefault(depth);
+                    byDepth[depth] = depth == path.Count ? new AxisRef(index, path) : AxisRef.Group(prefix);
+                }
+            }
+
             foreach (var subtotal in subtotals)
             {
                 var key = new HeaderKey(subtotal.RowHeader);
@@ -1199,6 +1234,17 @@ public sealed class PivotEngine
                 _columnGroupTotals[key] = subtotal.Totals;
                 _columnGroupCells[key] = subtotal.Cells.ToDictionary(cell => cell.Index, cell => cell.Values);
             }
+        }
+
+        public AxisRef? PreviousColumn(AxisRef column, bool crossGroups)
+        {
+            if (column.IsRoot || !_previousColumns.TryGetValue(new HeaderKey(column.Path), out var previous))
+            {
+                return null;
+            }
+            return previous is not null && (crossGroups ||
+                previous.Path.Take(previous.Path.Count - 1).SequenceEqual(column.Path.Take(column.Path.Count - 1)))
+                ? previous : null;
         }
 
         public AxisRef RowDetail(int row) => new(row, _rowHeaders[row]);
@@ -1954,12 +2000,27 @@ public sealed class PivotEngine
         // Resolved once rather than inside the comparer, which runs n log n times.
         var groupValues = ResolveGroupValues(rowHeaders, levelSorts, lookup, request, axisIsRows: true);
 
-        return rowOrder
-            .OrderBy(
-                row => row,
-                Comparer<int>.Create((left, right) =>
-                    CompareRows(left, right, rowHeaders, request.Rows, levelSorts, groupValues, request.DataTypes, culture)))
-            .ToArray();
+        int Compare(int left, int right) =>
+            CompareRows(left, right, rowHeaders, request.Rows, levelSorts, groupValues, request.DataTypes, culture);
+        return groupValues.Any(level => level?.Any(value => value.IsNaN) == true)
+            ? SortSiblingGroups(rowOrder, rowHeaders, Compare)
+            : rowOrder.OrderBy(row => row, Comparer<int>.Create(Compare)).ToArray();
+    }
+
+    // DevExtreme sorts sibling arrays independently. A flat sort can compare
+    // unrelated descendants in a different order when NaN makes the comparator
+    // non-transitive, even if both sorts are stable.
+    private static int[] SortSiblingGroups(
+        IEnumerable<int> source, IReadOnlyList<IReadOnlyList<string?>> headers,
+        Comparison<int> compare, int depth = 0)
+    {
+        var items = source.ToArray();
+        if (items.Length < 2 || depth >= headers[items[0]].Count) return items;
+        var groups = items.GroupBy(index => headers[index][depth], StringComparer.Ordinal)
+            .Select(group => group.ToArray()).ToArray();
+        var order = ReferenceHeaderSort.Sort(Enumerable.Range(0, groups.Length),
+            (left, right) => compare(groups[left][0], groups[right][0]));
+        return order.SelectMany(index => SortSiblingGroups(groups[index], headers, compare, depth + 1)).ToArray();
     }
 
     private static int CompareRows(
@@ -1968,7 +2029,7 @@ public sealed class PivotEngine
         IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
         IReadOnlyList<PivotFieldRef> fields,
         IReadOnlyList<PivotFieldSort?> levelSorts,
-        IReadOnlyList<decimal?[]?> groupValues,
+        IReadOnlyList<SummarySortValue[]?> groupValues,
         IReadOnlyDictionary<string, PivotDataType> dataTypes,
         CultureInfo culture)
     {
@@ -2005,9 +2066,9 @@ public sealed class PivotEngine
             {
                 var valueComparison = CompareGroupValues(values[left], values[right], sort.Direction);
 
-                // Equal values fall back to the label, ascending whatever the
-                // direction, so the same data always yields the same order.
-                return valueComparison != 0 ? valueComparison : labelComparison;
+                // The requested direction applies to the label tie-break too.
+                return valueComparison != 0 ? valueComparison
+                    : sort.Direction == PivotSortDirection.Descending ? -labelComparison : labelComparison;
             }
 
             // The comparison is applied level by level, so flipping one level
@@ -2019,16 +2080,15 @@ public sealed class PivotEngine
         return 0;
     }
 
-    private static int CompareGroupValues(decimal? left, decimal? right, PivotSortDirection direction)
-    {
-        // A group that aggregated to nothing has no rank, so it sits last in both
-        // directions rather than winning an ascending sort by being empty.
-        if (left is null || right is null)
-        {
-            return (left is null).CompareTo(right is null);
-        }
+    private readonly record struct SummarySortValue(decimal? Value, bool IsNaN = false);
 
-        var comparison = left.Value.CompareTo(right.Value);
+    private static int CompareGroupValues(SummarySortValue left, SummarySortValue right, PivotSortDirection direction)
+    {
+        // Empty summaries precede numbers ascending, and follow them descending.
+        var leftDefined = left.Value is not null || left.IsNaN;
+        var rightDefined = right.Value is not null || right.IsNaN;
+        var comparison = leftDefined != rightDefined ? leftDefined.CompareTo(rightDefined)
+            : left.IsNaN || right.IsNaN ? 0 : Nullable.Compare(left.Value, right.Value);
         return direction == PivotSortDirection.Descending ? -comparison : comparison;
     }
 
@@ -2037,7 +2097,7 @@ public sealed class PivotEngine
     /// does not carry, has no entry: a measure the reader removed leaves label order behind rather
     /// than an error. A group reads its summary where it crosses the declared path on the other
     /// axis, as shown after show-as, which is what the reader is looking at.</remarks>
-    private static IReadOnlyList<decimal?[]?> ResolveGroupValues(
+    private static IReadOnlyList<SummarySortValue[]?> ResolveGroupValues(
         IReadOnlyList<IReadOnlyList<string?>> headers,
         IReadOnlyList<PivotFieldSort?> levelSorts,
         Lazy<SummaryLookup> lookup,
@@ -2049,7 +2109,7 @@ public sealed class PivotEngine
             return [];
         }
 
-        decimal?[]? Resolve(PivotFieldSort? sort, int level)
+        SummarySortValue[]? Resolve(PivotFieldSort? sort, int level)
         {
             if (sort?.ValueKey is not { } valueKey ||
                 request.Values.All(value => value.Key != valueKey))
@@ -2057,10 +2117,11 @@ public sealed class PivotEngine
                 return null;
             }
 
+            var definition = request.Values.Single(value => value.Key == valueKey);
             var path = sort.SummaryPath ?? [];
-            var values = new decimal?[headers.Count];
+            var values = new SummarySortValue[headers.Count];
             // Siblings share a group, so each group is looked up once.
-            var seen = new Dictionary<HeaderKey, decimal?>();
+            var seen = new Dictionary<HeaderKey, SummarySortValue>();
 
             for (var index = 0; index < headers.Count; index++)
             {
@@ -2070,8 +2131,8 @@ public sealed class PivotEngine
                 if (!seen.TryGetValue(key, out var value))
                 {
                     value = axisIsRows
-                        ? lookup.Value.Get(group, path, valueKey)
-                        : lookup.Value.Get(path, group, valueKey);
+                        ? lookup.Value.GetSortValue(group, path, definition)
+                        : lookup.Value.GetSortValue(path, group, definition);
                     seen.Add(key, value);
                 }
 
@@ -2088,13 +2149,13 @@ public sealed class PivotEngine
     /// <remarks>The columns arrive already in label order, level by level, so a level without a
     /// value sort keeps the order its groups already have, and a tie between two values does the
     /// same. Every index into the column axis is renumbered together with the headers.</remarks>
-    private static PopulatedResult SortColumns(PopulatedResult populated, PivotRequest request, CultureInfo culture)
+    private static PopulatedResult SortColumns(PopulatedResult populated, PivotRequest request, CultureInfo culture, IReadOnlyList<IReadOnlyList<string?>> observedHeaders)
     {
         var columnHeaders = populated.ColumnHeaders;
         var levelSorts = ResolveLevelSorts(request.Columns, request.FieldSorts);
 
         if (columnHeaders.Count < 2 ||
-            !levelSorts.Any(sort => sort?.ValueKey is { } key && request.Values.Any(value => value.Key == key)))
+            !levelSorts.Any(sort => sort is not null))
         {
             return populated;
         }
@@ -2118,6 +2179,15 @@ public sealed class PivotEngine
                 // Groups are contiguous, so two columns' positions say which of their groups
                 // comes first at the level where they part.
                 var positional = left.CompareTo(right);
+                if (levelSorts.ElementAtOrDefault(level) is { } labelSort)
+                {
+                    positional = LevelComparer(request.Columns, level, request.DataTypes, culture)
+                        .Compare(leftHeader[level], rightHeader[level]);
+                    if (labelSort.Direction == PivotSortDirection.Descending)
+                    {
+                        positional = -positional;
+                    }
+                }
 
                 if (levelSorts.ElementAtOrDefault(level) is { } sort &&
                     groupValues.ElementAtOrDefault(level) is { } values)
@@ -2132,9 +2202,20 @@ public sealed class PivotEngine
             return left.CompareTo(right);
         }
 
-        var order = Enumerable.Range(0, columnHeaders.Count)
-            .OrderBy(column => column, Comparer<int>.Create(Compare))
-            .ToArray();
+        var sourceOrder = Enumerable.Range(0, columnHeaders.Count);
+        int[] order;
+        if (groupValues.Any(level => level?.Any(value => value.IsNaN) == true))
+        {
+            // Before display calculations the LocalStore tree is in discovery
+            // order. Preserve that input for the reference sorting traversal.
+            var observed = CreateHeaderLookup(observedHeaders);
+            order = SortSiblingGroups(sourceOrder.OrderBy(index =>
+                observed.GetValueOrDefault(new HeaderKey(columnHeaders[index]), int.MaxValue)), columnHeaders, Compare);
+        }
+        else
+        {
+            order = sourceOrder.OrderBy(column => column, Comparer<int>.Create(Compare)).ToArray();
+        }
 
         if (order.Select((column, position) => column == position).All(same => same))
         {
@@ -2221,7 +2302,17 @@ public sealed class PivotEngine
             }
         }
 
-        public decimal? Get(IReadOnlyList<string?> rowPath, IReadOnlyList<string?> columnPath, string key)
+        public SummarySortValue GetSortValue(IReadOnlyList<string?> rowPath, IReadOnlyList<string?> columnPath, PivotValueDefinition definition)
+        {
+            var values = GetValues(rowPath, columnPath);
+            var value = GetValue(values, definition.Key);
+            // Retain the distinction solely for comparison: the public decimal
+            // result still represents a non-finite average as null.
+            return new SummarySortValue(value, values is not null && value is null &&
+                definition.Aggregation == PivotAggregation.Average && definition.ShowAs == PivotShowAs.Normal);
+        }
+
+        private IReadOnlyDictionary<string, decimal?>? GetValues(IReadOnlyList<string?> rowPath, IReadOnlyList<string?> columnPath)
         {
             var row = Classify(rowPath, _rowDepth);
             var column = Classify(columnPath, _columnDepth);
@@ -2271,7 +2362,7 @@ public sealed class PivotEngine
                 _ => _grandTotals
             };
 
-            return GetValue(values, key);
+            return values;
         }
 
         private static Dictionary<TKey, TValue> Cached<TKey, TValue>(

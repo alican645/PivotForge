@@ -157,7 +157,7 @@ public sealed class PivotColumnSubtotalTests
         var records = Sales.Append(new Sale("Ege", "İzmir", "2027", "Q1", null, null)).ToArray();
 
         var shown = Engine.Execute(records, Request());
-        var hidden = Engine.Execute(records, Request([], null, hideEmpty: true));
+        var hidden = Engine.Execute(records, Request([PivotValueDefinition.Average("Amount")], null, hideEmpty: true));
 
         Assert.Contains(shown.ColumnSubtotals, subtotal => subtotal.ColumnHeader[0] == "2027");
         Assert.DoesNotContain(hidden.ColumnSubtotals, subtotal => subtotal.ColumnHeader[0] == "2027");

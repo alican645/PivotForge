@@ -39,20 +39,20 @@ public sealed class PivotFieldSortByValueTests
         var result = Engine.Execute(Sales, Nested(
             new PivotFieldSort("Category", PivotSortDirection.Descending, "Amount_sum")));
 
-        // Delta aggregated to nothing, so it has no rank and goes last.
+        // Delta sums to zero and follows the positive sums descending.
         Assert.Equal(
             ["East/Beta", "East/Gamma", "East/Alpha", "West/Alpha", "West/Beta", "West/Delta"],
             RowPaths(result));
     }
 
     [Fact]
-    public void ANullGroupIsLastWhenAscendingToo()
+    public void AnAllNullSumRanksAsZeroAscending()
     {
         var result = Engine.Execute(Sales, Nested(
             new PivotFieldSort("Category", PivotSortDirection.Ascending, "Amount_sum")));
 
         Assert.Equal(
-            ["East/Alpha", "East/Gamma", "East/Beta", "West/Beta", "West/Alpha", "West/Delta"],
+            ["East/Alpha", "East/Gamma", "East/Beta", "West/Delta", "West/Beta", "West/Alpha"],
             RowPaths(result));
     }
 
@@ -68,7 +68,7 @@ public sealed class PivotFieldSortByValueTests
     }
 
     [Fact]
-    public void EqualValuesBreakOnTheLabelAscending()
+    public void EqualValuesBreakOnTheLabelInTheRequestedDirection()
     {
         Sale[] tied =
         [
@@ -80,9 +80,8 @@ public sealed class PivotFieldSortByValueTests
         var result = Engine.Execute(tied, Nested(
             new PivotFieldSort("Category", PivotSortDirection.Descending, "Amount_sum")));
 
-        // Descending by value, but the tie between Zeta and Alpha is broken
-        // ascending, so the same data always yields the same order.
-        Assert.Equal(["North/Mid", "North/Alpha", "North/Zeta"], RowPaths(result));
+        // Descending applies to the value and the label tie-break alike.
+        Assert.Equal(["North/Mid", "North/Zeta", "North/Alpha"], RowPaths(result));
     }
 
     [Fact]
@@ -126,7 +125,7 @@ public sealed class PivotFieldSortByValueTests
             FieldSorts = [new PivotFieldSort("Category", PivotSortDirection.Ascending, "Amount_sum")]
         });
 
-        Assert.Equal(["Alpha", "Beta", "Gamma", "Delta"], RowPaths(result));
+        Assert.Equal(["Delta", "Alpha", "Beta", "Gamma"], RowPaths(result));
     }
 
     [Fact]

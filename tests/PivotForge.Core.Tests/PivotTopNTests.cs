@@ -167,13 +167,13 @@ public sealed class PivotTopNTests
         var top = Engine.Execute(records, new PivotRequest
         {
             Rows = ["Region"],
-            Values = [PivotValueDefinition.Sum("Amount")],
+            Values = [PivotValueDefinition.Average("Amount")],
             TopN = [new PivotTopN("Region", 2)]
         });
         var bottom = Engine.Execute(records, new PivotRequest
         {
             Rows = ["Region"],
-            Values = [PivotValueDefinition.Sum("Amount")],
+            Values = [PivotValueDefinition.Average("Amount")],
             TopN = [new PivotTopN("Region", 2, Mode: PivotTopNMode.Bottom)]
         });
 

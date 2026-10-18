@@ -87,7 +87,7 @@ public sealed class PivotCalculatedFieldTests
     public void AnEmptySummaryOrADivisionByZeroLeavesTheCellEmpty()
     {
         var result = Run(
-            PivotValueDefinition.Calculated("Profit", "[Revenue] - [Cost]"),
+            PivotValueDefinition.Calculated("Profit", "[Revenue] - Avg([Cost])"),
             PivotValueDefinition.Calculated("Zero", "[Revenue] / ([Cost] - [Cost])"));
 
         Assert.Null(RowTotal(result, "Manisa", "Profit_calculated"));

@@ -42,8 +42,8 @@ public sealed class PivotDataTypeTests
         });
 
         Assert.Equal(1350.5m, result.RowTotals.Single(total => total.Index == 0).Values["Amount_sum"]);
-        // "abc" and null are both blank, so Marmara has nothing to sum.
-        Assert.Null(result.RowTotals.Single(total => total.Index == 1).Values["Amount_sum"]);
+        // Both values convert to blank; an observed all-blank sum is zero.
+        Assert.Equal(0m, result.RowTotals.Single(total => total.Index == 1).Values["Amount_sum"]);
     }
 
     [Fact]

@@ -489,8 +489,9 @@ and takes its direction from `sort-order`, ascending when absent:
 ```
 
 An inner level is ordered by its subtotal and the deepest level by its row
-total, both as shown after `show-as`. A group with no value sorts last in
-either direction, and equal values break on the label. Row fields only. A sort
+total, both as shown after `show-as`. A group with no value sorts first
+ascending and last descending, and equal values break on the label in the same
+direction. Row fields only. A sort
 the reader picks from the cell menu still wins.
 
 `group-interval` (`Year`, `Quarter`, `Month`, `Day`, `DayOfWeek`) collapses a

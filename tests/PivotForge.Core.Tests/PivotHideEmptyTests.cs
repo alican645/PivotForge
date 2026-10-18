@@ -18,11 +18,11 @@ public sealed class PivotHideEmptyTests
 
     private static readonly PivotEngine Engine = new(CultureInfo.GetCultureInfo("tr-TR"));
 
-    private static PivotRequest Request(bool hide) => new()
+    private static PivotRequest Request(bool hide, bool average = false) => new()
     {
         Rows = ["Region"],
         Columns = ["Category", "Year"],
-        Values = [PivotValueDefinition.Sum("Amount")],
+        Values = [average ? PivotValueDefinition.Average("Amount") : PivotValueDefinition.Sum("Amount")],
         HideEmptySummaryCells = hide
     };
 
@@ -87,8 +87,8 @@ public sealed class PivotHideEmptyTests
             new Sale("Karadeniz", "Beton", "2025", null)
         };
 
-        var kept = Engine.Execute(withNulls, Request(hide: false));
-        var dropped = Engine.Execute(withNulls, Request(hide: true));
+        var kept = Engine.Execute(withNulls, Request(hide: false, average: true));
+        var dropped = Engine.Execute(withNulls, Request(hide: true, average: true));
 
         Assert.Equal(["Ege", "Karadeniz"], kept.RowHeaders.Select(header => header[0]!));
         Assert.Equal(["Ege"], dropped.RowHeaders.Select(header => header[0]!));
@@ -106,11 +106,11 @@ public sealed class PivotHideEmptyTests
             new Sale("Karadeniz", "Beton", "2025", 700m)
         };
 
-        var result = Engine.Execute(withNulls, Request(hide: true));
+        var result = Engine.Execute(withNulls, Request(hide: true, average: true));
 
         Assert.Equal(["Karadeniz"], result.RowHeaders.Select(header => header[0]!));
         Assert.Equal([0], result.RowTotals.Select(total => total.Index));
-        Assert.Equal(700m, result.RowTotals[0].Values["Amount_sum"]);
+        Assert.Equal(700m, result.RowTotals[0].Values["Amount_average"]);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class PivotHideEmptyTests
         {
             Rows = ["Region", "Category"],
             Columns = ["Year"],
-            Values = [PivotValueDefinition.Sum("Amount")],
+            Values = [PivotValueDefinition.Average("Amount")],
             HideEmptySummaryCells = true
         });
 

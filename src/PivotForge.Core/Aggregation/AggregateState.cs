@@ -13,6 +13,7 @@ internal sealed class AggregateState(MeasureInput input)
     private readonly HashSet<object>? _distinct =
         input.Aggregation == PivotAggregation.CountDistinct ? [] : null;
     private decimal _sum;
+    private bool _hasRecords;
     // Welford's running mean and sum of squared deviations: a sum of squares overflows decimal
     // long before the values themselves do, and loses the variance of large, close values.
     private decimal _mean;
@@ -25,6 +26,7 @@ internal sealed class AggregateState(MeasureInput input)
 
     public void Add(object? value)
     {
+        _hasRecords = true;
         if (input.Aggregation == PivotAggregation.Count)
         {
             if (value is not null)
@@ -98,7 +100,7 @@ internal sealed class AggregateState(MeasureInput input)
 
         return input.Aggregation switch
         {
-            PivotAggregation.Sum => _count == 0 ? null : _sum,
+            PivotAggregation.Sum => _hasRecords ? _sum : null,
             PivotAggregation.Count => _count,
             PivotAggregation.Average => _count == 0 ? null : _sum / _count,
             PivotAggregation.Min => _min,

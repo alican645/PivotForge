@@ -14,6 +14,28 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Breaking
+
+- Observed all-null sums now return zero, matching DevExtreme 26.1.3; an entirely
+  empty source still has no sum. Zero sums remain visible under empty-cell hiding
+  and participate in formulas, value filters and Top-N. Use Average/Min/Max when
+  an all-null group must remain empty. Null summaries sort first ascending and
+  last descending; equal summaries use the requested direction for label ties.
+  (Core)
+
+### Compatibility
+
+- Added an offline corpus generated from real DevExtreme 26.1.3 / Chromium
+  151.0.7922.34 runs: 275 passing calculation/sorting scenarios, including NaN
+  summary ordering on both axes up to 1,024 groups.
+  See `tests/compatibility/README.md` for provenance, scope and reproduction.
+- Empty averages retain their NaN distinction internally for summary sorting;
+  affected sibling groups use reference-compatible PowerSort traversal. Public
+  numeric results remain nullable decimal and no runtime dependency is added.
+- Variations now calculate in neutral ascending column order before display
+  sorting, including sibling column subtotals. Sparse dictionary records treat
+  an omitted known field as empty while unknown schema fields still fail. (Core)
+
 ### Added
 
 - Formulas that read other cells, DevExtreme's cell API: `Prev(x)` / `Next(x)`
