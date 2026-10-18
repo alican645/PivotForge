@@ -92,10 +92,18 @@
   // the server; this only reads the text and reports which fields it names. Errors
   // carry a code and the position, so a locale can word them and the editor can put
   // the caret where the problem is.
+  // The functions that read another cell, as the engine's PivotExpression names
+  // them: each takes a formula, and Slice a field and a whole number after it.
+  const RELATIVE_FUNCTIONS = [
+    "Prev", "Next", "PrevRow", "NextRow", "ParentRow", "ParentColumn",
+    "RowTotal", "ColumnTotal", "GrandTotal", "Slice"
+  ];
+
   function parseExpression(text) {
     const source = String(text ?? "");
     let position = 0;
     const summaries = [];
+    const sliceFields = [];
 
     const fail = (code, detail, at = position) => {
       const messages = {
@@ -109,6 +117,8 @@
         emptyReference: "A field reference names no field.",
         number: `'${detail}' is not a number.`,
         argument: `${detail}() takes a field in brackets, such as ${detail}([Amount]).`,
+        sliceField: `${detail}() takes a field in brackets after the formula, such as ${detail}([Amount], [Year], -1).`,
+        sliceOffset: `${detail}() moves a whole number of members, such as ${detail}([Amount], [Year], -1).`,
         expected: `Expected '${detail}'.`
       };
       const error = new Error(messages[code]);
@@ -202,6 +212,36 @@
         }
 
         position++;
+
+        const relative = RELATIVE_FUNCTIONS.find(entry => entry.toLowerCase() === name.toLowerCase());
+        if (relative) {
+          sum();
+          if (relative === "Slice") {
+            expect(",");
+            skip();
+            if (source[position] !== "[") {
+              fail("sliceField", name);
+            }
+            sliceFields.push(fieldName());
+            expect(",");
+            skip();
+            const start = position;
+            if (source[position] === "-" || source[position] === "+") {
+              position++;
+              skip();
+            }
+            const digits = position;
+            while (position < source.length && /\d/.test(source[position])) {
+              position++;
+            }
+            if (position === digits) {
+              fail("sliceOffset", name, start);
+            }
+          }
+          expect(")");
+          return;
+        }
+
         skip();
         if (source[position] !== "[") {
           fail("argument", name);
@@ -255,7 +295,7 @@
       }
     });
 
-    return { fields, summaries };
+    return { fields, summaries, sliceFields };
   }
 
   function normalizeField(field, index) {
@@ -885,7 +925,7 @@
   PivotForge.PivotRequestBuilder = {
     normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes,
     normalizeRankings, normalizeValueFilters, comparisonType, parseExpression,
-    AGGREGATIONS, CALCULATED, DATA_TYPES, RUNNING_TOTALS, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
+    AGGREGATIONS, CALCULATED, DATA_TYPES, RUNNING_TOTALS, FORMULA_FUNCTIONS, RELATIVE_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
     FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS, VALUE_FILTER_OPERATORS
   };
 

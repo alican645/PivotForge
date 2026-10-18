@@ -22,22 +22,46 @@ namespace PivotForge.Core;
 /// custom aggregate registered with the engine. Names are matched without regard to case.
 /// </para>
 /// <para>
+/// A formula may also read another cell, DevExtreme's cell API: <c>Prev(x)</c> / <c>Next(x)</c>
+/// evaluate <c>x</c> in the previous / next column of the same level, <c>PrevRow(x)</c> /
+/// <c>NextRow(x)</c> in the previous / next row, <c>ParentRow(x)</c> / <c>ParentColumn(x)</c> in
+/// the parent group on that axis, <c>RowTotal(x)</c> / <c>ColumnTotal(x)</c> / <c>GrandTotal(x)</c>
+/// in the totals, and <c>Slice(x, [Field], n)</c> where <c>[Field]</c>'s level is moved <c>n</c>
+/// members along -- <c>Slice([Amount], [Year], -1)</c> is the same cell last year. A cell that
+/// does not exist reads as empty. <c>x</c> is any formula, so
+/// <c>([Amount] - Prev([Amount])) / Prev([Amount])</c> is the growth on the previous period.
+/// </para>
+/// <para>
 /// Nothing is ever executed: the text is only read as this grammar, so a formula typed by a
 /// reader is as safe to evaluate as a number.
 /// </para>
 /// </remarks>
 public sealed class PivotExpression
 {
-    private PivotExpression(string text, Node root, IReadOnlyList<Summary> summaries)
+    private PivotExpression(string text, Node root, IReadOnlyList<Summary> summaries, IReadOnlyList<string> sliceFields)
     {
         Text = text;
         Root = root;
         Summaries = summaries;
+        // A Slice names a header level as well, which an allow-list has to see too.
         Fields = summaries
             .Select(summary => summary.Field)
+            .Concat(sliceFields)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        IsRelative = Contains(root, node => node is RelativeNode);
     }
+
+    /// <summary>Gets whether the formula reads another cell than its own.</summary>
+    internal bool IsRelative { get; }
+
+    private static bool Contains(Node node, Func<Node, bool> predicate) => predicate(node) || node switch
+    {
+        NegateNode negate => Contains(negate.Operand, predicate),
+        BinaryNode binary => Contains(binary.Left, predicate) || Contains(binary.Right, predicate),
+        RelativeNode relative => Contains(relative.Inner, predicate),
+        _ => false
+    };
 
     /// <summary>Gets the formula as it was written.</summary>
     public string Text { get; }
@@ -63,7 +87,7 @@ public sealed class PivotExpression
 
         var parser = new Parser(text);
         var root = parser.ParseAll();
-        return new PivotExpression(text, root, parser.Summaries);
+        return new PivotExpression(text, root, parser.Summaries, parser.SliceFields);
     }
 
     /// <summary>A function applied to one source field.</summary>
@@ -91,17 +115,45 @@ public sealed class PivotExpression
 
     internal sealed record BinaryNode(char Operator, Node Left, Node Right) : Node;
 
+    /// <summary>Where a relative function reads its formula.</summary>
+    internal enum RelativeKind
+    {
+        Prev,
+        Next,
+        PrevRow,
+        NextRow,
+        ParentRow,
+        ParentColumn,
+        RowTotal,
+        ColumnTotal,
+        GrandTotal,
+        Slice
+    }
+
+    /// <summary><paramref name="Inner"/> evaluated at another cell.</summary>
+    /// <param name="Kind">Which cell.</param>
+    /// <param name="Inner">The formula read there.</param>
+    /// <param name="Field">The level a <see cref="RelativeKind.Slice"/> moves along.</param>
+    /// <param name="Offset">How many members a <see cref="RelativeKind.Slice"/> moves.</param>
+    internal sealed record RelativeNode(RelativeKind Kind, Node Inner, string? Field, int Offset) : Node;
+
     /// <summary>Evaluates the formula against the values of its summaries.</summary>
     /// <remarks>
     /// An empty summary empties the result, the way an empty cell stays empty in every
     /// show-as mode, and so does a division by zero: there is no number to show, and zero
     /// would be a wrong one.
     /// </remarks>
-    internal static decimal? Evaluate(Node node, IReadOnlyList<decimal?> summaries)
+    internal static decimal? Evaluate(Node node, IReadOnlyList<decimal?> summaries) =>
+        // A cell on its own cannot read another: a relative part is empty here, and the engine
+        // works the formula out again once every cell exists.
+        Evaluate(node, index => summaries[index], _ => null);
+
+    /// <summary>Evaluates the formula with its summaries and its relative parts read through callbacks.</summary>
+    internal static decimal? Evaluate(Node node, Func<int, decimal?> summary, Func<RelativeNode, decimal?> relative)
     {
         try
         {
-            return EvaluateCore(node, summaries);
+            return EvaluateCore(node, summary, relative);
         }
         catch (OverflowException)
         {
@@ -109,15 +161,16 @@ public sealed class PivotExpression
         }
     }
 
-    private static decimal? EvaluateCore(Node node, IReadOnlyList<decimal?> summaries) => node switch
+    private static decimal? EvaluateCore(Node node, Func<int, decimal?> summary, Func<RelativeNode, decimal?> relative) => node switch
     {
         NumberNode number => number.Value,
-        SummaryNode summary => summaries[summary.Index],
-        NegateNode negate => -EvaluateCore(negate.Operand, summaries),
+        SummaryNode reference => summary(reference.Index),
+        NegateNode negate => -EvaluateCore(negate.Operand, summary, relative),
         BinaryNode binary => Apply(
             binary.Operator,
-            EvaluateCore(binary.Left, summaries),
-            EvaluateCore(binary.Right, summaries)),
+            EvaluateCore(binary.Left, summary, relative),
+            EvaluateCore(binary.Right, summary, relative)),
+        RelativeNode other => relative(other),
         _ => throw new InvalidOperationException("Unknown formula node.")
     };
 
@@ -146,6 +199,8 @@ public sealed class PivotExpression
         private int _position;
 
         public List<Summary> Summaries { get; } = [];
+
+        public List<string> SliceFields { get; } = [];
 
         public Node ParseAll()
         {
@@ -245,6 +300,14 @@ public sealed class PivotExpression
                 }
 
                 _position++;
+
+                // A relative function takes a formula rather than a field: Prev([A] - [B]).
+                if (Enum.TryParse<RelativeKind>(function, ignoreCase: true, out var kind) &&
+                    Enum.GetName(kind)!.Equals(function, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ParseRelative(kind, function);
+                }
+
                 SkipWhitespace();
 
                 if (_position >= text.Length || text[_position] != '[')
@@ -258,6 +321,54 @@ public sealed class PivotExpression
             }
 
             throw Error($"Unexpected '{current}'.");
+        }
+
+        // The opening parenthesis is already consumed.
+        private RelativeNode ParseRelative(RelativeKind kind, string function)
+        {
+            var inner = ParseSum();
+
+            if (kind != RelativeKind.Slice)
+            {
+                Expect(')');
+                return new RelativeNode(kind, inner, null, 0);
+            }
+
+            Expect(',');
+            SkipWhitespace();
+            if (_position >= text.Length || text[_position] != '[')
+            {
+                throw Error($"{function}() takes a field in brackets after the formula, such as {function}([Amount], [Year], -1).");
+            }
+
+            var field = ReadFieldName();
+            SliceFields.Add(field);
+            Expect(',');
+            SkipWhitespace();
+
+            var start = _position;
+            var negative = TryConsume('-') is not null;
+            if (!negative)
+            {
+                TryConsume('+');
+            }
+
+            SkipWhitespace();
+            var digits = _position;
+            while (_position < text.Length && char.IsDigit(text[_position]))
+            {
+                _position++;
+            }
+
+            if (_position == digits ||
+                !int.TryParse(text.AsSpan(digits, _position - digits), NumberStyles.None, CultureInfo.InvariantCulture, out var offset))
+            {
+                throw new PivotExpressionException(
+                    $"{function}() moves a whole number of members, such as {function}([Amount], [Year], -1).", start);
+            }
+
+            Expect(')');
+            return new RelativeNode(kind, inner, field, negative ? -offset : offset);
         }
 
         private SummaryNode Reference(string function, string field)

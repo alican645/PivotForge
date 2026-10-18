@@ -142,6 +142,8 @@
       emptyReference: "[] names no field.",
       number: "'{0}' is not a number.",
       argument: "{0}() takes a field in brackets, such as {0}([Amount]).",
+      sliceField: "{0}() takes a field in brackets after the formula, such as {0}([Amount], [Year], -1).",
+      sliceOffset: "{0}() moves a whole number of members, such as {0}([Amount], [Year], -1).",
       expected: "'{0}' is missing.",
       unknownField: "There is no field called [{0}]."
     },

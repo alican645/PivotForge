@@ -854,3 +854,24 @@ test("a value's running total is sent as the engine's direction, and only on a v
     { dataField: "Amount", area: "data", aggregation: "sum", runningTotal: "diagonal" }
   ]), /Unknown runningTotal/);
 });
+
+test("the formula parser reads the relative functions the engine does", () => {
+  const parse = PivotForge.PivotRequestBuilder.parseExpression;
+
+  const growth = parse("([Amount] - Prev([Amount])) / prev([Amount])");
+  assert.deepEqual(growth.fields, ["Amount"]);
+
+  const slice = parse("Slice([Amount] - [Cost], [Year], -1)");
+  assert.deepEqual(slice.fields, ["Amount", "Cost"]);
+  assert.deepEqual(slice.sliceFields, ["Year"]);
+
+  for (const [formula, code] of [
+    ["Prev()", "unexpected"],
+    ["Slice([Amount], -1)", "sliceField"],
+    ["Slice([Amount], [Year], x)", "sliceOffset"],
+    ["Slice([Amount], [Year])", "expected"],
+    ["GrandTotal([Amount]", "end"]
+  ]) {
+    assert.throws(() => parse(formula), error => error.code === code, formula);
+  }
+});

@@ -187,6 +187,25 @@ The grammar:
 - Function and field names are matched without regard to case.
 - An empty summary or a division by zero leaves the cell empty.
 
+### Reading other cells
+
+A formula can read another cell than its own -- DevExtreme's cell API (`prev`, `next`, `parent`, `grandTotal`, `slice`) written as functions that take a formula:
+
+| Function | Reads its formula at |
+|---|---|
+| `Prev(x)` / `Next(x)` | the previous / next column of the same level, in the same row |
+| `PrevRow(x)` / `NextRow(x)` | the previous / next row of the same level, in the same column |
+| `ParentRow(x)` / `ParentColumn(x)` | the parent group on that axis (a top-level one's parent is the axis' total) |
+| `RowTotal(x)` / `ColumnTotal(x)` / `GrandTotal(x)` | the right-hand total of the row / the bottom total of the column / the grand total |
+| `Slice(x, [Field], n)` | the cell whose `[Field]` level is `n` members along -- `Slice([Amount], [Year], -1)` is last year |
+
+```csharp
+PivotValueDefinition.Calculated("Growth", "([Amount] - Prev([Amount])) / Prev([Amount])")
+PivotValueDefinition.Calculated("VersusLastYear", "[Amount] / Slice([Amount], [Year], -1) - 1")
+```
+
+A cell that does not exist -- the first column's previous one, a year with no data -- reads as empty. Rows run in their labels' order (the neutral order, so a user's sort does not change the numbers) and columns in the order they are drawn; a column no record fell into is skipped. `AllowCrossGroupCalculation = false` keeps `Prev`, `Next`, `PrevRow` and `NextRow` inside the parent group. Display modes apply to what the formula comes to. A `Slice` level that is on neither axis reads as empty; the level is one of the fields `PivotExpression.Fields` lists.
+
 `PivotExpression.Parse(text)` reads a formula without running it and lists the source fields it names; a formula that cannot be read throws `PivotExpressionException`, which carries the character `Position` the problem starts at.
 
 ### Custom Aggregates

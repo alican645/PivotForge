@@ -177,6 +177,8 @@
         emptyReference: "[] hiçbir alanı adlandırmıyor.",
         number: "'{0}' bir sayı değil.",
         argument: "{0}() köşeli parantezli bir alan alır, örneğin {0}([Tutar]).",
+        sliceField: "{0}() formülden sonra köşeli parantezli bir alan alır, örneğin {0}([Tutar], [Yıl], -1).",
+        sliceOffset: "{0}() tam sayı kadar kaydırır, örneğin {0}([Tutar], [Yıl], -1).",
         expected: "'{0}' eksik.",
         unknownField: "[{0}] adında bir alan yok."
       },

@@ -16,6 +16,16 @@ change will require a new major version.
 
 ### Added
 
+- Formulas that read other cells, DevExtreme's cell API: `Prev(x)` / `Next(x)`
+  (previous / next column), `PrevRow(x)` / `NextRow(x)`, `ParentRow(x)` /
+  `ParentColumn(x)`, `RowTotal(x)` / `ColumnTotal(x)` / `GrandTotal(x)` and
+  `Slice(x, [Field], n)` (`Slice([Amount], [Year], -1)` is last year), each
+  taking any formula: `([Amount] - Prev([Amount])) / Prev([Amount])` is the
+  growth on the previous period. Rows run in their labels' order, columns as
+  drawn (skipping columns no record fell into); a missing cell reads as
+  empty; `AllowCrossGroupCalculation = false` keeps neighbours inside the
+  parent group; display modes apply to the result. The browser's parser and
+  the designer's formula check accept the same grammar. (Core, AspNetCore)
 - Running totals in either direction, DevExtreme's `runningTotal`:
   `PivotValueDefinition.RunningTotal` (`PivotRunningTotal.Row` along each row,
   `Column` down each column) / `running-total="Row|Column"` /

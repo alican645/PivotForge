@@ -567,16 +567,25 @@ public sealed class PivotEngine
         var rawColumnSubtotals = OrderColumnSubtotals(
             scan.ColumnSubtotals.Values.Select(subtotal => subtotal.Finalize()),
             columnHeaders);
+        // Before the display modes, which apply to what a relative formula comes to.
+        var relative = PivotRelativeFormulas.Apply(
+            new PivotRelativeFormulas.Raw(rawCells, rawRowTotals, rawColumnTotals, rawSubtotals, rawColumnSubtotals, rawGrandTotals),
+            request.Values,
+            rowIndex.Headers,
+            columnHeaders,
+            request.Rows,
+            request.Columns,
+            level => LevelComparer(request.Rows, level, request.DataTypes, culture));
         var transformed = TransformValues(
             rowIndex.Headers,
             columnHeaders,
             request.Values,
-            rawCells,
-            rawRowTotals,
-            rawColumnTotals,
-            rawSubtotals,
-            rawColumnSubtotals,
-            rawGrandTotals);
+            relative.Cells,
+            relative.RowTotals,
+            relative.ColumnTotals,
+            relative.Subtotals,
+            relative.ColumnSubtotals,
+            relative.GrandTotals);
         // Before sorting, so the sort orders what survives rather than ordering
         // rows that are about to disappear.
         var populated = request.HideEmptySummaryCells

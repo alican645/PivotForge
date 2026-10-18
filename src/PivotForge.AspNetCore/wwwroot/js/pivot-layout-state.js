@@ -255,7 +255,11 @@
     checkFormula(expression) {
       const parsed = PivotForge.PivotRequestBuilder.parseExpression(expression);
       const known = new Set(this.formulaFields().map(field => field.dataField.toLowerCase()));
-      const unknown = parsed.fields.find(field => !known.has(field.toLowerCase()));
+      // A Slice moves along a header level, which any field of the catalog can be.
+      const levels = new Set([...this.catalog.values()]
+        .flatMap(field => [field.dataField.toLowerCase(), field.key.toLowerCase()]));
+      const unknown = parsed.fields.find(field => !known.has(field.toLowerCase())) ??
+        (parsed.sliceFields ?? []).find(field => !levels.has(field.toLowerCase()));
 
       if (unknown !== undefined) {
         const error = new Error(`Field "${unknown}" is not in the field list.`);
