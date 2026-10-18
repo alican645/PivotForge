@@ -1962,7 +1962,11 @@
         throw new Error("Cannot print because no pivot table has been rendered yet.");
       }
 
-      PivotForge.print(this.container, options);
+      // Virtual columns draw a window; a print is of the whole table.
+      const suspended = this.renderer?.suspendColumnWindow?.() === true;
+      PivotForge.print(this.container, suspended
+        ? { ...options, onRestore: () => this.renderer?.resumeColumnWindow?.() }
+        : options);
     }
 
     cancel() {

@@ -172,6 +172,14 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("values-position")]
     public PivotValuesPosition ValuesPosition { get; set; }
 
+    /// <summary>Gets or sets whether only the columns around what the grid shows are drawn.</summary>
+    [HtmlAttributeName("virtual-columns")]
+    public bool? VirtualColumns { get; set; }
+
+    /// <summary>Gets or sets the first guess at a value column's width, in pixels, while columns are virtual.</summary>
+    [HtmlAttributeName("virtual-column-width")]
+    public int? VirtualColumnWidth { get; set; }
+
     /// <summary>Gets or sets whether the cell context menu is available.</summary>
     [HtmlAttributeName("context-menu")]
     public bool? ContextMenu { get; set; }
@@ -474,6 +482,15 @@ public sealed class PivotGridTagHelper : TagHelper
         if (written.Contains("values-position"))
         {
             builder.ValuesPosition(ValuesPosition);
+        }
+
+        if (VirtualColumns is { } virtualColumns)
+        {
+            builder.VirtualColumns(virtualColumns, VirtualColumnWidth);
+        }
+        else if (VirtualColumnWidth is not null)
+        {
+            throw new InvalidOperationException("virtual-column-width is only meaningful with virtual-columns.");
         }
 
         if (ContextMenu is { } contextMenu)

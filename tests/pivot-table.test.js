@@ -1320,3 +1320,37 @@ test("the horizontal arrows trade places right to left, and only there", () => {
     globalThis.getComputedStyle = previous;
   }
 });
+
+test("virtual columns draw a window of pages around the view, with absolute positions", () => {
+  const plan = Array.from({ length: 50 }, (_, columnIndex) => ({ type: "detail", columnIndex, columnHeader: [String(columnIndex)] }));
+  const container = { scrollLeft: 0, clientWidth: 500 };
+  const renderer = new window.PivotForge.PivotTableRenderer(container);
+  const settings = { virtualColumns: true, virtualColumnWidth: 100 };
+
+  // Off: no window at all.
+  assert.equal(renderer.resolveColumnWindow(plan, 1, { virtualColumns: false }), null);
+
+  // At the start: the view (5 columns) and one page after it.
+  let slice = renderer.resolveColumnWindow(plan, 1, settings);
+  assert.deepEqual([slice.offset, slice.plan.length, slice.after], [0, 10, 40]);
+  assert.equal(slice.plan[3].position, 3);
+
+  // In the middle: a page either side of the view, 5 + 5 + 5.
+  container.scrollLeft = 2000;
+  slice = renderer.resolveColumnWindow(plan, 1, settings);
+  assert.deepEqual([slice.before, slice.plan[0].position, slice.plan.length], [15, 15, 15]);
+
+  // RTL scrolls negative; the same distance gives the same window.
+  container.scrollLeft = -2000;
+  assert.equal(renderer.resolveColumnWindow(plan, 1, settings).before, 15);
+
+  // At the end: the window stops at the last column.
+  container.scrollLeft = 4800;
+  slice = renderer.resolveColumnWindow(plan, 1, settings);
+  assert.equal(slice.after, 0);
+  assert.equal(slice.plan.at(-1).position, 49);
+
+  // Two values per column: a position is twice as wide.
+  container.scrollLeft = 2000;
+  assert.equal(renderer.resolveColumnWindow(plan, 2, settings).before, 7);
+});

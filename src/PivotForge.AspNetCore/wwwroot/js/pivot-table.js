@@ -282,6 +282,7 @@ PivotForge.print = function print(element, options = {}) {
 
     restored = true;
     view.removeEventListener?.("afterprint", restore);
+    options.onRestore?.();
     hidden.forEach(node => node.removeAttribute("data-pivot-print-hidden"));
     selected.forEach(([node, name]) => node.classList.add(name));
     header?.remove();
@@ -457,6 +458,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // row header (DevExtreme's dataFieldArea: "row"). One value has no
       // header of its own either way, so it changes nothing then.
       valuesPosition: "columns",
+      // Draw only the columns around what the container shows, with a spacer
+      // standing in for the rest (DevExtreme's virtual scrolling, columns).
+      // virtualColumnWidth is the first guess at a value column's width; after
+      // the first draw the spacers use the width the columns came out at.
+      virtualColumns: false,
+      virtualColumnWidth: 100,
       repeatRowLabels: false,
       // Cell lines: null keeps the default grid (lines between cells, none
       // round the outside), true closes it with an outer frame, false takes
@@ -502,6 +509,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.container.classList.add("pivot-table");
     this.container.classList.toggle("is-virtual", Boolean(settings.virtualState));
     this.closeContextMenu();
+    this.activeColumnWindow = null;
 
     if (values.length === 0) {
       this.container.replaceChildren(this.createEmptyState(settings.texts.noValueFields));
@@ -519,6 +527,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.collapsedRows ??= new Set();
     this.applyInitialCollapse(rowHeaders, actualRowDepth, settings);
     this.selectionMetadata = new WeakMap();
+    this.renderedDataStart = this.dataStart(rowDepth);
+    this.renderedValueSpan = columnValues.length;
+    // Read before anything is drawn: head and body slice the same window.
+    this.activeColumnWindow = this.resolveColumnWindow(
+      this.createColumnPlan(columnHeaders, settings), columnValues.length, settings);
     const table = document.createElement("table");
     // A tree is the compact layout drawn as a tree, so it carries both classes
     // and inherits every compact rule.
@@ -560,7 +573,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     // After the spacers, so the rows they insert are excluded from the count.
     this.applyGridIndexes(table, settings.virtualState);
 
+    // Swapping the table must not lose the horizontal position the window was
+    // computed from.
+    const scrollLeft = this.activeColumnWindow ? this.container.scrollLeft : null;
     this.container.replaceChildren(table);
+    if (scrollLeft !== null) {
+      this.container.scrollLeft = scrollLeft;
+    }
     this.currentTable = table;
     this.wireSubtotalToggles(table, result, options);
     this.wireSelection(table, settings);
@@ -574,8 +593,239 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     this.applyColumnWidths(table);
     this.wireColumnResize(table, settings);
     this.applyStickyOffsets(table, headerDepth, rowDepth + this.measureColumns);
-    if (settings.restoreSelectionFocus) {
+    this.wireVirtualColumnScroll(settings);
+    // A redraw the scroll itself asked for must not pull the view back to the
+    // selected cell, or scrolling away from it would be impossible.
+    if (settings.restoreSelectionFocus && !this.scrollRerender) {
       this.restoreSelectedCellFocus(table);
+    }
+    // Last: it may draw the grid again, and nothing after it should touch
+    // the table this call built.
+    this.measureColumnWindow(table);
+  }
+
+  // --- Virtual columns -------------------------------------------------------
+  // Only the plan positions around what the container shows are drawn, one
+  // page of them on either side of it; a spacer before and after keeps the
+  // table as wide as it would be whole. Positions stay absolute, so a column
+  // keeps its index, its width and its selection key wherever the window is.
+
+  virtualColumnWidth(settings) {
+    return Math.max(24, Number(settings?.virtualColumnWidth) || 100);
+  }
+
+  resolveColumnWindow(plan, valueSpan, settings) {
+    if (!settings.virtualColumns || this.columnWindowSuspended || plan.length === 0) {
+      this.columnWindowState = null;
+      return null;
+    }
+
+    // One plan position's width: measured from the last draw once there was
+    // one, so the spacers and the window follow what the browser laid out --
+    // a long header widens a column past any estimate. The declared width is
+    // only the first guess.
+    const width = this.measuredPositionWidth ?? this.virtualColumnWidth(settings) * Math.max(1, valueSpan);
+    // Negative in RTL, where the content scrolls the other way.
+    const scroll = Math.abs(this.container?.scrollLeft ?? 0);
+    const view = Math.max(width, this.container?.clientWidth || 1200);
+    const pageSize = Math.max(1, Math.ceil(view / width));
+    const first = Math.floor(scroll / width);
+    const start = Math.max(0, Math.min(first - pageSize, plan.length - pageSize));
+    const end = Math.min(plan.length, Math.max(start, first) + 2 * pageSize);
+
+    this.columnWindowState = { start, end, total: plan.length, width, pageSize };
+    return {
+      plan: plan.slice(start, end).map((entry, index) => ({ ...entry, position: start + index })),
+      offset: start,
+      before: start,
+      after: plan.length - end
+    };
+  }
+
+  // Stands in for `count` plan positions, at the width the window counts with.
+  createColumnSpacer(tagName, count, valueSpan, settings) {
+    const cell = this.createCell(tagName, "", "pivot-table__virtual-column", "presentation");
+    const positionWidth = this.columnWindowState?.width ?? valueSpan * this.virtualColumnWidth(settings);
+    const width = `${Math.round(count * positionWidth)}px`;
+    cell.setAttribute("aria-hidden", "true");
+    cell.style.width = width;
+    cell.style.minWidth = width;
+    cell.style.maxWidth = width;
+    return cell;
+  }
+
+  appendColumnSpacer(row, side, valueSpan, settings) {
+    const count = this.activeColumnWindow?.[side] ?? 0;
+    if (count > 0) {
+      row.appendChild(this.createColumnSpacer("td", count, valueSpan, settings));
+    }
+  }
+
+  // How wide one plan position came out, from the first body row's drawn
+  // value columns. When it is well off what the window counted with, the grid
+  // is drawn once more with it, so the spacers match the columns they replace.
+  measureColumnWindow(table) {
+    const state = this.columnWindowState;
+    const window = this.activeColumnWindow;
+    const row = table.tBodies[0]?.rows[0];
+
+    if (!state || !window || !row || window.plan.length === 0) {
+      return;
+    }
+
+    const first = this.renderedDataStart + window.offset * this.renderedValueSpan;
+    const last = first + window.plan.length * this.renderedValueSpan;
+    let total = 0;
+
+    for (const cell of row.cells) {
+      const index = Number(cell.dataset.columnIndex);
+      if (index >= first && index < last) {
+        total += cell.getBoundingClientRect?.().width ?? 0;
+      }
+    }
+
+    const measured = total / window.plan.length;
+    if (!(measured > 0)) {
+      return;
+    }
+
+    this.measuredPositionWidth = measured;
+    if (Math.abs(measured - state.width) / state.width > 0.1 && !this.remeasuring) {
+      this.remeasuring = true;
+      try {
+        this.rerenderForScroll();
+      } finally {
+        this.remeasuring = false;
+      }
+    }
+  }
+
+  // Wired once per renderer: redraws when the view nears the window's edge.
+  wireVirtualColumnScroll(settings) {
+    if (!settings.virtualColumns || this.virtualScrollWired || typeof this.container?.addEventListener !== "function") {
+      return;
+    }
+
+    this.virtualScrollWired = true;
+    this.container.addEventListener("scroll", () => {
+      const state = this.columnWindowState;
+      if (!state || this.virtualFramePending) {
+        return;
+      }
+
+      const first = Math.floor(Math.abs(this.container.scrollLeft) / state.width);
+      const margin = Math.ceil(state.pageSize / 2);
+      const nearStart = state.start > 0 && first < state.start + margin;
+      const nearEnd = state.end < state.total && first + state.pageSize > state.end - margin;
+
+      if (!nearStart && !nearEnd) {
+        return;
+      }
+
+      this.virtualFramePending = true;
+      const run = () => {
+        this.virtualFramePending = false;
+        this.rerenderForScroll();
+      };
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(run);
+      } else {
+        setTimeout(run, 0);
+      }
+    }, { passive: true });
+  }
+
+  // The redraw replaces the cell that had focus -- often the one a click
+  // just scrolled into view -- so focus goes back to the selected cell, where
+  // it was, without moving the view to it.
+  rerenderForScroll() {
+    const hadFocus = typeof document !== "undefined" && Boolean(this.container?.contains?.(document.activeElement));
+    this.scrollRerender = true;
+    try {
+      this.rerenderLast();
+    } finally {
+      this.scrollRerender = false;
+    }
+
+    if (hadFocus) {
+      this.currentTable?.querySelector("td.is-cell-selected")?.focus({ preventScroll: true });
+    }
+  }
+
+  // An arrow key at the window's edge: the next column is not drawn yet, so
+  // the view moves to it and the grid redraws before focus lands there.
+  // Undefined when the ordinary navigation can handle the move.
+  moveAcrossColumnWindow(table, currentCell, step, settings) {
+    const state = this.columnWindowState;
+    const valueSpan = this.renderedValueSpan;
+    const first = this.renderedDataStart;
+    const desired = Number(currentCell.dataset.columnIndex) + step;
+    const row = currentCell.closest("tr");
+
+    if (!state || !row || !(desired >= first && desired < first + state.total * valueSpan) ||
+        row.querySelector(`[data-column-index="${desired}"]`)) {
+      return undefined;
+    }
+
+    const rowIndex = Array.from(table.tBodies[0]?.rows ?? []).indexOf(row);
+    const position = Math.floor((desired - first) / valueSpan);
+    const target = Math.max(0, position * state.width - (this.container.clientWidth - state.width) / 2);
+    this.container.scrollLeft = PivotForge.isRtl(this.container) ? -target : target;
+    this.rerenderForScroll();
+
+    const next = this.currentTable?.tBodies[0]?.rows[rowIndex]
+      ?.querySelector(`[data-selection-target="cell"][data-column-index="${desired}"]`);
+    if (!next) {
+      return currentCell;
+    }
+
+    this.setSelection(this.selectionMetadata.get(next), settings);
+    next.focus({ preventScroll: true });
+    this.ensureCellVisible(next, this.currentTable);
+    return next;
+  }
+
+  // Printing shows the whole table, so the window steps aside until it is done.
+  suspendColumnWindow() {
+    if (!this.columnWindowState) {
+      return false;
+    }
+
+    this.columnWindowSuspended = true;
+    this.rerenderLast();
+    return true;
+  }
+
+  resumeColumnWindow() {
+    if (!this.columnWindowSuspended) {
+      return;
+    }
+
+    this.columnWindowSuspended = false;
+    this.rerenderLast();
+  }
+
+  // An export is of the whole table, as DevExtreme's skips its virtual cut: a
+  // copy of this renderer draws it without the window, off screen, and the
+  // model is read from that.
+  exportModelWithAllColumns(options) {
+    const host = document.createElement("div");
+    host.dir = PivotForge.isRtl(this.container) ? "rtl" : "ltr";
+    host.setAttribute("aria-hidden", "true");
+    host.style.cssText = "position:absolute;left:-100000px;top:0;visibility:hidden;max-height:none;";
+    document.body.appendChild(host);
+
+    try {
+      const copy = new this.constructor(host, { ...this.options, virtualColumns: false, restoreSelectionFocus: false });
+      copy.collapsedRows = new Set(this.collapsedRows ?? []);
+      copy.collapsedColumns = new Set(this.collapsedColumns ?? []);
+      copy.columnWidths = new Map(this.columnWidths);
+      copy.initialCollapseApplied = true;
+      copy.initialColumnCollapseApplied = true;
+      copy.render(this.lastResult, { ...(this.lastOptions ?? {}), virtualColumns: false, restoreSelectionFocus: false });
+      return copy.getExcelExportModel(options);
+    } finally {
+      host.remove();
     }
   }
 
@@ -712,6 +962,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     if (!table) {
       return null;
+    }
+
+    if (this.activeColumnWindow && this.lastResult && typeof document !== "undefined") {
+      return this.exportModelWithAllColumns(options);
     }
 
     const bodyRow = table.tBodies[0]?.rows[0];
@@ -991,9 +1245,12 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   }
 
   columnCount(rowDepth, columnHeaders, values, settings) {
-    return this.dataStart(rowDepth) +
-      Math.max(1, this.createColumnPlan(columnHeaders, settings).length) * values.length +
-      this.totalColumnValues(values, settings).length;
+    const window = this.activeColumnWindow;
+    const planColumns = window
+      ? window.plan.length * values.length + (window.before > 0 ? 1 : 0) + (window.after > 0 ? 1 : 0)
+      : Math.max(1, this.createColumnPlan(columnHeaders, settings).length) * values.length;
+
+    return this.dataStart(rowDepth) + planColumns + this.totalColumnValues(values, settings).length;
   }
 
   // The columns in the order they are drawn, each a block of one cell per
@@ -1083,8 +1340,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     thead.setAttribute("role", "rowgroup");
     const valueSpan = values.length;
     const totalValues = this.totalColumnValues(values, settings);
-    const columnPlan = this.createColumnPlan(columnHeaders, settings);
-    const planWidth = Math.max(1, columnPlan.length);
+    const fullPlan = this.createColumnPlan(columnHeaders, settings);
+    // With virtual columns only the window is drawn; positions stay absolute,
+    // so a column keeps its index -- and its width -- wherever the window is.
+    const columnWindow = this.activeColumnWindow;
+    const columnPlan = columnWindow ? columnWindow.plan : fullPlan;
+    const offset = columnWindow?.offset ?? 0;
+    const planWidth = Math.max(1, fullPlan.length);
+    const spacer = side => columnWindow?.[side] > 0
+      ? this.createColumnSpacer("th", columnWindow[side], valueSpan, settings)
+      : null;
+    const spacerCount = (columnWindow?.before > 0 ? 1 : 0) + (columnWindow?.after > 0 ? 1 : 0);
     // A column header names a value -- "2024" -- never the field behind it, so
     // there is nowhere to hang a sort arrow or a funnel the way the row axis
     // hangs them on its corner. The field names get a cell of their own in the
@@ -1162,6 +1428,10 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       }
 
       const groups = this.createColumnHeaderGroups(columnPlan, level);
+      const before = spacer("before");
+      if (before) {
+        row.appendChild(before);
+      }
 
       for (const group of groups) {
         if (group.subtotal) {
@@ -1177,7 +1447,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
           header.colSpan = valueSpan;
           header.rowSpan = columnDepth - level;
           header.dataset.stickyRow = String(level);
-          header.dataset.columnStart = String(this.dataStart(rowDepth) + group.start * valueSpan);
+          header.dataset.columnStart = String(this.dataStart(rowDepth) + (offset + group.start) * valueSpan);
           if (measureDepth === 0 && values.length === 1 && !values[0].slot) {
             this.decorateSortableHeader(header, label, {
               mode: "RowTotalValue",
@@ -1197,7 +1467,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         const header = this.createCell("th", this.displayValue(group.value, settings), "pivot-table__column-header");
         header.colSpan = group.span * valueSpan;
         header.dataset.stickyRow = String(level);
-        header.dataset.columnStart = String(this.dataStart(rowDepth) + group.start * valueSpan);
+        header.dataset.columnStart = String(this.dataStart(rowDepth) + (offset + group.start) * valueSpan);
 
         if (group.value === null || group.value === undefined || group.value === "") {
           header.classList.add("is-empty");
@@ -1224,6 +1494,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         }
 
         row.appendChild(header);
+      }
+
+      const after = spacer("after");
+      if (after) {
+        row.appendChild(after);
       }
 
       if (level === 0 && totalValues.length > 0) {
@@ -1257,8 +1532,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         measureRow.appendChild(filler);
       }
 
-      for (let position = 0; position < planWidth; position++) {
-        const entry = columnPlan[position];
+      const before = spacer("before");
+      if (before) {
+        measureRow.appendChild(before);
+      }
+
+      for (let index = 0; index < (columnWindow ? columnPlan.length : planWidth); index++) {
+        const entry = columnPlan[index];
+        const position = offset + index;
         const isSubtotal = entry?.type === "subtotal";
 
         values.forEach((value, valueIndex) => {
@@ -1282,6 +1563,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         });
       }
 
+      const after = spacer("after");
+      if (after) {
+        measureRow.appendChild(after);
+      }
+
       totalValues.forEach((value, valueIndex) => {
         const totalCell = this.createCell("th", value.label, "pivot-table__value-header pivot-table__total-value-header");
         totalCell.dataset.stickyRow = String(columnDepth);
@@ -1303,7 +1589,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // the row names an axis, not a coordinate, so there is nothing to line up
       // with underneath.
       const filler = this.createCell("th", "", "pivot-table__column-field-filler");
-      filler.colSpan = planWidth * valueSpan + totalValues.length;
+      filler.colSpan = (columnWindow ? columnPlan.length : planWidth) * valueSpan + spacerCount + totalValues.length;
       rowFieldRow.appendChild(filler);
       thead.appendChild(rowFieldRow);
     }
@@ -1549,7 +1835,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       cell.values ?? {}
     ]));
 
-    columns.plan.forEach((entry, position) => {
+    this.appendColumnSpacer(row, "before", values.length, settings);
+
+    columns.plan.forEach((entry, index) => {
+      const position = entry.position ?? index;
+
       if (entry.type === "subtotal") {
         this.appendColumnSubtotalCells(row, rowInfo, rowSelection, entry, position, rowDepth, values, lookup,
           settings, columns, crossings);
@@ -1598,6 +1888,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       });
     });
 
+    this.appendColumnSpacer(row, "after", values.length, settings);
+
     this.totalColumnValues(values, settings).forEach((valueDefinition, valueIndex) => {
       const serverTotal = rowInfo.type === "detail"
         ? rowTotalLookup.get(rowInfo.rowIndexes[0])?.[valueDefinition.key]
@@ -1614,7 +1906,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       if (totalValue === null || totalValue === undefined) {
         totalCell.classList.add("is-empty");
       }
-      totalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + Math.max(1, columns.plan.length) * values.length + valueIndex);
+      totalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + Math.max(1, columns.width) * values.length + valueIndex);
       this.registerSelectionTarget(totalCell, this.createCellSelection(rowSelection, {
         kind: "rowTotal",
         columnIndex: null,
@@ -1641,8 +1933,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   // them -- an older server -- leaves serverSubtotals false, and the cells
   // are summed here from the columns they cover instead.
   createColumnContext(columnHeaders, settings, columnSubtotals = null) {
+    const plan = this.createColumnPlan(columnHeaders, settings);
+
     return {
-      plan: this.createColumnPlan(columnHeaders, settings),
+      // The drawn columns -- the window, with virtual columns -- each carrying
+      // its absolute position; width is the whole plan's, which the total
+      // columns after it are counted from.
+      plan: this.activeColumnWindow ? this.activeColumnWindow.plan : plan,
+      width: plan.length,
       subtotals: new Map((columnSubtotals ?? []).map(subtotal => [
         this.createSubtotalKey(subtotal.columnHeader ?? []),
         {
@@ -2131,6 +2429,13 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       return null;
     }
 
+    if (this.columnWindowState && (direction === "ArrowLeft" || direction === "ArrowRight")) {
+      const moved = this.moveAcrossColumnWindow(table, currentCell, direction === "ArrowRight" ? 1 : -1, settings);
+      if (moved !== undefined) {
+        return moved;
+      }
+    }
+
     const currentColumn = Number(currentCell.dataset.columnIndex);
     const currentIndex = rows[currentRow].indexOf(currentCell);
     const nextPosition = this.resolveNavigationPosition(
@@ -2286,6 +2591,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
   getRowCopyText(row) {
     return Array.from(row?.children ?? [])
+      .filter(cell => !cell.classList?.contains("pivot-table__virtual-column"))
       .map(cell => String(cell.textContent ?? "").trim())
       .join("\t");
   }
@@ -2976,7 +3282,11 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       row.appendChild(header);
     }
 
-    columns.plan.forEach((entry, position) => {
+    this.appendColumnSpacer(row, "before", values.length, settings);
+
+    columns.plan.forEach((entry, index) => {
+      const position = entry.position ?? index;
+
       if (entry.type === "subtotal") {
         values.forEach((valueDefinition, valueIndex) => {
           const totalValue = columns.serverSubtotals
@@ -3034,12 +3344,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       });
     });
 
+    this.appendColumnSpacer(row, "after", values.length, settings);
+
     this.totalColumnValues(values, settings).forEach((valueDefinition, valueIndex) => {
       const grandTotalCell = this.createCell(
         "td",
         this.formatValue(grandTotals[valueDefinition.key], settings, valueDefinition),
         "pivot-table__grand-total");
-      grandTotalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + Math.max(1, columns.plan.length) * values.length + valueIndex);
+      grandTotalCell.dataset.columnIndex = String(this.dataStart(rowDepth) + Math.max(1, columns.width) * values.length + valueIndex);
       this.registerSelectionTarget(grandTotalCell, this.createCellSelection(rowSelection, {
         kind: "rowTotal",
         columnIndex: null,
@@ -3080,9 +3392,16 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       rowHeaderWidths.push(width);
     }
 
-    table.querySelectorAll("[data-sticky-row]").forEach(cell => {
-      cell.style.setProperty("--sticky-top", "0px");
-    });
+    // Each head row sticks below the rows above it, so a multi-row head stays
+    // readable when the body scrolls up under it. A cell spanning several rows
+    // belongs to the row it starts in.
+    let top = 0;
+    for (const row of table.tHead?.rows ?? []) {
+      for (const cell of row.cells) {
+        cell.style.setProperty("--sticky-top", `${top}px`);
+      }
+      top += row.getBoundingClientRect?.().height ?? 0;
+    }
 
     table.querySelectorAll("[data-sticky-column]").forEach(cell => {
       const level = Number(cell.dataset.stickyColumn ?? "0");

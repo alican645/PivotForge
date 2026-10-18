@@ -899,6 +899,24 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesVirtualColumnsAndItsWidthOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", VirtualColumns = true, VirtualColumnWidth = 80 },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var undeclared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var renderer = declared.GetProperty("rendererOptions");
+        Assert.True(renderer.GetProperty("virtualColumns").GetBoolean());
+        Assert.Equal(80, renderer.GetProperty("virtualColumnWidth").GetInt32());
+        Assert.False(undeclared.TryGetProperty("rendererOptions", out var options) &&
+            options.TryGetProperty("virtualColumns", out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotGridBuilder().VirtualColumns(true, 10));
+    }
+
+    [Fact]
     public async Task OmitsValuesPositionWhenTheAttributeIsNotWritten()
     {
         var config = ConfigOf(await RenderAsync(

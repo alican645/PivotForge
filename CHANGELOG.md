@@ -43,6 +43,14 @@ change will require a new major version.
   Expand all / Collapse all buttons reach both axes. The header's
   sort arrow on a collapsed column orders the rows by that group's total.
   (AspNetCore)
+- Virtual columns: `virtual-columns="true"` / `VirtualColumns(bool, int?)` /
+  `rendererOptions.virtualColumns`, DevExtreme's virtual scrolling on the
+  column axis. Only a window of columns -- a page either side of the view --
+  is drawn, with a spacer before and after keeping the table its full width;
+  scrolling sideways redraws the window, and the arrow keys walk past its
+  edge. The spacers are measured from the drawn columns
+  (`virtual-column-width` is the first guess, 100). Excel, CSV and printing
+  get every column. Independent of `large-data`'s row paging. (AspNetCore)
 - A group header's menu, DevExtreme's Expand All / Collapse All: right-clicking
   a row header above the innermost level or a column header that folds (or
   the menu key / Shift+F10 on a row header) offers **Expand all {field}** /
@@ -51,6 +59,14 @@ change will require a new major version.
   to do is disabled. `context-menu="false"` turns it off with the cell menu.
   `expandLevel(axis, level)` / `collapseLevel(axis, level)` on the renderer.
   (AspNetCore)
+
+### Fixed
+
+- The frozen headers were not frozen: a general `th` rule outranked the
+  rules making the row headers and the head rows sticky, so the row headers
+  scrolled away sideways and the head scrolled up out of view. They stick
+  now, and each head row sits below the ones above it instead of every row
+  stacking at the top. (AspNetCore)
 
 ## [0.7.0-preview.1] — 2026-10-18
 
