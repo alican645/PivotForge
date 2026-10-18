@@ -182,6 +182,8 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | `customizeText` | `null` | Only on `data` fields (and `available` measures). A function, or the name of one on the page (`"app.pivot.amountText"`, resolved when a cell is drawn like an event handler, so it may be defined further down the page), that has the last word on each value's text. It is called with `{ value, valueText, valueKey }`, after the format; what it returns is shown, and `null` or `undefined` keeps `valueText`. From C#: `CustomizeText(string)`; from markup: `customize-text`. The Excel export keeps the number and its format, not this text; the CSV export writes what the grid shows. |
 | `allowCrossGroupCalculation` | `true` | Only on `data` fields. Whether `showAs: "runningTotal"` and the two "previous" comparisons walk the whole row (the default, as before) or start afresh at each outer column group: with Year and Quarter on the columns, `false` starts the running total again every year and gives each year's first quarter nothing to compare with. The group is the last column level's parent, so with Year, Quarter and Month it starts again every quarter. A single column level is one group either way. This follows DevExtreme's option of the same name, whose default is the opposite. From C#: `AllowCrossGroupCalculation(bool)`; from markup: `allow-cross-group-calculation`; in the engine: `PivotValueDefinition.AllowCrossGroupCalculation`. |
 | `displayFolder` | `null` | Valid in every area. The folder the field is listed under in the designer's field list, such as `"Sales"`: fields without one come first, then a heading per folder, in the order the catalog first names it, that opens and closes. A search opens every folder so a match is never hidden. One level only; the name is not split. From C#: `DisplayFolder(string)`; from markup: `display-folder`. |
+| `groupName` | `null` | Makes the field part of a hierarchy, DevExtreme's `groupName`. A field with `groupName` and neither `groupIndex` nor `groupInterval` is the group itself; one with `groupIndex` is a level of it. See [Field groups](#field-groups). From C#: `GroupName(string)`; from markup: `group-name`. |
+| `groupIndex` | the next free level | A level's place in its group, a whole number from 0. A level with `groupName` and `groupInterval` but no index takes the next one. From C#: `GroupIndex(int)`; from markup: `group-index`. |
 | `visible` | `true` | `false` configures a field without including it in the rendered request. |
 | `expanded` | `true` | Only on `row` fields. `false` collapses this level's groups at the grid's **first** render; after that the state belongs to the user, and a restored `state-storing` view wins. Declaring it on the deepest row field does nothing — that level's rows are the detail rows and have no groups. |
 | `showTotals` | `true` | Only on `row` and `column` fields. On a row field, `false` leaves the group header in place without its sums, which is the same shape the grid uses when `subtotals` is off entirely — so a deep hierarchy can total the levels worth totalling and nowhere else. On a column field, `false` drops the total column after each of its groups. The grid-wide `subtotals="false"` / `column-subtotals="false"` still win. |
@@ -787,6 +789,33 @@ It needs no host element on the page.
 | `field-chooser-all-fields` | `allFields` | `true` | Lists every field, placed or not, each with a checkbox: ticking a measure puts it among the values, any other field on the columns; clearing removes it; a folder's box places its first field, or removes every placed one. Enter on a listed field does the same. `false` lists only the unplaced fields. |
 | `field-chooser-apply-changes-mode` | `applyChangesMode: "instantly" \| "onDemand"` | `Instantly` | `OnDemand` holds every edit until **OK**; **Cancel**, Escape or a click outside puts the layout back as the dialog found it. |
 
+#### Field groups
+
+A hierarchy is declared as DevExtreme declares one: a group field naming the group, then its
+levels naming the group and their place in it.
+
+```html
+<pivot-field group-name="Date" field="OrderDate" area="Column" caption="Order date" />
+<pivot-field group-name="Date" group-index="0" group-interval="Year" />
+<pivot-field group-name="Date" group-index="1" group-interval="Quarter" />
+<pivot-field group-name="Date" group-index="2" group-interval="Month" />
+```
+
+- The group field is not a field of its own. Each level takes from it what it does not declare:
+  `area`, `areaIndex`, `expanded`, `dataField`, `dataType`, the sort settings, `visible` and
+  `showTotals`. A group with no area is offered unplaced.
+- The levels stay together in `groupIndex` order wherever the group stands. The field list
+  shows the group once, under its caption (the group field's, or `groupName` titled) with a ⋮
+  mark; on a zone its levels are drawn joined.
+- Dragging, moving with the keyboard or removing any level does the same to the whole group,
+  in the designer and the field chooser alike. A stored view that seats only part of a group, or
+  splits it, comes back with the group whole where its first level stood.
+- A level is a dimension: a group in the data area, or a level declared as a measure, is a
+  validation error, as is a `groupIndex` used twice in one group.
+
+Limitation: DevExtreme's tree header filter for a group, whose values are paths such as
+`["2024", "1"]`, is not offered; each level filters on its own values.
+
 #### Discovering fields
 
 `retrieve-fields="true"` (`RetrieveFields()`, `retrieveFields: true`) is DevExtreme's
@@ -798,8 +827,8 @@ it starts with nothing summed and says so until the reader places a measure.
 - The fields come from the record type's public properties and fields, in declaration order, so
   no records are loaded. A nested object or a collection is left out, as is a name starting with
   `__`, and so is any field off `AllowedFields`.
-- A number is offered as a measure, anything else as a dimension. A date comes as its year,
-  quarter and month in a folder named after it.
+- A number is offered as a measure, anything else as a dimension. A date comes as a
+  [group](#field-groups) named after it, of its year, quarter and month.
 - A declared field (the same data field and interval) stays as declared and takes the
   discovered data type if it names none.
 - `fieldsPrepared` (`on-fields-prepared`) fires with `e.fields`, the merged list, before the first

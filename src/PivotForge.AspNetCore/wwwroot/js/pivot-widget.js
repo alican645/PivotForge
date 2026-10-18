@@ -141,9 +141,9 @@
   // DevExtreme's mergeFields for retrieveFields: a discovered field the page
   // declared (same data field and interval) is the declared one, which takes
   // the discovered data type if it names none; every other discovered field is
-  // added after the declared ones, unplaced. A date's levels share a folder
-  // named after the date. Numbers are offered as measures, the rest as
-  // dimensions.
+  // added after the declared ones, unplaced. A date's levels come as one
+  // group named after the date, which the field list shows as one entry.
+  // Numbers are offered as measures, the rest as dimensions.
   function mergeDiscoveredFields(declared, discovered) {
     const identity = field => `${String(field.dataField).toLowerCase()}\u001f${field.groupInterval ?? ""}`;
     const types = new Map();
@@ -176,8 +176,8 @@
         role: field.dataType === "number" && !grouped ? "measure" : "dimension",
         ...(typeof field.dataType === "string" ? { dataType: field.dataType } : {}),
         ...(grouped ? { groupInterval: field.groupInterval } : {}),
-        ...(typeof field.groupName === "string"
-          ? { displayFolder: PivotForge.PivotRequestBuilder.titleize(field.groupName) }
+        ...(typeof field.groupName === "string" && Number.isInteger(field.groupIndex)
+          ? { groupName: field.groupName, groupIndex: field.groupIndex }
           : {})
       });
     }

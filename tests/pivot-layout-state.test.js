@@ -1450,3 +1450,124 @@ test("a selector travels with its column wherever it is placed", () => {
   assert.deepEqual(
     PivotForge.PivotRequestBuilder.buildRequest(state.toFields()).selectors, { FiscalYear: "fiscalYear" });
 });
+
+// --- groupName / groupIndex hierarchies -------------------------------------------
+
+const dateGroup = [
+  { dataField: "Region", caption: "Bölge", area: "row" },
+  // The group field: the hierarchy's name and defaults, no level of its own.
+  { groupName: "Date", dataField: "OrderDate", caption: "Sipariş tarihi", area: "column", expanded: false },
+  { groupName: "Date", groupIndex: 2, groupInterval: "month" },
+  { groupName: "Date", groupIndex: 0, groupInterval: "year" },
+  { groupName: "Date", groupInterval: "quarter", groupIndex: 1 },
+  { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" },
+  { dataField: "Category", caption: "Kategori", area: "available", role: "dimension" }
+];
+
+test("a group's levels take its declaration and stand together in level order", () => {
+  const fields = PivotForge.PivotRequestBuilder.normalizeFields(dateGroup);
+  const levels = fields.filter(field => field.groupName === "Date");
+
+  assert.deepEqual(levels.map(field => field.key), ["OrderDate:year", "OrderDate:quarter", "OrderDate:month"]);
+  assert.ok(levels.every(field => field.area === "column" && field.expanded === false));
+  assert.deepEqual(levels.map(field => field.groupIndex), [0, 1, 2]);
+  assert.ok(levels.every(field => field.groupCaption === "Sipariş tarihi"));
+  // The group field is not a level, so it is not a field of the pivot.
+  assert.equal(fields.length, 6);
+  assert.equal(levels[0].caption, "Order Date Year");
+});
+
+test("an unnumbered level follows the group's highest, and a broken group says why", () => {
+  // Without a group field the levels name the hierarchy themselves.
+  const fields = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Amount", area: "data" },
+    { groupName: "Geo", groupIndex: 0, dataField: "Country", area: "row" },
+    { groupName: "Geo", groupIndex: 1, dataField: "City", area: "row" }
+  ]);
+  assert.equal(fields.find(field => field.key === "City").groupCaption, "Geo");
+
+  const numbered = PivotForge.PivotRequestBuilder.normalizeFields([
+    { dataField: "Amount", area: "data" },
+    { groupName: "D", groupIndex: 0, dataField: "When", groupInterval: "year", area: "row" },
+    { groupName: "D", dataField: "When", groupInterval: "month", area: "row" }
+  ]);
+  assert.equal(numbered.find(field => field.key === "When:month").groupIndex, 1);
+
+  const { normalizeFields } = PivotForge.PivotRequestBuilder;
+  assert.throws(() => normalizeFields([
+    { dataField: "Amount", area: "data" },
+    { groupName: "D", groupIndex: 0, dataField: "A", area: "row" },
+    { groupName: "D", groupIndex: 0, dataField: "B", area: "row" }
+  ]), /two levels with groupIndex 0/);
+  assert.throws(() => normalizeFields([
+    { dataField: "Amount", area: "data", groupName: "M", groupIndex: 0 }
+  ]), /a group's levels are dimensions/);
+  assert.throws(() => normalizeFields([
+    { dataField: "Amount", area: "data" },
+    { groupName: "Lonely", dataField: "X", area: "row" }
+  ]), /Group "Lonely" has no levels/);
+  assert.throws(() => normalizeFields([
+    { dataField: "Amount", area: "data" },
+    { groupName: "D", groupIndex: -1, dataField: "A", area: "row" }
+  ]), /whole number of 0 or more/);
+});
+
+test("moving any level moves the whole group, wherever it is dropped", () => {
+  const state = new PivotForge.PivotLayoutState(dateGroup);
+  assert.deepEqual(state.getState().columns, ["OrderDate:year", "OrderDate:quarter", "OrderDate:month"]);
+
+  // The month, dropped before the region: the three of them, in level order.
+  state.move("OrderDate:month", "row", 0);
+  assert.deepEqual(state.getState().rows, ["OrderDate:year", "OrderDate:quarter", "OrderDate:month", "Region"]);
+  assert.deepEqual(state.getState().columns, []);
+
+  // Down past the region, within the same zone.
+  state.move("OrderDate:year", "row", 4);
+  assert.deepEqual(state.getState().rows, ["Region", "OrderDate:year", "OrderDate:quarter", "OrderDate:month"]);
+
+  state.reorder("row", 2, 0);
+  assert.deepEqual(state.getState().rows, ["OrderDate:year", "OrderDate:quarter", "OrderDate:month", "Region"]);
+
+  state.move("OrderDate:quarter", "filter");
+  assert.deepEqual(state.getState().filters.map(filter => filter.field),
+    ["OrderDate:year", "OrderDate:quarter", "OrderDate:month"]);
+
+  state.remove("OrderDate:month");
+  assert.deepEqual(state.getState().filters, []);
+  assert.deepEqual(state.getState().available.filter(name => name.startsWith("OrderDate")),
+    ["OrderDate:year", "OrderDate:quarter", "OrderDate:month"]);
+});
+
+test("a filtered level keeps its filter when its group moves", () => {
+  const state = new PivotForge.PivotLayoutState(dateGroup);
+  state.setFilterValues("OrderDate:year", ["2024"]);
+
+  state.move("OrderDate:month", "row");
+
+  assert.deepEqual(state.getState().filters, [{ field: "OrderDate:year", values: ["2024"], mode: "Include" }]);
+});
+
+test("a stored layout naming one level, or splitting a group, is drawn up whole", () => {
+  const state = new PivotForge.PivotLayoutState(dateGroup, {
+    rows: ["Region", "OrderDate:quarter"],
+    columns: ["OrderDate:year"],
+    values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+    filters: []
+  });
+
+  assert.deepEqual(state.getState().rows, ["Region", "OrderDate:year", "OrderDate:quarter", "OrderDate:month"]);
+  assert.deepEqual(state.getState().columns, []);
+});
+
+test("toFields keeps each level in its group through a round trip", () => {
+  const state = new PivotForge.PivotLayoutState(dateGroup);
+  state.move("OrderDate:year", "row");
+
+  const again = PivotForge.PivotRequestBuilder.normalizeFields(state.toFields());
+  const levels = again.filter(field => field.groupName === "Date");
+  assert.deepEqual(levels.map(field => [field.key, field.area, field.groupIndex, field.groupCaption]), [
+    ["OrderDate:year", "row", 0, "Sipariş tarihi"],
+    ["OrderDate:quarter", "row", 1, "Sipariş tarihi"],
+    ["OrderDate:month", "row", 2, "Sipariş tarihi"]
+  ]);
+});

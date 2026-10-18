@@ -463,6 +463,14 @@
     // still waiting in the field list may declare it, because the catalog is the
     // only place it can live until the user drags it into the data area.
     const holdsGrandTotals = isData || (area === "available" && role === "measure");
+
+    // A hierarchy is something to group by, so its levels are dimensions.
+    const groupName = typeof field.groupName === "string" ? field.groupName : null;
+    if (groupName !== null && (isData || role === "measure")) {
+      throw new Error(
+        `Field "${dataField}" is a level of group "${groupName}", and a group's levels are dimensions: ` +
+        "it cannot be a measure or sit in the data area.");
+    }
     // On a dimension showTotals switches its level's subtotals off; on a measure
     // it takes the measure out of every subtotal column (DevExtreme's showTotals).
     if (!isRow && !isColumn && !holdsGrandTotals && field.showTotals !== undefined) {
@@ -691,6 +699,13 @@
       customizeText: holdsGrandTotals ? field.customizeText ?? null : null,
       // The field list's folder, in any area: a field keeps it wherever it goes.
       displayFolder: declared("displayFolder") ? field.displayFolder.trim() : null,
+      // The hierarchy the level belongs to, which moves as one: its name, the
+      // level's place in it, and the name the field list shows for the whole.
+      groupName: groupName,
+      groupIndex: groupName === null ? null : field.groupIndex,
+      groupCaption: groupName === null
+        ? null
+        : typeof field.groupCaption === "string" && field.groupCaption !== "" ? field.groupCaption : titleize(groupName),
       visible: field.visible !== false
     };
   }
@@ -731,7 +746,114 @@
       throw new Error('"fields" must be an array.');
     }
 
-    return applyAreaIndex(fields.map(normalizeField));
+    return applyAreaIndex(expandGroups(fields).map(normalizeField));
+  }
+
+  // What a level takes from its group field when it does not say (DevExtreme's
+  // getFieldsByGroup): where the group sits and how it is ordered and totalled.
+  const GROUP_INHERITED = [
+    "area", "areaIndex", "expanded", "dataField", "dataType", "sortBy", "sortOrder", "sortingMethod",
+    "sortByValueKey", "sortBySummaryPath", "visible", "showTotals"
+  ];
+
+  // A group field names a hierarchy and carries no level of its own: a
+  // groupName with neither a groupIndex nor a groupInterval.
+  function isGroupField(field) {
+    return Boolean(field) && typeof field === "object" && typeof field.groupName === "string" &&
+      (field.groupIndex === undefined || field.groupIndex === null) &&
+      (field.groupInterval === undefined || field.groupInterval === null);
+  }
+
+  // DevExtreme's groupName / groupIndex: the levels of one hierarchy take what
+  // their group field declares, are numbered when they do not say (after the
+  // highest index the group already has), and are drawn up together in level
+  // order where the first of them stands. The group field itself is left out:
+  // it is the hierarchy's name and defaults, not a level.
+  function expandGroups(fields) {
+    const groups = new Map();
+    const highest = new Map();
+    fields.forEach((field, index) => {
+      if (field && typeof field === "object" && field.groupName !== undefined && field.groupName !== null &&
+          (typeof field.groupName !== "string" || field.groupName.trim() === "")) {
+        throw new Error(`"groupName" on the field at index ${index} must be a non-empty string.`);
+      }
+
+      if (isGroupField(field)) {
+        if (groups.has(field.groupName)) {
+          throw new Error(`Group "${field.groupName}" is declared twice.`);
+        }
+        groups.set(field.groupName, field);
+      } else if (typeof field?.groupName === "string" && Number.isInteger(field.groupIndex)) {
+        highest.set(field.groupName, Math.max(highest.get(field.groupName) ?? -1, field.groupIndex));
+      }
+    });
+
+    const levels = new Map();
+    const expanded = [];
+    fields.forEach(field => {
+      if (isGroupField(field)) {
+        return;
+      }
+
+      if (typeof field?.groupName !== "string") {
+        expanded.push(field);
+        return;
+      }
+
+      const name = field.groupName;
+      let groupIndex = field.groupIndex;
+      if (groupIndex === undefined || groupIndex === null) {
+        groupIndex = (highest.get(name) ?? -1) + 1;
+        highest.set(name, groupIndex);
+      }
+
+      if (!Number.isInteger(groupIndex) || groupIndex < 0) {
+        throw new Error(`"groupIndex" on a level of group "${name}" must be a whole number of 0 or more.`);
+      }
+
+      const group = groups.get(name);
+      const inherited = {};
+      for (const property of GROUP_INHERITED) {
+        if (field[property] === undefined && group?.[property] !== undefined) {
+          inherited[property] = group[property];
+        }
+      }
+
+      const level = {
+        ...inherited,
+        ...field,
+        // A level whose group names no area waits in the field list, as an
+        // unplaced DevExtreme field does; a hierarchy is always a dimension.
+        ...(field.area === undefined && inherited.area === undefined ? { area: "available" } : {}),
+        ...(field.role === undefined && (field.area ?? inherited.area ?? "available") === "available"
+          ? { role: "dimension" }
+          : {}),
+        groupIndex,
+        ...(field.groupCaption === undefined && group?.caption !== undefined ? { groupCaption: group.caption } : {})
+      };
+      if (!levels.has(name)) {
+        levels.set(name, []);
+        // The group's place in the list: where its first level stands.
+        expanded.push({ group: name });
+      }
+
+      const siblings = levels.get(name);
+      if (siblings.some(sibling => sibling.groupIndex === groupIndex)) {
+        throw new Error(`Group "${name}" has two levels with groupIndex ${groupIndex}.`);
+      }
+      siblings.push(level);
+    });
+
+    for (const name of groups.keys()) {
+      if (!levels.has(name)) {
+        throw new Error(`Group "${name}" has no levels: give its fields groupName "${name}" and a groupIndex.`);
+      }
+    }
+
+    return expanded.flatMap(entry => (entry && typeof entry === "object" && "group" in entry &&
+      Object.keys(entry).length === 1
+      ? levels.get(entry.group).sort((left, right) => left.groupIndex - right.groupIndex)
+      : [entry]));
   }
 
   // The one place the filter vocabulary is spelled out, so the designer, the

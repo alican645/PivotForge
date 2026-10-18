@@ -27,10 +27,16 @@ change will require a new major version.
 - DevExtreme's `retrieveFields`: `retrieve-fields` / `RetrieveFields()` /
   `retrieveFields: true` asks the new `POST {prefix}/fields` endpoint for the
   record type's fields before the first load and lists every undeclared one in
-  the field chooser and designer, unplaced (a date as its year, quarter and
-  month in its own folder; nothing off `AllowedFields`). A grid declaring no
+  the field chooser and designer, unplaced (a date as one group of its year,
+  quarter and month; nothing off `AllowedFields`). A grid declaring no
   fields discovers them by default and starts empty until a measure is placed.
   `fieldsPrepared` sees and may change the merged list. (AspNetCore)
+- DevExtreme's field groups: `groupName` / `groupIndex` (`group-name`,
+  `group-index`, `GroupName()`, `GroupIndex()`) declare a hierarchy whose
+  levels take the group field's area, order, sort and totals settings. The
+  field list shows the group once; dragging, moving or removing any level
+  moves the whole group, and a stored view comes back with the group whole.
+  The tree header filter for a group is not offered. (AspNetCore)
 - `PivotFieldDiscovery.Discover<T>()` / `Discover(DataTable)` /
   `Discover(dictionaries)`: the fields a source offers, with their data types.
   (Core)

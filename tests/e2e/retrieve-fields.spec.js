@@ -35,13 +35,14 @@ async function build(page, fields) {
   await expect(page.locator(dialog)).toBeVisible();
 }
 
-test("the record type's fields are offered, a date as its year, quarter and month in one folder", async ({ page }) => {
+test("the record type's fields are offered, a date as one group of its year, quarter and month", async ({ page }) => {
   await build(page, FIELDS);
 
   await expect(page.locator(chip("SalesPerson"))).toContainText("Sales Person");
-  await expect(page.locator(chip("OrderDate:year"))).toContainText("Order Date Year");
-  await expect(page.locator(chip("OrderDate:month"))).toHaveClass(/is-in-folder/);
-  await expect(page.locator(`${dialog} .pivot-field-folder`, { hasText: "Order Date" })).toHaveCount(1);
+  // The group is listed once, by its first level, under the date's name.
+  await expect(page.locator(chip("OrderDate:year"))).toContainText("Order Date");
+  await expect(page.locator(chip("OrderDate:year"))).toHaveClass(/is-group/);
+  await expect(page.locator(chip("OrderDate:month"))).toHaveCount(0);
   // Off the demo's allow-list, so never offered.
   await expect(page.locator(chip("CustomerEmail"))).toHaveCount(0);
   // A declared field is listed once, under its own caption.
@@ -49,13 +50,13 @@ test("the record type's fields are offered, a date as its year, quarter and mont
   await expect(page.locator(chip("Region"))).toContainText("Bölge");
 });
 
-test("a discovered field ticked in the chooser reaches the grid", async ({ page }) => {
+test("a discovered date ticked in the chooser reaches the grid with all its levels", async ({ page }) => {
   await build(page, FIELDS);
 
   await page.locator(`${chip("OrderDate:year")} [data-action="place"]`).check();
 
-  await expect.poll(() => page.evaluate(() => window.discoverWidget.request.columns))
-    .toContainEqual(expect.objectContaining({ field: "OrderDate", interval: "year" }));
+  await expect.poll(() => page.evaluate(() => window.discoverWidget.request.columns.map(column => column.interval)))
+    .toEqual(["year", "quarter", "month"]);
   await expect(page.locator("#discoverHost .pivot-table__table thead")).toContainText("2024");
 });
 

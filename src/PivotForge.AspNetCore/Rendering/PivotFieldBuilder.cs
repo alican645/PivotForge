@@ -8,6 +8,9 @@ public sealed class PivotFieldBuilder
     private string? _dataField;
     private string? _caption;
     private PivotArea _area = PivotArea.Data;
+    private bool _areaDeclared;
+    private string? _groupName;
+    private int? _groupIndex;
     private PivotAggregation? _aggregation;
     private PivotShowAs? _showAs;
     private PivotFieldRole? _role;
@@ -69,6 +72,37 @@ public sealed class PivotFieldBuilder
     public PivotFieldBuilder Area(PivotArea area)
     {
         _area = area;
+        _areaDeclared = true;
+        return this;
+    }
+
+    /// <summary>Puts the field in a hierarchy, DevExtreme's <c>groupName</c>.</summary>
+    /// <remarks>
+    /// With <see cref="GroupIndex"/> or <see cref="GroupInterval"/> the field is a level of the
+    /// group; without either it is the group field, which names the hierarchy and carries the
+    /// defaults its levels take when they do not say: area, order, expanded, sorting, totals,
+    /// visibility, data field and type. A group moves as one in the field designer and is listed
+    /// once, under the group field's caption. A group field needs no data field of its own.
+    /// </remarks>
+    /// <param name="groupName">The hierarchy's name.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentException">The name is null or blank.</exception>
+    public PivotFieldBuilder GroupName(string groupName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(groupName);
+        _groupName = groupName;
+        return this;
+    }
+
+    /// <summary>Sets the level's place in its hierarchy, 0 for the outermost.</summary>
+    /// <remarks>Left out, a level follows the highest index its group already has.</remarks>
+    /// <param name="groupIndex">The zero-based level.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The index is negative.</exception>
+    public PivotFieldBuilder GroupIndex(int groupIndex)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(groupIndex);
+        _groupIndex = groupIndex;
         return this;
     }
 
@@ -578,11 +612,41 @@ public sealed class PivotFieldBuilder
     /// </exception>
     public IDictionary<string, object?> Build()
     {
-        if (string.IsNullOrWhiteSpace(_dataField))
+        // A level or group field may leave its data field to the group, and a level its area:
+        // the browser fills both in from the group field.
+        if (_groupName is null && string.IsNullOrWhiteSpace(_dataField))
         {
             throw new InvalidOperationException(
                 "A pivot field requires DataField to be set before it can be rendered.");
         }
+
+        if (_groupName is not null && (_role == PivotFieldRole.Measure || (_areaDeclared && _area == PivotArea.Data)))
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField ?? _groupName}\" belongs to group \"{_groupName}\", and a group's levels are " +
+                "dimensions: it cannot be a measure or sit in the Data area.");
+        }
+
+        // An undeclared area is the group's, which is a dimension's: checked as one, not written.
+        var inheritsArea = _groupName is not null && !_areaDeclared;
+        var declaredArea = _area;
+        if (inheritsArea)
+        {
+            _area = PivotArea.Row;
+        }
+
+        try
+        {
+            return BuildCore(inheritsArea);
+        }
+        finally
+        {
+            _area = declaredArea;
+        }
+    }
+
+    private IDictionary<string, object?> BuildCore(bool inheritsArea)
+    {
 
         // A formula yields a number, so a calculated field in the field list can only ever be
         // dropped into the data area: its role follows without being declared.
@@ -765,11 +829,26 @@ public sealed class PivotFieldBuilder
                 "Format is only valid on fields whose Area is Data, or Available with the Measure role.");
         }
 
-        var field = new Dictionary<string, object?>(StringComparer.Ordinal)
+        var field = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (_dataField is not null)
         {
-            ["dataField"] = _dataField,
-            ["area"] = ToCamelCase(_area.ToString())
-        };
+            field["dataField"] = _dataField;
+        }
+
+        if (!inheritsArea)
+        {
+            field["area"] = ToCamelCase(_area.ToString());
+        }
+
+        if (_groupName is not null)
+        {
+            field["groupName"] = _groupName;
+        }
+
+        if (_groupIndex is { } groupIndex)
+        {
+            field["groupIndex"] = groupIndex;
+        }
 
         // Undeclared, the browser names the field after its data field, as DevExtreme does:
         // "netAmount" summed reads "Net Amount (Sum)".

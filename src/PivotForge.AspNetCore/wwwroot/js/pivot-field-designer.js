@@ -506,11 +506,21 @@
 
     createChip(name, area) {
       const document = root.document;
-      const field = this.state.field(name);
+      const declared = this.state.field(name);
+      // The field list shows a hierarchy as one entry under its own name; a
+      // zone shows each of its levels, tied together, and every control on any
+      // of them acts on the whole group.
+      const grouped = Boolean(declared.groupName) && this.state.groupMembers?.(name).length > 1;
+      const listedAsGroup = grouped && area === "available";
+      const field = listedAsGroup ? { ...declared, caption: declared.groupCaption ?? declared.caption } : declared;
       const chip = document.createElement("div");
 
       chip.className = "pivot-chip";
       chip.dataset.field = name;
+      if (grouped) {
+        chip.dataset.group = declared.groupName;
+        chip.classList.add(listedAsGroup ? "is-group" : "is-grouped");
+      }
       // The chip -- not its controls -- is what a keyboard user operates, so it
       // is the thing that takes focus. refreshTabStops() decides afterwards
       // which one chip per zone is reachable with Tab.
@@ -546,7 +556,8 @@
         // chip removes it, and the settings modal carries the rest.
         remove.tabIndex = -1;
         remove.textContent = "\u00d7";
-        remove.setAttribute("aria-label", `${field.caption} \u2014 ${this.labels.remove}`);
+        remove.setAttribute("aria-label",
+          `${grouped ? declared.groupCaption ?? field.caption : field.caption} \u2014 ${this.labels.remove}`);
 
         const isLastValue = area === "data" && this.state.getState().values.length === 1;
         if (isLastValue) {
@@ -599,6 +610,14 @@
         chip.appendChild(badge);
       }
 
+      if (listedAsGroup) {
+        const mark = document.createElement("span");
+        mark.className = "pivot-chip__hierarchy";
+        mark.textContent = "\u22ee";
+        mark.setAttribute("aria-hidden", "true");
+        chip.appendChild(mark);
+      }
+
       const label = document.createElement("span");
       label.className = "pivot-chip__label";
       label.textContent = field.caption;
@@ -648,7 +667,7 @@
       box.tabIndex = -1;
       box.checked = this.state.areaOf(name) !== "available";
       box.disabled = this.isLastValue(name);
-      box.setAttribute("aria-label", format(this.labels.placeField, field.caption));
+      box.setAttribute("aria-label", format(this.labels.placeField, this.listedCaption(name)));
       // The chip under it starts a drag on a press; a click on the box is not one.
       box.addEventListener("pointerdown", event => event.stopPropagation());
       box.addEventListener("change", () => {
@@ -2529,7 +2548,20 @@
       this.zones.set(area, { zone, body, area });
 
       const names = this.namesIn(area);
-      names.forEach(name => body.appendChild(this.createChip(name, area)));
+      const groupOf = name => (name === undefined ? null : this.state.field(name).groupName ?? null);
+      names.forEach((name, index) => {
+        const chip = this.createChip(name, area);
+        // The ends of a group's run, where the line tying its levels stops.
+        if (chip.dataset.group) {
+          if (groupOf(names[index - 1]) !== chip.dataset.group) {
+            chip.classList.add("is-group-first");
+          }
+          if (groupOf(names[index + 1]) !== chip.dataset.group) {
+            chip.classList.add("is-group-last");
+          }
+        }
+        body.appendChild(chip);
+      });
       if (this.showsValuesChip() && this.areaOfChip(VALUES_CHIP) === area) {
         body.appendChild(this.createValuesChip());
       }
@@ -2697,13 +2729,28 @@
     // The names the field list shows: the unplaced ones, or with allFields
     // every field the reader can see, in catalog order.
     listedNames() {
-      if (!this.allFields) {
-        return this.namesIn("available");
-      }
+      const names = this.allFields
+        ? (() => {
+          const available = new Set(this.namesIn("available"));
+          return [...this.state.catalog.keys()].filter(name =>
+            !available.has(name) || this.state.field(name).visible !== false);
+        })()
+        : this.namesIn("available");
 
-      const available = new Set(this.namesIn("available"));
-      return [...this.state.catalog.keys()].filter(name =>
-        !available.has(name) || this.state.field(name).visible !== false);
+      // A hierarchy is listed once, by its first level: placing or removing it
+      // carries every level along.
+      return names.filter(name => {
+        const members = this.state.groupMembers?.(name) ?? [name];
+        return members.length < 2 || members[0] === name;
+      });
+    }
+
+    // What the field list calls an entry: a hierarchy by its group's name.
+    listedCaption(name) {
+      const field = this.state.field(name);
+      return field.groupName && (this.state.groupMembers?.(name).length ?? 1) > 1
+        ? field.groupCaption ?? field.caption ?? ""
+        : field.caption ?? "";
     }
 
     renderAvailableChips(body) {
@@ -2712,8 +2759,7 @@
         if (!term) {
           return true;
         }
-        const caption = this.state.field(name).caption ?? "";
-        return foldSearch(caption).includes(term);
+        return foldSearch(this.listedCaption(name)).includes(term);
       });
 
       // Fields with no folder first, then each folder in the order the catalog

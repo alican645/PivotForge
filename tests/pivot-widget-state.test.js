@@ -1062,11 +1062,12 @@ test("retrieveFields offers every undeclared field unplaced, before the first lo
 
   assert.deepEqual(calls.map(call => call.url), ["/pivotforge/fields", "/pivotforge/pivot"]);
   const added = widget.fields.filter(field => field.area === "available" && field.dataField !== "Quarter");
-  assert.deepEqual(added.map(field => [field.key, field.role, field.caption, field.displayFolder]), [
-    ["Channel", "dimension", "Channel", null],
-    ["Discount", "measure", "Discount", null],
-    ["OrderDate:year", "dimension", "Order Date Year", "Order Date"],
-    ["OrderDate:month", "dimension", "Order Date Month", "Order Date"]
+  assert.deepEqual(added.map(field => [field.key, field.role, field.caption, field.groupName, field.groupCaption]), [
+    ["Channel", "dimension", "Channel", null, null],
+    ["Discount", "measure", "Discount", null, null],
+    // A date's levels are one hierarchy, listed as "Order Date".
+    ["OrderDate:year", "dimension", "Order Date Year", "OrderDate", "Order Date"],
+    ["OrderDate:month", "dimension", "Order Date Month", "OrderDate", "Order Date"]
   ]);
   // A declared field is the declared one, and takes the discovered data type.
   const region = widget.fields.find(field => field.key === "Region");

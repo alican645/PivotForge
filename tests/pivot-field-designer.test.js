@@ -2771,3 +2771,54 @@ test("a field menu the page leaves empty does not open", () => {
   assert.equal(documentBody._children.length, before);
   assert.equal(prevented, false);
 });
+
+// --- Hierarchies ---------------------------------------------------------------
+
+const groupCatalog = [
+  { dataField: "Region", caption: "Bölge", area: "row" },
+  { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" },
+  { groupName: "Date", dataField: "OrderDate", caption: "Tarih", area: "available", role: "dimension" },
+  { groupName: "Date", groupIndex: 0, groupInterval: "year", role: "dimension" },
+  { groupName: "Date", groupIndex: 1, groupInterval: "month", role: "dimension" }
+];
+
+function buildGroups(options = {}) {
+  const updates = [];
+  const widget = { update: async payload => { updates.push(payload); } };
+  const state = new PivotForge.PivotLayoutState(groupCatalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget, ...options });
+  return { designer, state, host, updates };
+}
+
+test("the field list shows a hierarchy as one entry under the group's name", () => {
+  const { host } = buildGroups();
+  const listed = chips(zone(host, "available"));
+
+  assert.deepEqual(listed.map(chip => chip.dataset.field), ["OrderDate:year"]);
+  assert.equal(listed[0].classList.contains("is-group"), true);
+  assert.equal(listed[0].dataset.group, "Date");
+  const label = Array.from(listed[0].children).find(child => child.className === "pivot-chip__label");
+  assert.equal(label.textContent, "Tarih");
+});
+
+test("ticking the hierarchy places every level, tied together in the zone; × takes them all", async () => {
+  const { host, state, designer } = buildGroups({ allFields: true });
+  const box = findByAction(chips(zone(host, "available")).find(chip => chip.dataset.group === "Date"), "place");
+
+  box.checked = true;
+  box.dispatch("change", {});
+  await Promise.resolve();
+
+  assert.deepEqual(state.getState().columns, ["OrderDate:year", "OrderDate:month"]);
+  designer.render();
+  const placed = chips(zone(host, "column"));
+  assert.deepEqual(placed.map(chip => [chip.dataset.field, chip.classList.contains("is-grouped")]),
+    [["OrderDate:year", true], ["OrderDate:month", true]]);
+  assert.equal(placed[0].classList.contains("is-group-first"), true);
+  assert.equal(placed[1].classList.contains("is-group-last"), true);
+
+  findByAction(placed[1], "remove").dispatch("click", {});
+  await Promise.resolve();
+  assert.deepEqual(state.getState().columns, []);
+});
