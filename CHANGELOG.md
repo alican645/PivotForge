@@ -14,6 +14,12 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.10.0-preview.1] — 2026-10-18
+
+Field discovery with DevExtreme-style automatic captions, field groups
+(hierarchies), and a client RemoteStore that loads the grid from any
+DevExtreme.AspNet.Data backend.
+
 ### Breaking
 
 - A field without a caption is now titled as DevExtreme titles it, rather than
@@ -967,7 +973,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.9.0-preview.1...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.10.0-preview.1...HEAD
+[0.10.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.9.0-preview.1...v0.10.0-preview.1
 [0.9.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.8.0-preview.1...v0.9.0-preview.1
 [0.8.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.7.0-preview.1...v0.8.0-preview.1
 [0.7.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.6...v0.7.0-preview.1
