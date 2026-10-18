@@ -625,6 +625,49 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     public PivotGridBuilder RetrieveFields(bool retrieve = true) => Set("retrieveFields", retrieve);
 
+    /// <summary>Loads the grid from a DevExtreme.AspNet.Data backend instead of the PivotForge endpoints, DevExtreme's <c>RemoteStore</c>.</summary>
+    /// <remarks>
+    /// The browser sends the backend <c>DataSourceLoader.Load</c> requests -- <c>group</c>,
+    /// <c>groupSummary</c>, <c>totalSummary</c>, <c>filter</c> -- as a GET with JSON-encoded
+    /// parameters and builds the result from the groups that come back, so display modes, running
+    /// totals and ordering by a summary run in the browser. Reference
+    /// <c>js/pivot-result-assembler.js</c> and <c>js/pivot-remote-store.js</c> on the page. What the
+    /// protocol cannot express is refused when the grid starts: aggregations other than sum, count,
+    /// average, min and max, calculated fields, top N, value filters and <c>largeData</c>.
+    /// </remarks>
+    /// <param name="loadUrl">The URL answering <c>DataSourceLoader.Load</c> requests.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The URL is null or blank.</exception>
+    public PivotGridBuilder RemoteStore(string loadUrl)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(loadUrl);
+        return Set("store", new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["type"] = "remote",
+            ["loadUrl"] = loadUrl
+        });
+    }
+
+    /// <summary>Loads the grid through a page function speaking the <c>DataSourceLoader.Load</c> protocol.</summary>
+    /// <remarks>
+    /// The function receives the load options -- <c>group</c>, <c>groupSummary</c>,
+    /// <c>totalSummary</c>, <c>filter</c>, <c>skip</c>, <c>take</c> -- and returns the
+    /// <c>{data, summary, totalCount}</c> answer or a promise of it. The same limits as
+    /// <see cref="RemoteStore"/> apply.
+    /// </remarks>
+    /// <param name="load">The function's name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The name is null or blank.</exception>
+    public PivotGridBuilder RemoteStoreLoad(string load)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(load);
+        return Set("store", new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["type"] = "remote",
+            ["load"] = load
+        });
+    }
+
     /// <summary>Sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
     /// Every string the grid, the field designer, the value picker and the detail modal put

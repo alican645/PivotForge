@@ -37,6 +37,11 @@
     // not declare in the field list, unplaced. Null discovers only for a grid
     // that declares no fields at all.
     retrieveFields: null,
+    // DevExtreme's RemoteStore: { type: "remote", loadUrl } or { type: "remote",
+    // load } groups and sums on a DataSourceLoader backend instead of the
+    // PivotForge endpoints, and the browser builds the pivot from what comes
+    // back. Needs pivot-result-assembler.js and pivot-remote-store.js.
+    store: null,
     largeData: false,
     pageSize: 40,
     sourceRowCount: 100000,
@@ -380,6 +385,7 @@
       // Kept after discovery: a grid offering discovered fields may be laid
       // out with no measure until the reader places one.
       this.retrievesFields = this.fieldsToDiscover;
+      this.remoteStore = this.createRemoteStore();
       this.validateFields(this.options.fields ?? []);
 
       // Resolved before anything reads state, and never fatal: a page that
@@ -482,7 +488,7 @@
           state: this.layoutState,
           widget: this,
           labels: this.designerLabels(),
-          allowCalculatedFields: this.options.allowCalculatedFields !== false,
+          ...this.designerCapabilities(),
           deferUpdates: this.options.deferLayoutUpdate,
           // The field chooser's arrangements and "All fields" list, for a
           // designer the page hosts itself.
@@ -652,6 +658,10 @@
     // have no measure yet; it is checked field by field and the grid shows
     // that a value is needed rather than refusing the layout.
     validateFields(fields) {
+      if (this.remoteStore) {
+        PivotForge.RemoteStore.validateFields(PivotForge.PivotRequestBuilder.normalizeFields(fields));
+      }
+
       if (this.retrievesFields && !hasMeasure(fields)) {
         PivotForge.PivotRequestBuilder.normalizeFields(fields);
         return;
@@ -660,13 +670,68 @@
       PivotForge.PivotRequestBuilder.buildRequest(fields);
     }
 
+    // What the grid summarizes on when it declares a store rather than using
+    // the PivotForge endpoints. What only the engine can do -- a ranking, a
+    // value filter, a page of a large result -- is refused here, where the
+    // grid is declared, rather than discovered as a failed load.
+    createRemoteStore() {
+      const store = this.options.store;
+      if (store === null || store === undefined) {
+        return null;
+      }
+
+      if (store?.type !== "remote") {
+        throw new Error(`Unknown store type "${store?.type}". Expected "remote".`);
+      }
+
+      if (!PivotForge.RemoteStore || !PivotForge.ResultAssembler) {
+        throw new Error("A remote store requires pivot-result-assembler.js and pivot-remote-store.js to be loaded.");
+      }
+
+      if (this.options.largeData) {
+        throw new Error("largeData pages a result the PivotForge endpoints keep; a remote store builds the whole result in the browser.");
+      }
+
+      PivotForge.RemoteStore.validateRequest({
+        topN: PivotForge.PivotRequestBuilder.normalizeRankings(this.options.topN),
+        valueFilters: this.valueFilters
+      });
+
+      return PivotForge.RemoteStore.create(store, {
+        fetchImpl: this.options.fetchImpl,
+        // Looked up when the first load runs, like an event handler, so the
+        // function may be defined further down the page.
+        resolveFunction: name => (...args) => resolveHandler(root, name, "store.load")(...args)
+      });
+    }
+
+    // The culture a remote grid names months and weekdays in, which is the one
+    // its numbers are written in.
+    remoteCulture() {
+      return this.options.rendererOptions?.culture ?? this.locale?.table?.culture ?? null;
+    }
+
+    // What a designer may offer: a remote grid has no formula engine and only
+    // the summaries the load protocol carries.
+    designerCapabilities() {
+      return this.remoteStore
+        ? { allowCalculatedFields: false, aggregations: Object.keys(PivotForge.RemoteStore.SUMMARY_TYPES) }
+        : { allowCalculatedFields: this.options.allowCalculatedFields !== false };
+    }
+
+    get supportsValueFilters() {
+      return !this.remoteStore;
+    }
+
     // Asks once. A failed request is reported and leaves the declared fields:
     // the grid still works, only without the fields it would have offered.
     async applyDiscoveredFields() {
       this.fieldsToDiscover = false;
       let payload;
       try {
-        payload = await this.post("/fields", {});
+        payload = this.remoteStore
+          ? await this.remoteStore.fields()
+          : await this.post("/fields", {});
       } catch (error) {
         if (!this.disposed) {
           this.emit("error", error);
@@ -1140,7 +1205,7 @@
         state: this.layoutState,
         widget: this,
         labels: this.designerLabels(),
-        allowCalculatedFields: this.options.allowCalculatedFields !== false,
+        ...this.designerCapabilities(),
         layout: options.layout,
         allFields: options.allFields,
         deferUpdates: onDemand ? true : undefined,
@@ -1718,6 +1783,10 @@
         throw new Error("Cannot filter because allowFiltering is disabled.");
       }
 
+      if (filter && this.remoteStore) {
+        PivotForge.RemoteStore.validateRequest({ valueFilters: [filter] });
+      }
+
       const others = this.valueFilters.filter(entry => entry.field !== field);
       this.valueFilters = filter
         ? [...others, ...PivotForge.PivotRequestBuilder.normalizeValueFilters([{ ...filter, field }])]
@@ -1810,7 +1879,9 @@
       try {
         const result = this.options.largeData
           ? await this.startLargeSession(controller.signal)
-          : await this.post("/pivot", this.request, controller.signal);
+          : this.remoteStore
+            ? await this.remoteStore.pivot(this.request, { culture: this.remoteCulture(), signal: controller.signal })
+            : await this.post("/pivot", this.request, controller.signal);
         if (token !== this.requestToken || this.disposed) {
           return;
         }
@@ -2453,6 +2524,12 @@
         throw new Error("Cannot drill down because allowDrillDown is disabled.");
       }
 
+      if (this.remoteStore) {
+        return await this.remoteStore.drillDown(
+          { request: this.buildRequest(), rowPath, columnPath, valueKey },
+          { culture: this.remoteCulture() });
+      }
+
       return await this.post("/drill-down", {
         ...this.buildRequest(),
         rowPath,
@@ -2477,6 +2554,16 @@
       // level has to say which interval, or it would get raw dates back and the
       // filter it applied would match nothing.
       const level = this.fields.find(entry => entry.key === field) ?? null;
+
+      if (this.remoteStore) {
+        return await this.remoteStore.fieldValues({
+          field: level?.dataField ?? field,
+          interval: level?.groupInterval ?? null,
+          binSize: level?.groupSize ?? null,
+          filters: this.relevantValueFilters(field).filters ?? [],
+          dataTypes: PivotForge.PivotRequestBuilder.dataTypes(this.fields)
+        }, { culture: this.remoteCulture() });
+      }
 
       return await this.post("/field-values", {
         field: level?.dataField ?? field,

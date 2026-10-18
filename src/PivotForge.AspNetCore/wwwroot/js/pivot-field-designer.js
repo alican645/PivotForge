@@ -394,6 +394,9 @@
       // Off unless asked for, so a designer built by hand looks as it always
       // did; the widget asks for it by default.
       this.allowCalculatedFields = options.allowCalculatedFields === true;
+      // The summaries the settings panel offers; a remote grid narrows them to
+      // the ones its load protocol carries.
+      this.aggregations = Array.isArray(options.aggregations) ? options.aggregations : AGGREGATIONS;
       // Built on first use, so a designer whose filter zone is never opened
       // never creates the picker's overlay. A host may supply its own.
       this.filterPicker = options.filterPicker ?? null;
@@ -1429,7 +1432,8 @@
     canValueFilter(name) {
       return this.widget?.options?.allowFiltering !== false &&
         this.state.field(name).allowFiltering !== false &&
-        typeof this.widget?.setValueFilter === "function";
+        typeof this.widget?.setValueFilter === "function" &&
+        this.widget.supportsValueFilters !== false;
     }
 
     // "Regions whose sales exceed 10,000": which value, how it is compared and
@@ -1854,7 +1858,7 @@
         this.settingsChoices(
           aggregation,
           "aggregation",
-          AGGREGATIONS.map(entry => ({ value: entry, label: this.labels.aggregations[entry] })),
+          this.aggregations.map(entry => ({ value: entry, label: this.labels.aggregations[entry] })),
           value?.aggregation ?? "sum",
           picked => this.apply(() => this.state.setAggregation(name, picked)));
         settings.body.appendChild(aggregation);

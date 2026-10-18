@@ -317,6 +317,18 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("retrieve-fields")]
     public bool? RetrieveFields { get; set; }
 
+    /// <summary>Gets or sets the DevExtreme.AspNet.Data URL the grid loads from instead of the
+    /// PivotForge endpoints.</summary>
+    /// <remarks>See <see cref="PivotGridBuilder.RemoteStore"/>; needs <c>js/pivot-result-assembler.js</c>
+    /// and <c>js/pivot-remote-store.js</c> on the page.</remarks>
+    [HtmlAttributeName("remote-load-url")]
+    public string? RemoteLoadUrl { get; set; }
+
+    /// <summary>Gets or sets the page function answering <c>DataSourceLoader.Load</c> requests
+    /// instead of the PivotForge endpoints.</summary>
+    [HtmlAttributeName("remote-load")]
+    public string? RemoteLoad { get; set; }
+
     /// <summary>Gets or sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
     /// Left unset it follows the request's UI culture, so a Turkish request gets
@@ -696,6 +708,21 @@ public sealed class PivotGridTagHelper : TagHelper
         if (RetrieveFields is { } retrieveFields)
         {
             builder.RetrieveFields(retrieveFields);
+        }
+
+        if (RemoteLoadUrl is not null && RemoteLoad is not null)
+        {
+            throw new InvalidOperationException(
+                "remote-load-url and remote-load both name where the grid loads from; declare one of them.");
+        }
+
+        if (RemoteLoadUrl is { } remoteLoadUrl)
+        {
+            builder.RemoteStore(remoteLoadUrl);
+        }
+        else if (RemoteLoad is { } remoteLoad)
+        {
+            builder.RemoteStoreLoad(remoteLoad);
         }
 
         if (Locale is { } locale)

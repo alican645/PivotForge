@@ -1904,6 +1904,31 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesARemoteStoreFromEitherAttribute()
+    {
+        var byUrl = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RemoteLoadUrl = "/api/sales/load" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var byFunction = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RemoteLoad = "app.sales.load" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal("/api/sales/load", byUrl.GetProperty("store").GetProperty("loadUrl").GetString());
+        Assert.Equal("app.sales.load", byFunction.GetProperty("store").GetProperty("load").GetString());
+        Assert.Equal("remote", byFunction.GetProperty("store").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task RefusesBothRemoteAttributesAtOnce()
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RemoteLoadUrl = "/api/sales/load", RemoteLoad = "app.sales.load" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Contains("declare one of them", error.Message);
+    }
+
+    [Fact]
     public async Task WritesDeferLayoutUpdateOnlyWhenDeclared()
     {
         var ticked = ConfigOf(await RenderAsync(

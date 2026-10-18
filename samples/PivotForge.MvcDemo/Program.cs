@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
+using DevExtreme.AspNet.Data;
+using DevExtreme.AspNet.Data.Helpers;
 using PivotForge.AspNetCore.DependencyInjection;
 using PivotForge.AspNetCore.Endpoints;
 using PivotForge.MvcDemo.Models;
@@ -85,5 +87,24 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapPivotForgeEndpoints();
 
+// A DevExtreme.AspNet.Data endpoint over the same records, the kind of API a grid
+// declared with remote-load-url groups and sums on the server through. It is
+// not a PivotForge endpoint: any DataSourceLoader.Load backend answers the same.
+// Projected the way the allow-list above reads them, so CustomerEmail stays
+// home here too; 100 records unless asked, as the PivotForge provider gives.
+app.MapGet("/api/sales/load", (HttpRequest request, int? count) =>
+{
+    var loadOptions = new SalesLoadOptions();
+    DataSourceLoadOptionsParser.Parse(loadOptions, key => request.Query[key].FirstOrDefault());
+    var records = SampleSalesData.Create(count ?? 100).Select(record => new
+    {
+        record.Region, record.Category, record.SalesPerson, record.Year, record.Quarter,
+        record.OrderDate, record.Amount, record.Quantity, record.Discount
+    });
+    return Results.Json(DataSourceLoader.Load(records, loadOptions));
+});
+
 
 app.Run();
+
+internal sealed class SalesLoadOptions : DataSourceLoadOptionsBase;
