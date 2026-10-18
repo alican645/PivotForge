@@ -40,6 +40,17 @@ change will require a new major version.
 - `PivotFieldDiscovery.Discover<T>()` / `Discover(DataTable)` /
   `Discover(dictionaries)`: the fields a source offers, with their data types.
   (Core)
+- DevExtreme's `RemoteStore`: `remote-load-url` / `RemoteStore(loadUrl)` /
+  `store: { type: "remote", loadUrl }` (or `remote-load` / `RemoteStoreLoad` /
+  `load` for a page function) loads the grid from any DevExtreme.AspNet.Data
+  `DataSourceLoader.Load` backend instead of the PivotForge endpoints. The
+  browser sends `group` / `groupSummary` / `totalSummary` / `filter` requests
+  and builds the result itself, display modes, running totals, empty-cell
+  hiding and ordering by a summary included; the filter picker, drill-down and
+  `retrieveFields` use the same backend. Aggregations beyond sum, count,
+  average, min and max, calculated fields, `selector`, `sortingMethod`, top N,
+  value filters and `largeData` are refused with a clear error. Needs the new
+  `pivot-result-assembler.js` and `pivot-remote-store.js`. (AspNetCore)
 
 ## [0.9.0-preview.1] — 2026-10-18
 

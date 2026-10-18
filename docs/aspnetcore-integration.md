@@ -103,6 +103,10 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-chart.js"></script>
 
+<!-- Optional: a grid loading from a DevExtreme.AspNet.Data backend (RemoteStore). -->
+<script src="/_content/PivotForge.AspNetCore/js/pivot-result-assembler.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-remote-store.js"></script>
+
 <!-- Optional: the language every component shows. English needs nothing. -->
 <script src="/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>
 ```
@@ -629,6 +633,7 @@ emit identical markup.
 | `chart` | `null` | A chart of the pivot beside the grid; needs `pivot-chart.js`. `true`, a type name, or `{ type, position, height, valueKey }`. See [Pivot chart](#pivot-chart). |
 | `stateStoring` | `null` | `"local"`, `"session"`, `"custom"` (with `customLoad` / `customSave`), or `null`. See [State persistence](#state-persistence). Any other value throws. |
 | `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
+| `store` | `null` | `{ type: "remote", loadUrl \| load, headers, onBeforeSend, limit }` loads from a DevExtreme.AspNet.Data backend instead of the PivotForge endpoints. See [Remote data (RemoteStore)](#remote-data-remotestore). |
 
 `create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
 
@@ -845,6 +850,75 @@ The same arrangements are available to a designer the page hosts:
 A right click (or the menu key) on a field chip raises `contextMenuPreparing` with
 `field` and `area` instead of a cell; the menu has no entries of its own and opens
 only when the page adds some.
+
+### Remote data (RemoteStore)
+
+`remote-load-url="/api/sales/load"` (`RemoteStore("/api/sales/load")`,
+`store: { type: "remote", loadUrl: "/api/sales/load" }`) is DevExtreme's `RemoteStore`: the grid
+never calls the PivotForge endpoints. It sends `DataSourceLoader.Load` requests to any backend
+that answers them -- DevExtreme.AspNet.Data on ASP.NET Core, or anything speaking the same
+protocol -- and builds the pivot in the browser from the groups that come back. Load
+`pivot-result-assembler.js` and `pivot-remote-store.js` before the grid is created.
+
+```csharp
+// The backend: any IQueryable or IEnumerable, filtered and grouped by the library.
+app.MapGet("/api/sales/load", (HttpRequest request) =>
+{
+    var options = new SalesLoadOptions();
+    DataSourceLoadOptionsParser.Parse(options, key => request.Query[key]);
+    return Results.Json(DataSourceLoader.Load(db.Sales, options));
+});
+
+internal sealed class SalesLoadOptions : DataSourceLoadOptionsBase;
+```
+
+```html
+<pivot-grid id="sales" remote-load-url="/api/sales/load">
+    <pivot-field data-field="Region" area="Row" data-type="String" />
+    <pivot-field data-field="OrderDate" group-interval="Quarter" area="Column" />
+    <pivot-field data-field="Amount" area="Data" aggregation="Sum" />
+</pivot-grid>
+```
+
+- **The protocol.** `loadUrl` is fetched with GET, each load option JSON-encoded in the query
+  string (`group`, `groupSummary`, `totalSummary`, `filter`, `skip`, `take`, `requireTotalCount`),
+  as the DevExtreme.AspNet.Data client sends them. `headers` are added to every request, and
+  an `onBeforeSend(operation, settings)` function may change
+  `settings.url` and `settings.headers` before it goes. `remote-load="app.sales.load"`
+  (`RemoteStoreLoad`, `store: { type: "remote", load }`) hands the load options to a page
+  function instead, which returns `{ data, summary, totalCount }` or a promise of it.
+- **One request per depth.** Each row depth is one request grouped by the row levels down to it
+  and every column level, so totals, subtotals and averages are the backend's own, and they go
+  out together. A date level is grouped by its part (`year`, `quarter`, `month`, `day`,
+  `dayOfWeek`), a numeric range by its size.
+- **In the browser,** exactly as the engine does it: headers and their order, display modes
+  (`showAs`, `allowCrossGroupCalculation`), `runningTotal`, `hideEmptySummaryCells`, ordering by
+  label or by a summary (`sortByValueKey`, `sortBySummaryPath`, `rowSort`). Month and weekday
+  names follow `rendererOptions.culture`, then the locale pack's, then the browser's.
+- **Filters** go to the backend as a `filter` expression: a year, month, day or weekday by its
+  part, a quarter as a month range, a numeric range as `>=` / `<`, `Contains`, `StartsWith` and
+  `EndsWith` on text as the server's own. A filter it cannot express directly loads the field's
+  values first and is sent as the values it keeps.
+- **The filter picker** asks for one level grouped; **drill-down** sends the cell's filter with
+  `take` (the store's `limit`, 1000 by default) and `requireTotalCount`; **`retrieveFields`**
+  reads the first 20 records and offers what they hold, a date as its year, quarter and month.
+
+Refused when the grid starts or the field changes, with a message naming what is refused,
+because the protocol has no way to carry it: aggregations other than `sum`, `count`, `average`,
+`min` and `max`; calculated fields (`expression`) and relative formulas; `selector`; a
+`sortingMethod`; top N; value filters; `largeData`. The designer does not offer them.
+
+#### Limitations
+
+- **Count** is the number of records in a group, as DataSourceLoader counts, where the engine
+  counts the values that are not null.
+- **Text comparisons** follow the backend: DataSourceLoader compares strings ignoring case.
+- **Order the grid does not set:** a column level with no `sortOrder` and `sortBy: "none"` keeps
+  the order the backend returns, and rows tied under a `rowSort` keep the order they arrived in.
+- **Labels of computed keys** -- a decimal's scale, a negative range's bounds -- are formatted
+  from the number the backend returns, which may differ in its last digits from the engine's.
+- **The whole result** is loaded at once; branches are not loaded as they are expanded.
+- **Excel export** still asks `{prefix}/excel`; without the PivotForge endpoints, use CSV.
 
 ### Top-N
 
