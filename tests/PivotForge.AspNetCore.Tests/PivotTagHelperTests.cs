@@ -1575,6 +1575,27 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesTheCellEventHandlersUnderEvents()
+    {
+        var events = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                OnCellPrepared = "app.markNegatives",
+                OnCellClick = "app.onClick",
+                OnContextMenuPreparing = "app.menu",
+                OnExpandValueChanging = "app.onExpand"
+            },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum))).GetProperty("events");
+
+        Assert.Equal("app.markNegatives", events.GetProperty("cellPrepared").GetString());
+        Assert.Equal("app.onClick", events.GetProperty("cellClick").GetString());
+        Assert.Equal("app.menu", events.GetProperty("contextMenuPreparing").GetString());
+        Assert.Equal("app.onExpand", events.GetProperty("expandValueChanging").GetString());
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().OnCellClick(""));
+    }
+
+    [Fact]
     public async Task EventsMatchTheEquivalentBuilderConfiguration()
     {
         var fromTagHelper = await RenderAsync(
@@ -2210,6 +2231,34 @@ public class PivotTagHelperTests
             new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
 
         Assert.False(config.TryGetProperty("stateKey", out _));
+    }
+
+    [Fact]
+    public async Task WritesCustomStateStorageWithItsFunctionsAndNoKey()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                StateStoring = PivotStateStorage.Custom,
+                StateCustomLoad = "app.state.load",
+                StateCustomSave = "app.state.save",
+                StateSavingTimeout = 2000,
+                StateKey = "ignored"
+            },
+            MinimalFields));
+
+        Assert.Equal("custom", config.GetProperty("stateStoring").GetString());
+        Assert.Equal("app.state.load", config.GetProperty("customLoad").GetString());
+        Assert.Equal("app.state.save", config.GetProperty("customSave").GetString());
+        Assert.Equal(2000, config.GetProperty("stateSavingTimeout").GetInt32());
+        Assert.False(config.TryGetProperty("stateKey", out _));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", StateStoring = PivotStateStorage.Custom, StateCustomLoad = "app.load" },
+            MinimalFields));
+        Assert.Throws<ArgumentException>(() => new PivotGridBuilder().StateStoring(PivotStateStorage.Custom));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotGridBuilder().StateSavingTimeout(-1));
     }
 
     [Fact]

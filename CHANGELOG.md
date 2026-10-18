@@ -47,6 +47,19 @@ change will require a new major version.
 
 ### Added
 
+- DevExtreme's cell events: `cellPrepared` (every drawn cell, with its area,
+  text, value and paths; what a handler adds stays and is exported),
+  `cellClick` (cancel stops selecting and folding), `contextMenuPreparing`
+  (edit `items`, add `{ label, onClick }`, empty opens no menu) and
+  `expandValueChanging` (cancel keeps the group as it is), through `on()`,
+  `events`, `rendererOptions` and `on-cell-prepared` / `on-cell-click` /
+  `on-context-menu-preparing` / `on-expand-value-changing`. (AspNetCore)
+- Custom state storage, DevExtreme's `customLoad` / `customSave`:
+  `state-storing="Custom"` with `state-custom-load` / `state-custom-save` /
+  `CustomStateStorage(load, save)` / `stateStoring: "custom"`; a promised load
+  is waited for by the first request. `state-saving-timeout` /
+  `StateSavingTimeout(ms)` / `stateSavingTimeout` delays saves, flushing on
+  page hide and dispose. (AspNetCore)
 - Fields worked out from the whole record, DevExtreme's `selector`, as a
   function registered by name: `PivotEngine.CustomSelectors` /
   `PivotForgeOptions.CustomSelectors` (`PivotSelector`, reading

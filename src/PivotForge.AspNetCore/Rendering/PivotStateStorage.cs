@@ -10,5 +10,9 @@ public enum PivotStateStorage
     Local,
 
     /// <summary>Persisted in <c>sessionStorage</c>, so it lasts only for the browser tab.</summary>
-    Session
+    Session,
+
+    /// <summary>Handed to page functions that load and save it wherever the page keeps it --
+    /// a user profile on the server, for instance. DevExtreme's <c>type: "custom"</c>.</summary>
+    Custom
 }

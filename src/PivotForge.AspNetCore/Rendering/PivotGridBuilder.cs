@@ -294,9 +294,46 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <summary>Persists the layout, captions, filters, and sort the user arrives at.</summary>
     /// <param name="storage">Where to persist. <see cref="PivotStateStorage.None"/> writes nothing.</param>
     /// <returns>The same builder.</returns>
-    public PivotGridBuilder StateStoring(PivotStateStorage storage) => storage == PivotStateStorage.None
-        ? this
-        : Set("stateStoring", storage == PivotStateStorage.Session ? "session" : "local");
+    /// <exception cref="ArgumentException"><paramref name="storage"/> is <see cref="PivotStateStorage.Custom"/>,
+    /// which needs its functions: use <see cref="CustomStateStorage"/>.</exception>
+    public PivotGridBuilder StateStoring(PivotStateStorage storage) => storage switch
+    {
+        PivotStateStorage.None => this,
+        PivotStateStorage.Custom => throw new ArgumentException(
+            "Custom state storage needs the page functions that load and save it; use CustomStateStorage.",
+            nameof(storage)),
+        _ => Set("stateStoring", storage == PivotStateStorage.Session ? "session" : "local")
+    };
+
+    /// <summary>Hands the state to page functions instead of browser storage, DevExtreme's <c>customLoad</c> / <c>customSave</c>.</summary>
+    /// <remarks>
+    /// <paramref name="load"/> is called once, when the grid starts, and returns the stored state,
+    /// its JSON text, or a promise of either -- the first load then waits for it. <paramref name="save"/>
+    /// receives the state object after each change, and <c>null</c> when the state is cleared. No
+    /// <see cref="StateKey"/> is needed: where the state goes is the functions' business.
+    /// </remarks>
+    /// <param name="load">The load function's name, optionally a dotted path.</param>
+    /// <param name="save">The save function's name, optionally a dotted path.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentException">Either name is null or blank.</exception>
+    public PivotGridBuilder CustomStateStorage(string load, string save)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(load);
+        ArgumentException.ThrowIfNullOrWhiteSpace(save);
+        return Set("stateStoring", "custom").Set("customLoad", load).Set("customSave", save);
+    }
+
+    /// <summary>Makes a save wait for the next change, DevExtreme's <c>savingTimeout</c>.</summary>
+    /// <remarks>A burst of changes is then one save; a waiting save is written at once when
+    /// the page is hidden or the grid disposed. Left unset, every change is saved as it happens.</remarks>
+    /// <param name="milliseconds">How long a save waits; zero saves at once.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="milliseconds"/> is negative.</exception>
+    public PivotGridBuilder StateSavingTimeout(int milliseconds)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(milliseconds);
+        return Set("stateSavingTimeout", milliseconds);
+    }
 
     /// <summary>Names the storage entry, so two grids on a page never share one.</summary>
     /// <param name="key">The key. When absent the grid's container id stands in; with neither,
@@ -622,6 +659,44 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
     public PivotGridBuilder OnExporting(string handler) => SetEvent("exporting", handler);
+
+    /// <summary>Names a page function called for every drawn cell, DevExtreme's <c>onCellPrepared</c>.</summary>
+    /// <remarks>
+    /// It receives <c>{ area, cell, rowIndex, columnIndex, cellElement, rowFields, columnFields, dataFields }</c>
+    /// after each draw: <c>area</c> is <c>"row"</c>, <c>"column"</c> or <c>"data"</c>, and <c>cell</c> holds the
+    /// text, the value and the paths. A class or text it puts on <c>cellElement</c> is kept, and an
+    /// export reads the text it leaves.
+    /// </remarks>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnCellPrepared(string handler) => SetEvent("cellPrepared", handler);
+
+    /// <summary>Names a page function called when a cell is clicked, DevExtreme's <c>onCellClick</c>.</summary>
+    /// <remarks>Called before the click selects the cell or folds a group; setting <c>cancel</c>
+    /// on its argument stops both.</remarks>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnCellClick(string handler) => SetEvent("cellClick", handler);
+
+    /// <summary>Names a page function called before a cell's or header's menu opens, DevExtreme's <c>onContextMenuPreparing</c>.</summary>
+    /// <remarks>Its argument's <c>items</c> may be changed in place: an item the page adds is
+    /// <c>{ label, onClick }</c>, and a list left empty opens no menu.</remarks>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnContextMenuPreparing(string handler) =>
+        SetEvent("contextMenuPreparing", handler);
+
+    /// <summary>Names a page function called before a group opens or folds, DevExtreme's <c>onExpandValueChanging</c>.</summary>
+    /// <remarks>It receives <c>{ area, path, expanded, cancel }</c>, <c>expanded</c> being the
+    /// state the group is about to take; setting <c>cancel</c> leaves the group as it is.</remarks>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnExpandValueChanging(string handler) =>
+        SetEvent("expandValueChanging", handler);
 
     /// <summary>Restricts a field to the given values before aggregation.</summary>
     /// <param name="field">The source field to filter.</param>

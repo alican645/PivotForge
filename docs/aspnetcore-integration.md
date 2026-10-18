@@ -340,6 +340,25 @@ grids on a page overwrite each other's layouts, which is worse than not saving.
 
 `Local` survives closing the browser; `Session` lasts for the tab.
 
+`Custom` hands the state to the page instead, DevExtreme's `customLoad` /
+`customSave` — to keep it in a user profile on the server, for instance:
+
+```cshtml
+<pivot-grid id="pivotGrid" state-storing="Custom"
+            state-custom-load="app.state.load" state-custom-save="app.state.save"
+            state-saving-timeout="2000">
+```
+
+`load` is called once when the grid starts and returns the state, its JSON text,
+or a promise of either; with a promise the first load waits for it, and a state
+the fields no longer fit is left aside as a stored one would be. `save` receives
+the state object after each change and `null` when the state is cleared. No
+`state-key` is needed. `state-saving-timeout` (`StateSavingTimeout(ms)`, any
+storage) makes a save wait for the next change, so a burst of edits is one write;
+a waiting save is written at once when the page is hidden or the grid disposed.
+In JavaScript: `stateStoring: "custom"`, `customLoad`, `customSave` (functions or
+their names) and `stateSavingTimeout`.
+
 What is stored is a preference, never a contract. **A stored payload can never
 break the page:** unparseable JSON, a payload from another version, a layout the
 field catalog can no longer honour (a field that was removed, or one whose role
@@ -606,7 +625,7 @@ emit identical markup.
 | `loadPanelDelay` | `300` | Milliseconds a request must run before the panel appears, so a fast answer does not flash it. |
 | `toolbar` | `false` | A strip of buttons just above the grid, outside its scroll box. `true` (`toolbar="true"`, `Toolbar(true)`) shows every button the grid can offer: `excel` (only with `allowExcelExport`), `csv`, `print`, `expandAll`, `collapseAll`, `saveReport`, `openReport`, `fullscreen`, `chart` (only with `chart`). **Save report** downloads the view — layout, captions, filters, sorts and conditional rules, what `state-storing` keeps — as a JSON file (`exportReport()`); **Open report** picks such a file and shows its view (`loadReport(fileOrTextOrObject)`), in this grid or another offering the same fields. A file that is not a report, or names fields this grid does not have, is refused with the `error` event and the grid stays as it was. **Full screen** lets the grid and its toolbar fill the browser window — in the page rather than through the Fullscreen API, so the toolbar stays on screen and it works inside an iframe; the button or Escape leaves it. A list (`toolbar-items="Excel,Print"`, `Toolbar(PivotToolbarItem.Excel, PivotToolbarItem.Print)`, `["excel", "print"]`) picks the buttons and their order; an unknown name is an error, and `toolbar="false"` beside `toolbar-items` is a contradiction. Excel and Print title the file and the page with the grid's `aria-label`. A failure is raised as the `error` event. The texts are the renderer texts `toolbar` (the strip's accessible name), `toolbarExcel`, `toolbarCsv`, `toolbarPrint`, `toolbarExpandAll`, `toolbarCollapseAll`, `toolbarSaveReport`, `toolbarOpenReport`, `toolbarFullscreen` and `toolbarExitFullscreen`, translated in the `tr` locale. Printing hides the strip. |
 | `chart` | `null` | A chart of the pivot beside the grid; needs `pivot-chart.js`. `true`, a type name, or `{ type, position, height, valueKey }`. See [Pivot chart](#pivot-chart). |
-| `stateStoring` | `null` | `"local"`, `"session"`, or `null`. See [State persistence](#state-persistence). Any other value throws. |
+| `stateStoring` | `null` | `"local"`, `"session"`, `"custom"` (with `customLoad` / `customSave`), or `null`. See [State persistence](#state-persistence). Any other value throws. |
 | `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
 
 `create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
@@ -646,6 +665,25 @@ Register handlers with `widget.on(eventName, handler)`, which returns an unsubsc
 | `dataLoading` | `{ request }` | Before each request is sent. |
 | `dataLoaded` | `{ result }` | After a request succeeds and the result has been rendered. |
 | `error` | the `Error` | When a request fails (network or server-side), after it is shown next to the table. |
+| `cellPrepared` | `{ area, cell, rowIndex, columnIndex, cellElement }` | For every drawn cell after each draw, while someone listens through `on()`, `events` or `rendererOptions` (DevExtreme's `onCellPrepared`). A class or text put on `cellElement` stays, and an export reads that text. |
+| `cellClick` | the same, with `event` and `cancel` | Before a click selects the cell or folds a group; `cancel = true` stops both. |
+| `contextMenuPreparing` | the same, with `event` and `items` | Before a cell's or header's menu opens. Change `items` in place: drop an entry, or add `{ label, onClick }`; an empty list opens no menu. A header without a menu of its own gets one when the page adds an item. |
+| `expandValueChanging` | `{ area, path, expanded, cancel }` | Before a group opens or folds from its toggle; `expanded` is the state it is about to take, and `cancel = true` leaves it. Expanding or collapsing a whole level does not raise it. |
+
+The four cell events also carry `rowFields`, `columnFields` and `dataFields`. `area`
+is `"row"`, `"column"` or `"data"`; `cell` holds `text`, and for a header `path`,
+`type` (`"D"` value, `"T"` subtotal, `"GT"` grand total) and `expanded` when it
+folds, for a data cell `value`, `rowPath`, `columnPath`, `rowType`, `columnType`
+and `dataField`. Declaratively they are `on-cell-prepared`, `on-cell-click`,
+`on-context-menu-preparing` and `on-expand-value-changing`.
+
+```js
+widget.on("cellPrepared", e => {
+  if (e.area === "data" && e.cell.value < 0) {
+    e.cellElement.classList.add("is-negative");
+  }
+});
+```
 
 In addition, `PivotForge.create` dispatches a plain DOM `CustomEvent` named `pivotforge:ready` on the container element, carrying `{ detail: { widget } }`. This is **not** a `widget.on()` event — it fires synchronously during `create`, before `create` returns the widget. Because of that timing, a listener added to the element by id *after* the helper's markup runs can never see it fire. Register a capture-phase listener on `document` before the markup, as shown in the [root README](../README.md#declarative-quick-start):
 

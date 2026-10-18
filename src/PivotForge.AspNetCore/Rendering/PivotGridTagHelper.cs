@@ -120,6 +120,19 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("state-key")]
     public string? StateKey { get; set; }
 
+    /// <summary>Gets or sets the page function that loads the state when <c>state-storing="Custom"</c>.</summary>
+    /// <remarks>Returns the stored state, its JSON text, or a promise of either.</remarks>
+    [HtmlAttributeName("state-custom-load")]
+    public string? StateCustomLoad { get; set; }
+
+    /// <summary>Gets or sets the page function that saves the state when <c>state-storing="Custom"</c>.</summary>
+    [HtmlAttributeName("state-custom-save")]
+    public string? StateCustomSave { get; set; }
+
+    /// <summary>Gets or sets how many milliseconds a save waits for the next change.</summary>
+    [HtmlAttributeName("state-saving-timeout")]
+    public int? StateSavingTimeout { get; set; }
+
     /// <summary>Gets or sets how a click on a cell selects.</summary>
     /// <remarks>
     /// Non-nullable so Razor accepts the unqualified member name (<c>selection-mode="None"</c>).
@@ -310,6 +323,22 @@ public sealed class PivotGridTagHelper : TagHelper
     /// <summary>Gets or sets the page function called before an Excel or CSV file is written.</summary>
     [HtmlAttributeName("on-exporting")]
     public string? OnExporting { get; set; }
+
+    /// <summary>Gets or sets the page function called for every drawn cell.</summary>
+    [HtmlAttributeName("on-cell-prepared")]
+    public string? OnCellPrepared { get; set; }
+
+    /// <summary>Gets or sets the page function called when a cell is clicked; it may cancel the click.</summary>
+    [HtmlAttributeName("on-cell-click")]
+    public string? OnCellClick { get; set; }
+
+    /// <summary>Gets or sets the page function that may change a menu's items before it opens.</summary>
+    [HtmlAttributeName("on-context-menu-preparing")]
+    public string? OnContextMenuPreparing { get; set; }
+
+    /// <summary>Gets or sets the page function called before a group opens or folds; it may cancel.</summary>
+    [HtmlAttributeName("on-expand-value-changing")]
+    public string? OnExpandValueChanging { get; set; }
 
     /// <summary>Collects the declared fields and writes the grid markup.</summary>
     /// <param name="context">The tag helper context.</param>
@@ -627,6 +656,26 @@ public sealed class PivotGridTagHelper : TagHelper
             builder.OnExporting(onExporting);
         }
 
+        if (OnCellPrepared is { } onCellPrepared)
+        {
+            builder.OnCellPrepared(onCellPrepared);
+        }
+
+        if (OnCellClick is { } onCellClick)
+        {
+            builder.OnCellClick(onCellClick);
+        }
+
+        if (OnContextMenuPreparing is { } onContextMenuPreparing)
+        {
+            builder.OnContextMenuPreparing(onContextMenuPreparing);
+        }
+
+        if (OnExpandValueChanging is { } onExpandValueChanging)
+        {
+            builder.OnExpandValueChanging(onExpandValueChanging);
+        }
+
         foreach (var ranking in declaredRankings)
         {
             ranking.ApplyTo(builder);
@@ -664,7 +713,17 @@ public sealed class PivotGridTagHelper : TagHelper
 
         // A key with nowhere to store is dead weight in the payload, so the two
         // travel together or not at all.
-        if (StateStoring != PivotStateStorage.None)
+        if (StateStoring == PivotStateStorage.Custom)
+        {
+            if (string.IsNullOrWhiteSpace(StateCustomLoad) || string.IsNullOrWhiteSpace(StateCustomSave))
+            {
+                throw new InvalidOperationException(
+                    "state-storing=\"Custom\" needs state-custom-load and state-custom-save: the page functions that load and save the state.");
+            }
+
+            builder.CustomStateStorage(StateCustomLoad, StateCustomSave);
+        }
+        else if (StateStoring != PivotStateStorage.None)
         {
             builder.StateStoring(StateStoring);
 
@@ -672,6 +731,11 @@ public sealed class PivotGridTagHelper : TagHelper
             {
                 builder.StateKey(StateKey);
             }
+        }
+
+        if (StateStoring != PivotStateStorage.None && StateSavingTimeout is { } savingTimeout)
+        {
+            builder.StateSavingTimeout(savingTimeout);
         }
 
         if (declaredFields.Count > 0)

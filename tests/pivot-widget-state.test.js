@@ -871,3 +871,116 @@ test("a view whose widths were never changed stores none", () => {
   assert.equal("groupSizes" in saved(store), false);
   widget.dispose();
 });
+
+// --- Custom storage ---------------------------------------------------------
+
+test("custom storage hands the state to customSave and reads it from customLoad", () => {
+  const writes = [];
+  const stored = { version: 1, rowSort: { mode: "RowLabel", direction: "Descending", field: "Region" } };
+  const { widget } = build({
+    options: {
+      stateStoring: "custom",
+      stateKey: null,
+      customLoad: () => stored,
+      customSave: state => writes.push(state)
+    }
+  });
+
+  // Read synchronously, as a stored view is.
+  assert.equal(widget.rowSort.direction, "Descending");
+  widget.saveState();
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].version, 1);
+
+  widget.clearState();
+  assert.equal(writes.at(-1), null);
+  widget.dispose();
+});
+
+test("a promised customLoad is waited for by the first refresh", async () => {
+  const requests = [];
+  globalThis.pivotStateApi = {
+    load: () => Promise.resolve(JSON.stringify({
+      version: 1,
+      rowSort: { mode: "RowLabel", direction: "Descending", field: "Region" }
+    })),
+    save: () => {}
+  };
+  const { widget } = build({
+    options: {
+      stateStoring: "custom",
+      customLoad: "pivotStateApi.load",
+      customSave: "pivotStateApi.save",
+      fetchImpl: async (_, init) => {
+        requests.push(JSON.parse(init.body));
+        return { ok: true, status: 200, json: async () => ({ rowHeaders: [], columnHeaders: [], cells: [] }) };
+      }
+    }
+  });
+
+  assert.equal(widget.rowSort, null);
+  await widget.refresh();
+
+  assert.equal(requests[0].rowSort.direction, "Descending");
+  widget.dispose();
+  delete globalThis.pivotStateApi;
+});
+
+test("a promised state the grid cannot use leaves the declared view", async () => {
+  const { widget } = build({
+    designer: true,
+    options: {
+      stateStoring: "custom",
+      customLoad: async () => ({ version: 1, layout: { rows: ["Missing"], columns: [], values: [], filters: [] } }),
+      customSave: () => {}
+    }
+  });
+
+  await widget.refresh();
+
+  assert.deepEqual(widget.layoutState.getState().rows, ["Region"]);
+  widget.dispose();
+});
+
+test("custom storage without its functions is a configuration error", () => {
+  assert.throws(
+    () => build({ options: { stateStoring: "custom", customLoad: () => null } }),
+    /customSave/);
+});
+
+test("a saving timeout waits for the last change and flushes on dispose", async () => {
+  const writes = [];
+  const { widget } = build({
+    options: {
+      stateStoring: "custom",
+      customLoad: () => null,
+      customSave: state => writes.push(state),
+      stateSavingTimeout: 30
+    }
+  });
+
+  widget.saveState();
+  widget.saveState();
+  assert.equal(writes.length, 0);
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(writes.length, 1);
+
+  widget.saveState();
+  widget.dispose();
+  assert.equal(writes.length, 2);
+});
+
+test("the cell events are among the events a page may declare", () => {
+  const { widget } = build({
+    options: {
+      events: {
+        cellPrepared: null,
+        cellClick: null,
+        contextMenuPreparing: null,
+        expandValueChanging: null
+      }
+    }
+  });
+
+  widget.dispose();
+});

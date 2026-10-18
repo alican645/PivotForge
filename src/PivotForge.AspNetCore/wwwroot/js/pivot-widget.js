@@ -68,7 +68,16 @@
     renderImpl: null,
     fieldDesigner: null,
     stateStoring: null,
-    stateKey: null
+    stateKey: null,
+    // With stateStoring "custom": DevExtreme's customLoad / customSave, as
+    // functions or the names of functions on the page. customLoad may return
+    // the stored state, its JSON text, or a promise of either.
+    customLoad: null,
+    customSave: null,
+    // Milliseconds a save waits for the next change, DevExtreme's savingTimeout;
+    // a waiting save is written at once when the page is hidden or the grid
+    // disposed. Zero writes every change as it happens.
+    stateSavingTimeout: 0
   };
 
   // Bumped only when a stored payload can no longer be read by this code. An
@@ -76,7 +85,7 @@
   // costs the user their saved layout, never a broken page.
   const STATE_VERSION = 1;
   const STATE_PREFIX = "pivotforge:state:";
-  const STORAGES = { local: "localStorage", session: "sessionStorage" };
+  const STORAGES = { local: "localStorage", session: "sessionStorage", custom: "custom" };
 
   // Both exports hand back a file without saving it, which left every consuming
   // page writing the same anchor dance. Takes exactly what they return, so a
@@ -139,7 +148,15 @@
     "cellFilterRequested",
     "conditionalFormatRequested",
     "viewStateChanged",
-    "exporting"
+    "exporting",
+    // DevExtreme's cell events. Each carries area, cell, rowIndex, columnIndex
+    // and cellElement, with rowFields, columnFields and dataFields beside them;
+    // cellClick and expandValueChanging may be cancelled, and
+    // contextMenuPreparing's items edited in place.
+    "cellPrepared",
+    "cellClick",
+    "contextMenuPreparing",
+    "expandValueChanging"
   ];
 
   // Looks up a handler declared by name, so Razor markup can name a function
@@ -413,7 +430,7 @@
 
       if (!Object.hasOwn(STORAGES, requested)) {
         throw new Error(
-          `Unknown stateStoring "${requested}". Expected "local", "session", or null.`);
+          `Unknown stateStoring "${requested}". Expected "local", "session", "custom", or null.`);
       }
 
       return STORAGES[requested];
@@ -427,6 +444,12 @@
         return null;
       }
 
+      // The page's own functions decide where the state goes, so there is no
+      // key to share and none to name.
+      if (this.stateStorageName === "custom") {
+        return "custom";
+      }
+
       const name = this.options.stateKey ?? this.container?.id ?? "";
       return name ? `${STATE_PREFIX}${name}` : null;
     }
@@ -438,10 +461,80 @@
         return null;
       }
 
+      if (this.stateStorageName === "custom") {
+        this.customStorage ??= this.createCustomStorage();
+        return this.customStorage;
+      }
+
       try {
         return root[this.stateStorageName] ?? null;
       } catch {
         return null;
+      }
+    }
+
+    // customLoad / customSave behind the Storage methods the rest of the
+    // widget already uses. A load that returns a promise reads as nothing
+    // stored for now; the first refresh waits for it and applies what arrives.
+    createCustomStorage() {
+      const resolve = name => {
+        const declared = this.options[name];
+        if (typeof declared === "function") {
+          return declared;
+        }
+
+        if (typeof declared === "string" && declared) {
+          return (...args) => resolveHandler(root, declared, name)(...args);
+        }
+
+        throw new Error(`stateStoring "custom" requires a ${name} function.`);
+      };
+      const load = resolve("customLoad");
+      const save = resolve("customSave");
+      const quietly = result => {
+        // A failed save leaves the view on screen as it is; nothing to undo.
+        Promise.resolve(result).catch(() => {});
+      };
+
+      return {
+        getItem: () => {
+          const loaded = load();
+          if (loaded && typeof loaded.then === "function") {
+            this.pendingState = loaded;
+            return null;
+          }
+
+          return loaded === null || loaded === undefined
+            ? null
+            : typeof loaded === "string" ? loaded : JSON.stringify(loaded);
+        },
+        setItem: (_, text) => quietly(save(JSON.parse(text))),
+        removeItem: () => quietly(save(null))
+      };
+    }
+
+    // The state a promised customLoad delivered, applied as a stored view is:
+    // a state the fields no longer fit is left aside rather than failing the grid.
+    async applyPendingState() {
+      const pending = this.pendingState;
+      this.pendingState = null;
+
+      let payload;
+      try {
+        const loaded = await pending;
+        payload = typeof loaded === "string" ? JSON.parse(loaded) : loaded;
+      } catch {
+        return;
+      }
+
+      if (payload?.version !== STATE_VERSION || this.disposed) {
+        return;
+      }
+
+      try {
+        this.applyReport(this.parseState(payload), payload);
+      } catch {
+        // The declared layout stays.
       }
     }
 
@@ -536,6 +629,45 @@
         return false;
       }
 
+      const delay = Number(this.options.stateSavingTimeout) || 0;
+      if (delay > 0) {
+        // The next change restarts the wait, so a burst of edits is one save.
+        root.clearTimeout?.(this.saveTimer);
+        this.saveTimer = root.setTimeout(() => this.flushState(), delay);
+        this.watchVisibility();
+        return true;
+      }
+
+      return this.writeState(storage);
+    }
+
+    // A waiting save, written now.
+    flushState() {
+      if (this.saveTimer === undefined || this.saveTimer === null) {
+        return false;
+      }
+
+      root.clearTimeout?.(this.saveTimer);
+      this.saveTimer = null;
+      const storage = this.stateStorage();
+      return storage ? this.writeState(storage) : false;
+    }
+
+    // A hidden page may never come back, so a waiting save is not left to its timer.
+    watchVisibility() {
+      if (this.visibilityListener || typeof root.document?.addEventListener !== "function") {
+        return;
+      }
+
+      this.visibilityListener = () => {
+        if (root.document.visibilityState === "hidden") {
+          this.flushState();
+        }
+      };
+      root.document.addEventListener("visibilitychange", this.visibilityListener);
+    }
+
+    writeState(storage) {
       try {
         storage.setItem(this.stateKey, JSON.stringify(this.snapshotState()));
         return true;
@@ -621,8 +753,14 @@
         throw new Error("This file is not a PivotForge report this grid can open.");
       }
 
-      const report = this.parseState(payload);
+      this.applyReport(this.parseState(payload), payload);
+      this.saveState();
+      return this.refresh();
+    }
 
+    // What opening a report or a promised stored view does to the grid: its
+    // layout, filters, sorts, rules and chart, without saving or loading.
+    applyReport(report, payload) {
       if (report.layout && PivotForge.PivotLayoutState) {
         const state = new PivotForge.PivotLayoutState(this.declaredFields, {
           ...report.layout,
@@ -676,9 +814,6 @@
           this.showChart(report.chart.visible, { save: false });
         }
       }
-
-      this.saveState();
-      return this.refresh();
     }
 
     clearState() {
@@ -876,7 +1011,26 @@
         onCellCopied: (text, copied, kind) => {
           this.emit("cellCopied", { text, copied, kind });
           consumer.onCellCopied?.(text, copied, kind);
-        }
+        },
+        // The cell events. Each payload is the renderer's own object, extended
+        // in place, so what a handler sets -- cancel, items -- reaches it.
+        onCellPrepared: payload => bridge("cellPrepared", this.withFieldContext(payload)),
+        wantsCellPrepared: () =>
+          (this.handlers.get("cellPrepared")?.size ?? 0) > 0 || typeof consumer.onCellPrepared === "function",
+        onCellClick: payload => bridge("cellClick", this.withFieldContext(payload)),
+        onContextMenuPreparing: payload => bridge("contextMenuPreparing", this.withFieldContext(payload)),
+        onExpandValueChanging: payload => bridge("expandValueChanging", payload)
+      });
+    }
+
+    // DevExtreme's rowFields, columnFields and dataFields beside a cell event:
+    // the fields on each axis as normalized, in their drawn order.
+    withFieldContext(payload) {
+      const visible = area => this.fields.filter(field => field.visible && field.area === area);
+      return Object.assign(payload, {
+        rowFields: visible("row"),
+        columnFields: visible("column"),
+        dataFields: visible("data")
       });
     }
 
@@ -1232,6 +1386,15 @@
 
     async refresh() {
       this.assertNotDisposed();
+
+      // A promised customLoad is waited for once, so the first request asks for
+      // the stored view rather than the declared one.
+      if (this.pendingState) {
+        await this.applyPendingState();
+        if (this.disposed) {
+          return;
+        }
+      }
 
       this.controller?.abort();
       const controller = new AbortController();
@@ -2146,6 +2309,12 @@
         return;
       }
 
+      // Before anything goes: the last change is still the reader's.
+      this.flushState();
+      if (this.visibilityListener) {
+        root.document?.removeEventListener?.("visibilitychange", this.visibilityListener);
+        this.visibilityListener = null;
+      }
       this.disposed = true;
       this.requestToken++;
       this.controller?.abort();
