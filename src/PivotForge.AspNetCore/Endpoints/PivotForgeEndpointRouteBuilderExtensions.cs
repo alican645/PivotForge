@@ -292,8 +292,6 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         }
     }
 
-    // Named rather than described: telling a caller which field it was would turn the
-    // endpoint into a way of asking what the record type holds.
     // The record type's fields, as far as the allow-list lets a header reach them: a field the
     // other endpoints would refuse is not offered either.
     private static IResult HandleFields(
@@ -316,6 +314,8 @@ public static class PivotForgeEndpointRouteBuilderExtensions
 
     private static string CamelCase(string name) => char.ToLowerInvariant(name[0]) + name[1..];
 
+    // Named rather than described: telling a caller which field it was would turn the
+    // endpoint into a way of asking what the record type holds.
     private static IResult FieldNotAllowed() =>
         BadRequest("The request names a field that is not available.");
 

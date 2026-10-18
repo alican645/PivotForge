@@ -652,8 +652,6 @@
       };
     }
 
-    // The state a promised customLoad delivered, applied as a stored view is:
-    // a state the fields no longer fit is left aside rather than failing the grid.
     // Checks a layout as a request would. With discovered fields a layout may
     // have no measure yet; it is checked field by field and the grid shows
     // that a value is needed rather than refusing the layout.
@@ -768,6 +766,8 @@
       }
     }
 
+    // The state a promised customLoad delivered, applied as a stored view is:
+    // a state the fields no longer fit is left aside rather than failing the grid.
     async applyPendingState() {
       const pending = this.pendingState;
       this.pendingState = null;
