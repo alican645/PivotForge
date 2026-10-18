@@ -14,6 +14,21 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- DevExtreme's `XmlaStore`: `xmla-url` / `xmla-catalog` / `xmla-cube`
+  (`XmlaStore(url, catalog, cube)`, `store: { type: "xmla", url, catalog, cube }`)
+  reads the grid from an OLAP cube over XMLA (SQL Server Analysis Services'
+  `msmdpump.dll` or any XMLA provider). One MDX query brings every cell, total
+  and subtotal from the cube; display modes, running totals, empty-cell hiding
+  and ordering by a summary run in the browser. `retrieveFields` reads the
+  cube's schema, measures by folder and hierarchies as field groups; filters
+  are sent as member subselects, drill-down as `DRILLTHROUGH`. Calculated
+  fields, `groupInterval`, `selector`, `sortingMethod`, top N, value filters
+  and `largeData` are refused with a clear error. Needs the new
+  `pivot-xmla-store.js`; paging and branch loading are not supported yet.
+  (AspNetCore)
+
 ## [0.10.0-preview.1] — 2026-10-18
 
 Field discovery with DevExtreme-style automatic captions, field groups

@@ -107,6 +107,10 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-result-assembler.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-remote-store.js"></script>
 
+<!-- Optional: a grid reading an OLAP cube over XMLA (XmlaStore). -->
+<script src="/_content/PivotForge.AspNetCore/js/pivot-result-assembler.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-xmla-store.js"></script>
+
 <!-- Optional: the language every component shows. English needs nothing. -->
 <script src="/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>
 ```
@@ -633,7 +637,7 @@ emit identical markup.
 | `chart` | `null` | A chart of the pivot beside the grid; needs `pivot-chart.js`. `true`, a type name, or `{ type, position, height, valueKey }`. See [Pivot chart](#pivot-chart). |
 | `stateStoring` | `null` | `"local"`, `"session"`, `"custom"` (with `customLoad` / `customSave`), or `null`. See [State persistence](#state-persistence). Any other value throws. |
 | `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
-| `store` | `null` | `{ type: "remote", loadUrl \| load, headers, onBeforeSend, limit }` loads from a DevExtreme.AspNet.Data backend instead of the PivotForge endpoints. See [Remote data (RemoteStore)](#remote-data-remotestore). |
+| `store` | `null` | `{ type: "remote", loadUrl \| load, headers, onBeforeSend, limit }` loads from a DevExtreme.AspNet.Data backend instead of the PivotForge endpoints. See [Remote data (RemoteStore)](#remote-data-remotestore). `{ type: "xmla", url, catalog, cube, headers, beforeSend, localeIdentifier, limit }` reads an OLAP cube. See [OLAP data (XmlaStore)](#olap-data-xmlastore). |
 
 `create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
 
@@ -919,6 +923,68 @@ because the protocol has no way to carry it: aggregations other than `sum`, `cou
   from the number the backend returns, which may differ in its last digits from the engine's.
 - **The whole result** is loaded at once; branches are not loaded as they are expanded.
 - **Excel export** still asks `{prefix}/excel`; without the PivotForge endpoints, use CSV.
+
+### OLAP data (XmlaStore)
+
+`xmla-url="/olap/msmdpump.dll" xmla-catalog="Adventure Works DW" xmla-cube="Adventure Works"`
+(`XmlaStore(url, catalog, cube)`, `store: { type: "xmla", url, catalog, cube }`) is DevExtreme's
+`XmlaStore`: the grid reads an OLAP cube -- SQL Server Analysis Services through `msmdpump.dll`,
+or any XMLA provider -- instead of the PivotForge endpoints. Load `pivot-result-assembler.js` and
+`pivot-xmla-store.js` before the grid is created.
+
+```html
+<pivot-grid id="sales" xmla-url="/olap/msmdpump.dll" xmla-catalog="Adventure Works DW"
+            xmla-cube="Adventure Works" retrieve-fields="true">
+    <pivot-field data-field="[Customer].[Country].[Country]" area="Row" />
+    <pivot-field data-field="[Date].[Calendar].[Calendar Year]" area="Column" />
+    <pivot-field data-field="[Measures].[Internet Sales Amount]" area="Data" />
+</pivot-grid>
+```
+
+- **Fields name the cube.** A row or column field is a level (`[Date].[Calendar].[Calendar Year]`)
+  or a single-level attribute hierarchy (`[Customer].[Country]`); a data field is a measure. The
+  cube sums its measures, so `aggregation` is not used and the designer offers no choice of
+  summary. Levels of one hierarchy may follow each other on an axis -- year, then quarter -- but a
+  hierarchy cannot be on both the rows and the columns.
+- **`retrieveFields`** reads the cube's schema (`MDSCHEMA_MEASURES`, `MDSCHEMA_HIERARCHIES`,
+  `MDSCHEMA_LEVELS`, `MDSCHEMA_DIMENSIONS`, `MDSCHEMA_MEASUREGROUPS`): each visible measure filed
+  under its display folder or measure group, each attribute hierarchy as a field under its
+  dimension, and each hierarchy of several levels as a [group](#field-groups) of them.
+- **One query.** The grid sends one MDX `SELECT` crossing every row and column member down to
+  each depth, so every total and subtotal is the cube's own -- a calculated member and a distinct
+  count stay right. Display modes, running totals, empty-cell hiding and ordering by a summary run
+  in the browser, exactly as the engine runs them.
+- **Order** is the cube's member order; `sortOrder: "Descending"` turns it around and
+  `sortBy: "displayText"` orders by caption.
+- **Labels** are member captions in the culture's language (`LocaleIdentifier`, from
+  `rendererOptions.culture` or `localeIdentifier`). Where captions repeat under what the axis
+  shows -- every year's Q1 with no year beside it -- a member is named with its ancestors,
+  `Q1 2024`. A quarter of every year is an attribute hierarchy of its own in a cube, and is
+  declared as one.
+- **Filters** are decided on the level's captions by the engine's rules (include, exclude,
+  `Contains`, `StartsWith`, `EndsWith`, `Between`, `GreaterThan`, `LessThan`, `Blank`) and sent as
+  the members they keep, in a subselect.
+- **The filter picker** lists a level's members; **drill-down** sends `DRILLTHROUGH MAXROWS` for
+  the cell, its records named by the rowset's columns (`[$Customer].[Country]` becomes `Country`).
+- **Errors:** a SOAP fault is the grid's `error`; a cell the cube could not compute (`#N/A`) is
+  shown empty, with one console warning.
+- **The request** is a `POST` with `Content-Type: text/xml`; `headers` are added to it and
+  `beforeSend(settings)` may change `settings.url`, `settings.headers` or set
+  `settings.withCredentials` for a server on another origin that asks for credentials.
+
+Refused when the grid starts, with a message naming what is refused: calculated fields
+(`expression` -- declare a calculated member of the cube instead), a `groupInterval` (a cube's
+dates come as hierarchy levels), `selector`, a `sortingMethod`, top N, value filters, `largeData`.
+
+#### Limitations
+
+- **The whole result** is read at once: DevExtreme's `paginate` and loading a branch as it is
+  expanded are not supported yet.
+- **`metadata.sourceRowCount`** is the number of crossings holding a value; a cube has no record
+  count.
+- **Excel export** still asks `{prefix}/excel`; without the PivotForge endpoints, use CSV.
+- The demo's `/api/xmla` is a small stand-in for `msmdpump.dll` that answers only the MDX the
+  store writes; it is for trying the grid, not an OLAP server.
 
 ### Top-N
 
