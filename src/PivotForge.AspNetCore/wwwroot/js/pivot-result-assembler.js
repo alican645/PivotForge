@@ -1478,6 +1478,181 @@
     };
   }
 
+  // ---- Buckets (what PivotEngine.Scan leaves) ----
+
+  function emptyScan(keys) {
+    return {
+      rowHeaders: [],
+      columnHeaders: [],
+      columnLevelValues: [],
+      rowKinds: [],
+      columnKinds: [],
+      cells: new Map(),
+      rowTotals: new Map(),
+      columnTotals: new Map(),
+      subtotals: new Map(),
+      columnSubtotals: new Map(),
+      // What an empty bucket finalizes to: no records counts to zero.
+      grandTotals: Object.fromEntries(keys.map(key => [key, key.endsWith("_count") ? 0 : null])),
+      sourceRowCount: 0
+    };
+  }
+
+  // Collects summaries a store read, each for a crossing of a row path and a
+  // column path of any depth, into the buckets assemble() reads: a full path
+  // on both axes is a cell, an empty one a total, a partial one a subtotal.
+  // The first value placed for a bucket wins.
+  function createScan(rowCount, columnCount, keys) {
+    const scan = emptyScan(keys);
+    const rowIndex = new Map();
+    const columnIndex = new Map();
+    scan.columnLevelValues = Array.from({ length: columnCount }, () => []);
+    scan.rowKinds = Array.from({ length: rowCount }, () => null);
+    scan.columnKinds = Array.from({ length: columnCount }, () => null);
+    scan.grandTotals = null;
+
+    const indexOf = (index, headers, path) => {
+      const key = keyOf(path);
+      if (!index.has(key)) {
+        index.set(key, headers.length);
+        headers.push(path);
+      }
+
+      return index.get(key);
+    };
+    const setOnce = (map, key, values) => {
+      if (!map.has(key)) {
+        map.set(key, values);
+      }
+    };
+
+    function place(rowPath, columnPath, values) {
+      const rowFull = rowPath.length === rowCount;
+      const columnFull = columnPath.length === columnCount;
+      let row = null;
+      let column = null;
+
+      if (rowFull && columnFull) {
+        row = indexOf(rowIndex, scan.rowHeaders, rowPath);
+        column = indexOf(columnIndex, scan.columnHeaders, columnPath);
+        columnPath.forEach((label, level) => {
+          if (!scan.columnLevelValues[level].includes(label)) {
+            scan.columnLevelValues[level].push(label);
+          }
+        });
+        setOnce(scan.cells, `${row},${column}`, values);
+      }
+
+      if (rowFull && columnPath.length === 0 && rowIndex.has(keyOf(rowPath))) {
+        setOnce(scan.rowTotals, rowIndex.get(keyOf(rowPath)), values);
+      }
+
+      if (rowPath.length === 0 && columnFull && columnIndex.has(keyOf(columnPath))) {
+        setOnce(scan.columnTotals, columnIndex.get(keyOf(columnPath)), values);
+      }
+
+      if (rowPath.length === 0 && columnPath.length === 0) {
+        scan.grandTotals ??= values;
+      }
+
+      const rowGroup = rowPath.length > 0 && rowPath.length < rowCount;
+      const columnGroup = columnPath.length > 0 && columnPath.length < columnCount;
+
+      if (rowGroup && (columnFull || columnPath.length === 0)) {
+        const key = keyOf(rowPath);
+        if (!scan.subtotals.has(key)) {
+          scan.subtotals.set(key, { rowHeader: rowPath, cells: new Map(), totals: null });
+        }
+
+        const subtotal = scan.subtotals.get(key);
+        if (columnPath.length === 0) {
+          subtotal.totals ??= values;
+        }
+
+        if (columnFull && columnIndex.has(keyOf(columnPath))) {
+          setOnce(subtotal.cells, columnIndex.get(keyOf(columnPath)), values);
+        }
+      }
+
+      if (columnGroup) {
+        const key = keyOf(columnPath);
+        if (!scan.columnSubtotals.has(key)) {
+          scan.columnSubtotals.set(key, { columnHeader: columnPath, cells: new Map(), totals: null, rowGroups: new Map() });
+        }
+
+        const subtotal = scan.columnSubtotals.get(key);
+        if (rowFull && rowIndex.has(keyOf(rowPath))) {
+          setOnce(subtotal.cells, rowIndex.get(keyOf(rowPath)), values);
+        } else if (rowPath.length === 0) {
+          subtotal.totals ??= values;
+        } else if (rowGroup) {
+          setOnce(subtotal.rowGroups, keyOf(rowPath), values);
+        }
+      }
+    }
+
+    function finish() {
+      // Nothing matched: no headers at all, as when no record reaches a bucket.
+      // An axis without fields needs nothing more: its one empty path is
+      // complete at every depth, so place() fills it like any other.
+      if (scan.sourceRowCount === 0) {
+        return emptyScan(keys);
+      }
+
+      scan.rowKinds = scan.rowKinds.map(kind => kind ?? "Auto");
+      scan.columnKinds = scan.columnKinds.map(kind => kind ?? "Auto");
+      for (const subtotal of scan.subtotals.values()) {
+        subtotal.totals ??= {};
+      }
+
+      for (const subtotal of scan.columnSubtotals.values()) {
+        subtotal.totals ??= {};
+      }
+
+      return scan;
+    }
+
+    return { scan, place, finish };
+  }
+
+  // ---- The engine's filter rule (PivotFilterPredicates), for labels in hand ----
+
+  function createPredicates(labels) {
+    const culture = labels.culture;
+    const fold = text => String(text ?? "").toLocaleLowerCase(culture.name);
+
+    function compare(text, argument) {
+      const other = argument ?? "";
+      const left = labels.invariantNumberOf(text);
+      const right = labels.invariantNumberOf(other);
+      if (left !== null && right !== null) {
+        return left < right ? -1 : left > right ? 1 : 0;
+      }
+
+      const leftDate = labels.dateNumberOf(text);
+      const rightDate = labels.dateNumberOf(other);
+      if (leftDate !== null && rightDate !== null) {
+        return leftDate < rightDate ? -1 : leftDate > rightDate ? 1 : 0;
+      }
+
+      return labels.ignoreCase(text, other);
+    }
+
+    return function matches(value, operator, args) {
+      const text = value ?? "";
+      switch (operator) {
+        case "Contains": return fold(text).includes(fold(args[0]));
+        case "StartsWith": return fold(text).startsWith(fold(args[0]));
+        case "EndsWith": return fold(text).endsWith(fold(args[0]));
+        case "Between": return compare(text, args[0]) >= 0 && compare(text, args[1]) <= 0;
+        case "GreaterThan": return compare(text, args[0]) > 0;
+        case "LessThan": return compare(text, args[0]) < 0;
+        case "Blank": return text.length === 0;
+        default: return args.includes(value);
+      }
+    };
+  }
+
   // ---- The whole pass (ExecuteCore after Scan) ----
 
   // scan: what the summaries came to before anything was ordered --
@@ -1579,6 +1754,9 @@
     levelInterval,
     valueKey,
     keyOf,
+    emptyScan,
+    createScan,
+    createPredicates,
     RANGE_SEPARATOR
   };
 
