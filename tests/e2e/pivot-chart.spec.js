@@ -173,9 +173,11 @@ test("the toolbar's chart button hides the chart and brings it back, drawn", asy
   await expect(chart).toBeVisible();
   await expect(button).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".pivot-chart__bar")).not.toHaveCount(0);
-  // Drawn at the width it has now, not the width a hidden box reports.
-  const width = await page.locator(".pivot-chart__svg").evaluate(svg => svg.getBoundingClientRect().width);
-  expect(width).toBeGreaterThan(300);
+  // Drawn at the width it has now, not the width a hidden box reports. Polled:
+  // showing the chart resizes its box, and the redraw that follows replaces the
+  // svg, so a read that lands in between measures a detached one.
+  await expect.poll(() => page.evaluate(() =>
+    document.querySelector(".pivot-chart__svg")?.getBoundingClientRect().width ?? 0)).toBeGreaterThan(300);
 
   await button.click();
   await expect(chart).toBeHidden();
