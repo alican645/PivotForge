@@ -78,6 +78,11 @@
     // a waiting save is written at once when the page is hidden or the grid
     // disposed. Zero writes every change as it happens.
     stateSavingTimeout: 0,
+    // DevExtreme's exportPivotGrid options, for every Excel and CSV export:
+    // exportFilterFieldHeaders, exportDataFieldHeaders, exportColumnFieldHeaders
+    // and exportRowFieldHeaders (field header rows), mergeRowFieldValues and
+    // mergeColumnFieldValues. An export call's own options win.
+    excelExport: null,
     // DevExtreme's field chooser popup: true, or { layout: 0 | 1 | 2,
     // allFields, applyChangesMode: "instantly" | "onDemand", title }. Opened
     // with showFieldChooser(), the toolbar's fieldChooser button or the cell
@@ -2240,6 +2245,19 @@
       };
     }
 
+    // The grid's declared export options under the call's own, with the filter
+    // fields' captions a filter field header row names.
+    exportOptions(options = {}) {
+      const filterFieldLabels = this.fields
+        .filter(field => field.visible && field.area === "filter")
+        .map(field => field.caption);
+      return {
+        ...(filterFieldLabels.length > 0 ? { filterFieldLabels } : {}),
+        ...(this.options.excelExport ?? {}),
+        ...options
+      };
+    }
+
     async exportToExcel(options = {}) {
       this.assertNotDisposed();
 
@@ -2255,7 +2273,7 @@
         );
       }
 
-      const document = this.renderer.getExcelExportModel(options);
+      const document = this.renderer.getExcelExportModel(this.exportOptions(options));
       if (!document) {
         throw new Error("Cannot export because no pivot table has been rendered yet.");
       }
@@ -2301,7 +2319,7 @@
         );
       }
 
-      const model = this.renderer.getExcelExportModel(options);
+      const model = this.renderer.getExcelExportModel(this.exportOptions(options));
       if (!model) {
         throw new Error("Cannot export because no pivot table has been rendered yet.");
       }

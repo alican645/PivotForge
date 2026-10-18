@@ -350,6 +350,90 @@ PivotForge.isConditionalRule = function isConditionalRule(rule) {
 };
 
 // Compact and tree both put every row field in one indented column.
+// DevExtreme's export field header rows, above the table: the filter fields
+// across the whole width, then the data fields over the row headers and the
+// column fields over the column headers. A field takes a cell of its own while
+// there is room, the last stretching to the edge; with more fields than
+// columns their captions share one cell. A side left out stays blank.
+function fieldHeaderRows({
+  width,
+  rowHeaderWidth,
+  filterLabels = [],
+  dataLabels = [],
+  columnLabels = [],
+  exportFilterFieldHeaders = false,
+  exportDataFieldHeaders = false,
+  exportColumnFieldHeaders = false
+}) {
+  const cell = (text, columnSpan, headerType) => ({
+    text,
+    number: null,
+    rowSpan: 1,
+    columnSpan,
+    width: 118 * columnSpan,
+    numberFormat: null,
+    role: "FieldHeader",
+    highlight: "None",
+    fillColor: null,
+    source: { area: "fieldHeader", headerType }
+  });
+  // One cell per caption across `span` columns, or one cell for all of them.
+  const spread = (labels, span, headerType) => {
+    if (labels.length === 0) {
+      return [cell("", span, headerType)];
+    }
+
+    if (labels.length > span) {
+      return [cell(labels.join(", "), span, headerType)];
+    }
+
+    return labels.map((label, index) =>
+      cell(label, index === labels.length - 1 ? span - index : 1, headerType));
+  };
+  const rows = [];
+  const total = Math.max(1, width);
+  const left = Math.max(1, Math.min(rowHeaderWidth, total));
+
+  if (exportFilterFieldHeaders && filterLabels.length > 0) {
+    rows.push({ cells: spread(filterLabels, total, "filter") });
+  }
+
+  const showData = exportDataFieldHeaders && dataLabels.length > 0;
+  const showColumns = exportColumnFieldHeaders && columnLabels.length > 0 && total > left;
+  if (showData || showColumns) {
+    rows.push({
+      cells: [
+        cell(showData ? dataLabels.join(", ") : "", left, "data"),
+        ...(total > left ? spread(showColumns ? columnLabels : [], total - left, "column") : [])
+      ]
+    });
+  }
+
+  return rows;
+}
+
+// How many columns a table's rows span, counting the cells that reach down
+// into a row from one above.
+function tableWidth(rows) {
+  const carried = new Map();
+  let widest = 0;
+
+  rows.forEach((row, index) => {
+    let width = carried.get(index) ?? 0;
+    for (const cell of row.cells) {
+      width += cell.columnSpan || 1;
+      for (let below = 1; below < (cell.rowSpan || 1); below++) {
+        carried.set(index + below, (carried.get(index + below) ?? 0) + (cell.columnSpan || 1));
+      }
+    }
+    widest = Math.max(widest, width);
+  });
+
+  return widest;
+}
+
+PivotForge.excelFieldHeaderRows = fieldHeaderRows;
+
 function isOneColumnLayout(settings) {
   return settings?.layoutMode === "compact" || settings?.layoutMode === "tree";
 }
@@ -980,20 +1064,50 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       ? Array.from(bodyRow.children).findIndex(cell => cell.tagName === "TD")
       : 0;
 
+    const rows = Array.from(table.rows)
+      .filter(row => !row.hidden && row.style.display !== "none")
+      .map(row => ({
+        cells: Array.from(row.children).map(cell => {
+          const exported = this.createExcelExportCell(cell, row);
+          // DevExtreme leaves the corner blank unless asked; here it names the row
+          // fields unless asked not to, as every earlier export did.
+          if (options.exportRowFieldHeaders === false && cell.classList.contains("pivot-table__corner") &&
+              !cell.classList.contains("pivot-table__column-field") &&
+              !cell.classList.contains("pivot-table__values-corner")) {
+            exported.text = "";
+          }
+          return exported;
+        })
+      }));
+    // A grid whose corner already names its column fields -- one with sorting
+    // or filtering on its column axis -- is not given a second row of them.
+    const namesColumnFields = Boolean(table.querySelector?.(".pivot-table__column-field"));
+    const settings = this.lastSettings ?? this.options;
+    const fieldRows = fieldHeaderRows({
+      width: tableWidth(rows),
+      rowHeaderWidth: Math.max(1, frozenColumnCount),
+      filterLabels: options.filterFieldLabels ?? [],
+      dataLabels: options.dataFieldLabels ?? (settings?.values ?? []).map(value => value.label ?? value.key),
+      columnLabels: namesColumnFields ? [] : settings?.columnFieldLabels ?? [],
+      exportFilterFieldHeaders: options.exportFilterFieldHeaders === true,
+      exportDataFieldHeaders: options.exportDataFieldHeaders === true,
+      exportColumnFieldHeaders: options.exportColumnFieldHeaders === true
+    });
+
     return {
       title: options.title ?? "Pivot Tablo",
       filterSummary: options.filterSummary ?? "Aktif filtre yok",
       filterLabel: options.filterLabel ?? "Filtreler",
       sheetName: options.sheetName ?? "Pivot Tablo",
-      headerRowCount: table.tHead?.rows.length ?? 0,
+      // The field header rows freeze with the table's own head.
+      headerRowCount: (table.tHead?.rows.length ?? 0) + fieldRows.length,
       frozenColumnCount: Math.max(0, frozenColumnCount),
       // Written only for a right-to-left grid, so every other model is unchanged.
       ...(PivotForge.isRtl(table) ? { rightToLeft: true } : {}),
-      rows: Array.from(table.rows)
-        .filter(row => !row.hidden && row.style.display !== "none")
-        .map(row => ({
-          cells: Array.from(row.children).map(cell => this.createExcelExportCell(cell, row))
-        }))
+      // Written only when switched off, for the same reason.
+      ...(options.mergeRowFieldValues === false ? { mergeRowFieldValues: false } : {}),
+      ...(options.mergeColumnFieldValues === false ? { mergeColumnFieldValues: false } : {}),
+      rows: [...fieldRows, ...rows]
     };
   }
 

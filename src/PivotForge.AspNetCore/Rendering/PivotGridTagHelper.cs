@@ -76,6 +76,30 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("field-designer-all-fields")]
     public bool? FieldDesignerAllFields { get; set; }
 
+    /// <summary>Gets or sets whether Excel and CSV exports name the filter fields in a row above the table.</summary>
+    [HtmlAttributeName("excel-filter-field-headers")]
+    public bool? ExcelFilterFieldHeaders { get; set; }
+
+    /// <summary>Gets or sets whether exports name the data fields above the row headers.</summary>
+    [HtmlAttributeName("excel-data-field-headers")]
+    public bool? ExcelDataFieldHeaders { get; set; }
+
+    /// <summary>Gets or sets whether exports name the column fields above the column headers.</summary>
+    [HtmlAttributeName("excel-column-field-headers")]
+    public bool? ExcelColumnFieldHeaders { get; set; }
+
+    /// <summary>Gets or sets whether exports keep the row fields' names in the corner (true by default).</summary>
+    [HtmlAttributeName("excel-row-field-headers")]
+    public bool? ExcelRowFieldHeaders { get; set; }
+
+    /// <summary>Gets or sets whether a row header spanning several rows is exported as one merged cell.</summary>
+    [HtmlAttributeName("excel-merge-row-field-values")]
+    public bool? ExcelMergeRowFieldValues { get; set; }
+
+    /// <summary>Gets or sets whether a column header spanning several columns is exported as one merged cell.</summary>
+    [HtmlAttributeName("excel-merge-column-field-values")]
+    public bool? ExcelMergeColumnFieldValues { get; set; }
+
     /// <summary>Gets or sets whether the grid is laid out right to left; undeclared follows the page.</summary>
     [HtmlAttributeName("rtl-enabled")]
     public bool? RtlEnabled { get; set; }
@@ -465,6 +489,17 @@ public sealed class PivotGridTagHelper : TagHelper
         {
             builder.FieldChooser(fieldChooser);
         }
+
+        var defaultExport = new PivotExcelExportOptions();
+        builder.ExcelExport(new PivotExcelExportOptions
+        {
+            ExportFilterFieldHeaders = ExcelFilterFieldHeaders ?? defaultExport.ExportFilterFieldHeaders,
+            ExportDataFieldHeaders = ExcelDataFieldHeaders ?? defaultExport.ExportDataFieldHeaders,
+            ExportColumnFieldHeaders = ExcelColumnFieldHeaders ?? defaultExport.ExportColumnFieldHeaders,
+            ExportRowFieldHeaders = ExcelRowFieldHeaders ?? defaultExport.ExportRowFieldHeaders,
+            MergeRowFieldValues = ExcelMergeRowFieldValues ?? defaultExport.MergeRowFieldValues,
+            MergeColumnFieldValues = ExcelMergeColumnFieldValues ?? defaultExport.MergeColumnFieldValues
+        });
 
         if (written.Contains("field-designer-layout"))
         {

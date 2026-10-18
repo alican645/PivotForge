@@ -1414,3 +1414,41 @@ test("a kind of column every value gives up keeps them all", () => {
   assert.deepEqual(layout.valuesAt(0).map(({ value }) => value.key), ["count"]);
   assert.equal(renderer.showsValueIn({ slot: true, showValues: false }, "detail"), true);
 });
+
+test("field header rows: filters across the top, data over the row headers, columns over the rest", () => {
+  const rows = window.PivotForge.excelFieldHeaderRows({
+    width: 5,
+    rowHeaderWidth: 2,
+    filterLabels: ["Bölge", "Kanal"],
+    dataLabels: ["Tutar", "Adet"],
+    columnLabels: ["Yıl", "Çeyrek"],
+    exportFilterFieldHeaders: true,
+    exportDataFieldHeaders: true,
+    exportColumnFieldHeaders: true
+  });
+  const shape = row => row.cells.map(cell => `${cell.text}:${cell.columnSpan}`);
+
+  assert.deepEqual(rows.map(shape), [
+    ["Bölge:1", "Kanal:4"],
+    ["Tutar, Adet:2", "Yıl:1", "Çeyrek:2"]
+  ]);
+  assert.ok(rows.flatMap(row => row.cells).every(cell => cell.role === "FieldHeader"));
+  assert.deepEqual(rows[1].cells.map(cell => cell.source.headerType), ["data", "column", "column"]);
+});
+
+test("field header rows: more fields than columns share a cell, an unasked side stays blank", () => {
+  const rows = window.PivotForge.excelFieldHeaderRows({
+    width: 3,
+    rowHeaderWidth: 1,
+    columnLabels: ["Yıl", "Çeyrek", "Ay"],
+    dataLabels: ["Tutar"],
+    exportColumnFieldHeaders: true
+  });
+
+  assert.deepEqual(rows[0].cells.map(cell => [cell.text, cell.columnSpan]), [["", 1], ["Yıl, Çeyrek, Ay", 2]]);
+  // Nothing asked for, or nothing to name: no rows.
+  assert.deepEqual(window.PivotForge.excelFieldHeaderRows({ width: 3, rowHeaderWidth: 1 }), []);
+  assert.deepEqual(window.PivotForge.excelFieldHeaderRows({
+    width: 3, rowHeaderWidth: 1, filterLabels: [], exportFilterFieldHeaders: true
+  }), []);
+});

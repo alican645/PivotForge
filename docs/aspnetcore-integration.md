@@ -1152,6 +1152,36 @@ Both exports read the table as it currently stands, not the last result — so a
 collapsed group exports collapsed, and a resized or reordered grid exports the
 way it looks.
 
+
+#### Field header rows and merging
+
+DevExtreme's `exportPivotGrid` options, for every Excel and CSV export of the grid —
+declared once, or passed to an export call, whose own options win:
+
+```cshtml
+<pivot-grid id="pivotGrid" allow-excel-export="true"
+            excel-filter-field-headers="true"
+            excel-data-field-headers="true"
+            excel-column-field-headers="true"
+            excel-merge-row-field-values="false">
+```
+
+| Attribute | JavaScript | Default | Meaning |
+| --- | --- | --- | --- |
+| `excel-filter-field-headers` | `exportFilterFieldHeaders` | `false` | A row above the table naming the filter fields. |
+| `excel-data-field-headers` | `exportDataFieldHeaders` | `false` | The data fields named above the row headers. |
+| `excel-column-field-headers` | `exportColumnFieldHeaders` | `false` | The column fields named above the column headers. A grid whose corner already names them (sorting or filtering on its columns) is not given a second row. |
+| `excel-row-field-headers` | `exportRowFieldHeaders` | `true` | The corner names the row fields, as on screen. DevExtreme leaves it blank unless asked; `false` does the same here. |
+| `excel-merge-row-field-values` | `mergeRowFieldValues` | `true` | `false` writes a row header into every row it spans instead of one merged cell, so the sheet sorts and filters row by row. |
+| `excel-merge-column-field-values` | `mergeColumnFieldValues` | `true` | The same for a column header across its columns. |
+
+Each field takes a cell of its own while there is room, the last stretching to the
+edge; with more fields than columns their captions share one cell. Field header cells
+are bold with a thin grey border, stay merged, freeze with the table's head, and
+carry `source: { area: "fieldHeader", headerType }` in the `exporting` event. The
+builder takes `ExcelExport(new PivotExcelExportOptions { ... })`; in JavaScript the
+widget option is `excelExport`.
+
 ### Filter operators
 
 A filter compares its values with an operator. The default, `Equals`, reads them as

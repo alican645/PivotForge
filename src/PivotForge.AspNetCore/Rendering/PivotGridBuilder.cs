@@ -291,6 +291,34 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder FieldDesigner(string selector) => Set("fieldDesigner", selector);
 
+    /// <summary>Sets how the grid's Excel and CSV exports lay out their headers.</summary>
+    /// <remarks>Only the options that differ from the defaults are written, so a grid that leaves
+    /// them alone exports as it always has. An export call's own options still win.</remarks>
+    /// <param name="options">The field header rows and merging to apply.</param>
+    /// <returns>The same builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
+    public PivotGridBuilder ExcelExport(PivotExcelExportOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var defaults = new PivotExcelExportOptions();
+        var written = new Dictionary<string, object?>(StringComparer.Ordinal);
+        void Write(string name, bool value, bool fallback)
+        {
+            if (value != fallback)
+            {
+                written[name] = value;
+            }
+        }
+
+        Write("exportFilterFieldHeaders", options.ExportFilterFieldHeaders, defaults.ExportFilterFieldHeaders);
+        Write("exportDataFieldHeaders", options.ExportDataFieldHeaders, defaults.ExportDataFieldHeaders);
+        Write("exportColumnFieldHeaders", options.ExportColumnFieldHeaders, defaults.ExportColumnFieldHeaders);
+        Write("exportRowFieldHeaders", options.ExportRowFieldHeaders, defaults.ExportRowFieldHeaders);
+        Write("mergeRowFieldValues", options.MergeRowFieldValues, defaults.MergeRowFieldValues);
+        Write("mergeColumnFieldValues", options.MergeColumnFieldValues, defaults.MergeColumnFieldValues);
+        return written.Count == 0 ? this : Set("excelExport", written);
+    }
+
     /// <summary>Arranges the page's field designer the way a field chooser layout does.</summary>
     /// <param name="layout">The arrangement.</param>
     /// <returns>The same builder.</returns>

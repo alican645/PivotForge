@@ -2302,6 +2302,34 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesOnlyTheExcelExportOptionsThatDifferFromTheDefaults()
+    {
+        var plain = ConfigOf(await RenderAsync(new PivotGridTagHelper { Id = "pivotGrid" }, MinimalFields));
+        Assert.False(plain.TryGetProperty("excelExport", out _));
+
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                ExcelFilterFieldHeaders = true,
+                ExcelColumnFieldHeaders = true,
+                ExcelRowFieldHeaders = false,
+                ExcelMergeColumnFieldValues = false,
+                // The default, so it is not written.
+                ExcelMergeRowFieldValues = true
+            },
+            MinimalFields)).GetProperty("excelExport");
+
+        Assert.Equal(
+            ["exportColumnFieldHeaders", "exportFilterFieldHeaders", "exportRowFieldHeaders", "mergeColumnFieldValues"],
+            declared.EnumerateObject().Select(property => property.Name).Order());
+        Assert.True(declared.GetProperty("exportFilterFieldHeaders").GetBoolean());
+        Assert.False(declared.GetProperty("exportRowFieldHeaders").GetBoolean());
+        Assert.False(declared.GetProperty("mergeColumnFieldValues").GetBoolean());
+        Assert.Throws<ArgumentNullException>(() => new PivotGridBuilder().ExcelExport(null!));
+    }
+
+    [Fact]
     public async Task StateStoringMatchesTheEquivalentBuilderConfiguration()
     {
         var fromTagHelper = await RenderAsync(

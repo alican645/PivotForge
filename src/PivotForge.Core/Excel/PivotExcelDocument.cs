@@ -28,6 +28,17 @@ public sealed class PivotExcelDocument
     /// <remarks>The sheet's columns run from the right, and every horizontal alignment trades
     /// sides with it: headers align right and numbers left, as they do on screen.</remarks>
     public bool RightToLeft { get; init; }
+
+    /// <summary>Gets whether a row header spanning several rows is one merged cell, DevExtreme's
+    /// <c>mergeRowFieldValues</c>.</summary>
+    /// <remarks>False writes the header into every row it spans, so the sheet sorts and filters
+    /// row by row without losing which group a row belongs to.</remarks>
+    public bool MergeRowFieldValues { get; init; } = true;
+
+    /// <summary>Gets whether a column header spanning several columns is one merged cell,
+    /// DevExtreme's <c>mergeColumnFieldValues</c>.</summary>
+    /// <remarks>False writes the header into every column it spans. Field header rows stay merged.</remarks>
+    public bool MergeColumnFieldValues { get; init; } = true;
 }
 
 /// <summary>Represents one logical row in a pivot workbook.</summary>
@@ -94,7 +105,10 @@ public enum PivotExcelCellRole
     /// <summary>A row or column total.</summary>
     Total,
     /// <summary>A grand total.</summary>
-    GrandTotal
+    GrandTotal,
+    /// <summary>A field's caption in a field header row: the filters, values or column fields
+    /// above the table. Bold, with a thin grey border, and always merged.</summary>
+    FieldHeader
 }
 
 /// <summary>Specifies the optional emphasis color applied to an exported cell.</summary>

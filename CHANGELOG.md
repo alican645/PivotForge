@@ -27,6 +27,16 @@ change will require a new major version.
   until OK; Cancel and Escape put the layout back. A page-hosted designer takes
   the same `field-designer-layout` / `field-designer-all-fields`, and a field
   chip's right click raises `contextMenuPreparing` with the field. (AspNetCore)
+- Export field header rows and header merging, DevExtreme's `exportPivotGrid`
+  options: `exportFilterFieldHeaders`, `exportDataFieldHeaders`,
+  `exportColumnFieldHeaders` (bold, bordered rows above the table that freeze
+  with its head), `exportRowFieldHeaders` (the corner's row field names, on by
+  default as before), and `mergeRowFieldValues` / `mergeColumnFieldValues`
+  (false writes a header into every cell it spans). Declared with
+  `excel-*` attributes / `ExcelExport(PivotExcelExportOptions)` / the
+  `excelExport` option, or passed to an export call.
+  `PivotExcelDocument.MergeRowFieldValues` / `MergeColumnFieldValues` and
+  `PivotExcelCellRole.FieldHeader` carry them to the workbook. (Core, AspNetCore)
 
 ### Fixed
 

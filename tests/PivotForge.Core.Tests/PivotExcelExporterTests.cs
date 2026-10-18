@@ -239,6 +239,124 @@ public sealed class PivotExcelExporterTests
         Assert.Equal(-1, worksheet.ToString().IndexOf('\u0001'));
     }
 
+    // A field header row over a 2026/2027 column header row and two regions spanning two rows.
+    private static PivotExcelDocument FieldHeaderDocument(bool mergeRows = true, bool mergeColumns = true) => new()
+    {
+        HeaderRowCount = 2,
+        FrozenColumnCount = 1,
+        MergeRowFieldValues = mergeRows,
+        MergeColumnFieldValues = mergeColumns,
+        Rows =
+        [
+            new PivotExcelRow
+            {
+                Cells =
+                [
+                    new PivotExcelCell { Text = "Tutar", Role = PivotExcelCellRole.FieldHeader },
+                    new PivotExcelCell { Text = "Yıl", ColumnSpan = 2, Role = PivotExcelCellRole.FieldHeader }
+                ]
+            },
+            new PivotExcelRow
+            {
+                Cells =
+                [
+                    new PivotExcelCell { Text = "Bölge", Role = PivotExcelCellRole.Header },
+                    new PivotExcelCell { Text = "2026", ColumnSpan = 2, Width = 200, Role = PivotExcelCellRole.Header }
+                ]
+            },
+            new PivotExcelRow
+            {
+                Cells =
+                [
+                    new PivotExcelCell { Text = "Ege", RowSpan = 2, Role = PivotExcelCellRole.RowHeader },
+                    new PivotExcelCell { Text = "1", Number = 1m },
+                    new PivotExcelCell { Text = "2", Number = 2m }
+                ]
+            },
+            new PivotExcelRow
+            {
+                Cells =
+                [
+                    new PivotExcelCell { Text = "3", Number = 3m },
+                    new PivotExcelCell { Text = "4", Number = 4m }
+                ]
+            }
+        ]
+    };
+
+    private static (XDocument Worksheet, XDocument Styles) Export(PivotExcelDocument document)
+    {
+        using var archive = new ZipArchive(new MemoryStream(new PivotExcelExporter().Export(document)), ZipArchiveMode.Read);
+        return (ReadXml(archive, "xl/worksheets/sheet1.xml"), ReadXml(archive, "xl/styles.xml"));
+    }
+
+    private static string[] Merges(XDocument worksheet) =>
+        worksheet.Descendants(Spreadsheet + "mergeCell").Select(element => element.Attribute("ref")!.Value).ToArray();
+
+    private static string? TextAt(XDocument worksheet, string reference) =>
+        worksheet.Descendants(Spreadsheet + "c")
+            .SingleOrDefault(cell => cell.Attribute("r")?.Value == reference)
+            ?.Descendants(Spreadsheet + "t").SingleOrDefault()?.Value;
+
+    [Fact]
+    public void HeadersAreMergedByDefault()
+    {
+        var (worksheet, _) = Export(FieldHeaderDocument());
+
+        // Data starts on row 4: the field header row, the column headers, then the body.
+        Assert.Contains("B4:C4", Merges(worksheet));
+        Assert.Contains("B5:C5", Merges(worksheet));
+        Assert.Contains("A6:A7", Merges(worksheet));
+    }
+
+    [Fact]
+    public void UnmergedHeadersAreWrittenIntoEveryCellTheySpan_FieldHeadersStayMerged()
+    {
+        var (worksheet, _) = Export(FieldHeaderDocument(mergeRows: false, mergeColumns: false));
+        var merges = Merges(worksheet);
+
+        Assert.DoesNotContain("B5:C5", merges);
+        Assert.DoesNotContain("A6:A7", merges);
+        Assert.Contains("B4:C4", merges);
+        Assert.Equal("2026", TextAt(worksheet, "B5"));
+        Assert.Equal("2026", TextAt(worksheet, "C5"));
+        Assert.Equal("Ege", TextAt(worksheet, "A6"));
+        Assert.Equal("Ege", TextAt(worksheet, "A7"));
+        // The body still lands beside the headers it belongs to.
+        Assert.Equal("4", worksheet.Descendants(Spreadsheet + "c")
+            .Single(cell => cell.Attribute("r")?.Value == "C7").Element(Spreadsheet + "v")?.Value);
+    }
+
+    [Fact]
+    public void EachKindOfHeaderFollowsItsOwnFlag()
+    {
+        var (rowsOnly, _) = Export(FieldHeaderDocument(mergeRows: false));
+        Assert.Contains("B5:C5", Merges(rowsOnly));
+        Assert.DoesNotContain("A6:A7", Merges(rowsOnly));
+
+        var (columnsOnly, _) = Export(FieldHeaderDocument(mergeColumns: false));
+        Assert.DoesNotContain("B5:C5", Merges(columnsOnly));
+        Assert.Contains("A6:A7", Merges(columnsOnly));
+    }
+
+    [Fact]
+    public void AFieldHeaderIsBoldWithAGreyBorder_AndAWorkbookWithoutOneKeepsItsStyles()
+    {
+        var (worksheet, styles) = Export(FieldHeaderDocument());
+        var borders = styles.Descendants(Spreadsheet + "border").ToArray();
+        Assert.Equal(3, borders.Length);
+        Assert.Contains("FF7E7E7E", borders[2].ToString());
+
+        var styleIndex = int.Parse(worksheet.Descendants(Spreadsheet + "c")
+            .Single(cell => cell.Attribute("r")?.Value == "A4").Attribute("s")!.Value);
+        var xf = styles.Descendants(Spreadsheet + "cellXfs").Single().Elements(Spreadsheet + "xf").ElementAt(styleIndex);
+        Assert.Equal("2", xf.Attribute("borderId")!.Value);
+        Assert.Equal("1", xf.Attribute("fontId")!.Value);
+
+        var plain = new PivotExcelDocument { Rows = [new PivotExcelRow { Cells = [new PivotExcelCell { Text = "x" }] }] };
+        Assert.Equal(2, Export(plain).Styles.Descendants(Spreadsheet + "border").Count());
+    }
+
     private static XDocument ReadXml(ZipArchive archive, string path)
     {
         using var stream = archive.GetEntry(path)!.Open();

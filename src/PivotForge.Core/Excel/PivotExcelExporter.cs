@@ -55,7 +55,36 @@ public sealed class PivotExcelExporter
 
                 var rowSpan = Math.Max(1, cell.RowSpan);
                 var columnSpan = Math.Max(1, cell.ColumnSpan);
-                placements.Add(new CellPlacement(rowIndex, columnIndex, rowSpan, columnSpan, cell));
+                if (rowSpan * columnSpan > 1 && !Merges(document, cell))
+                {
+                    // Unmerged, the header is written into every cell it covers, at that
+                    // cell's share of its width, as DevExtreme copies value and style.
+                    var copy = cell.ColumnSpan > 1
+                        ? new PivotExcelCell
+                        {
+                            Text = cell.Text,
+                            Number = cell.Number,
+                            Width = cell.Width / columnSpan,
+                            NumberFormat = cell.NumberFormat,
+                            Role = cell.Role,
+                            Highlight = cell.Highlight,
+                            FillColor = cell.FillColor,
+                            FontColor = cell.FontColor,
+                            Bold = cell.Bold
+                        }
+                        : cell;
+                    for (var row = rowIndex; row < rowIndex + rowSpan; row++)
+                    {
+                        for (var column = columnIndex; column < columnIndex + columnSpan; column++)
+                        {
+                            placements.Add(new CellPlacement(row, column, 1, 1, copy));
+                        }
+                    }
+                }
+                else
+                {
+                    placements.Add(new CellPlacement(rowIndex, columnIndex, rowSpan, columnSpan, cell));
+                }
 
                 for (var row = rowIndex; row < rowIndex + rowSpan; row++)
                 {
@@ -72,6 +101,15 @@ public sealed class PivotExcelExporter
 
         return new SheetLayout(placements, maxColumn);
     }
+
+    // Row headers follow MergeRowFieldValues and column headers MergeColumnFieldValues; a field
+    // header row and the table body are always merged as drawn.
+    private static bool Merges(PivotExcelDocument document, PivotExcelCell cell) => cell.Role switch
+    {
+        PivotExcelCellRole.RowHeader => document.MergeRowFieldValues,
+        PivotExcelCellRole.Header => document.MergeColumnFieldValues,
+        _ => true
+    };
 
     private static StyleCatalog BuildStyles(IReadOnlyList<CellPlacement> placements)
     {
@@ -128,6 +166,7 @@ public sealed class PivotExcelExporter
 
     private static bool IsBold(StyleKey key) => key.Bold ?? key.Role is "title"
         or nameof(PivotExcelCellRole.Header)
+        or nameof(PivotExcelCellRole.FieldHeader)
         or nameof(PivotExcelCellRole.RowHeader)
         or nameof(PivotExcelCellRole.Subtotal)
         or nameof(PivotExcelCellRole.Total)
@@ -317,7 +356,10 @@ public sealed class PivotExcelExporter
 
         WriteFonts(writer, catalog.CustomFonts);
         WriteFills(writer, catalog.CustomFills);
-        WriteBorders(writer);
+        // The grey field-header border is written only when a field header is, so a workbook
+        // without them is byte for byte what it was.
+        var fieldHeaders = catalog.Keys.Any(key => key.Role == nameof(PivotExcelCellRole.FieldHeader));
+        WriteBorders(writer, fieldHeaders);
 
         writer.WriteStartElement("cellStyleXfs");
         writer.WriteAttributeString("count", "1");
@@ -336,7 +378,8 @@ public sealed class PivotExcelExporter
             // Excel keeps "left" and "right" physical in a right-to-left sheet, so
             // they trade places here to read as they do on screen.
             var horizontal = numeric != rightToLeft ? "right" : "left";
-            WriteXf(writer, numberFormatId, fontId, fillId, role is "title" or "metadata" ? 0 : 1, numberFormatId > 0, true, horizontal);
+            var borderId = role is "title" or "metadata" ? 0 : role == nameof(PivotExcelCellRole.FieldHeader) ? 2 : 1;
+            WriteXf(writer, numberFormatId, fontId, fillId, borderId, numberFormatId > 0, true, horizontal);
         }
         writer.WriteEndElement();
 
@@ -445,10 +488,10 @@ public sealed class PivotExcelExporter
         writer.WriteEndElement();
     }
 
-    private static void WriteBorders(XmlWriter writer)
+    private static void WriteBorders(XmlWriter writer, bool fieldHeaders)
     {
         writer.WriteStartElement("borders");
-        writer.WriteAttributeString("count", "2");
+        writer.WriteAttributeString("count", fieldHeaders ? "3" : "2");
         writer.WriteStartElement("border");
         writer.WriteElementString("left", "");
         writer.WriteElementString("right", "");
@@ -468,6 +511,22 @@ public sealed class PivotExcelExporter
         }
         writer.WriteElementString("diagonal", "");
         writer.WriteEndElement();
+        if (fieldHeaders)
+        {
+            // DevExtreme's field header border: thin, mid grey.
+            writer.WriteStartElement("border");
+            foreach (var side in new[] { "left", "right", "top", "bottom" })
+            {
+                writer.WriteStartElement(side);
+                writer.WriteAttributeString("style", "thin");
+                writer.WriteStartElement("color");
+                writer.WriteAttributeString("rgb", "FF7E7E7E");
+                writer.WriteEndElement();
+                writer.WriteEndElement();
+            }
+            writer.WriteElementString("diagonal", "");
+            writer.WriteEndElement();
+        }
         writer.WriteEndElement();
     }
 
