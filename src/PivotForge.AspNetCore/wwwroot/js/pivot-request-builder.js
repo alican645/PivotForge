@@ -301,6 +301,33 @@
     return { fields, summaries, sliceFields };
   }
 
+  // DevExtreme's titleize: words split at camelCase boundaries and at _ - . or
+  // spaces, each started with a capital. "netAmount" reads "Net Amount".
+  // An acronym is left as written: "orderID" reads "Order ID".
+  function titleize(text) {
+    return String(text ?? "")
+      .replace(/([\p{Ll}\d])(\p{Lu})/gu, "$1 $2")
+      .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2")
+      .split(/[\s_.-]+/)
+      .filter(Boolean)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+
+  // The caption of a field that declares none, as DevExtreme makes it: the data
+  // field titled, with its interval ("Order Date Year") and, for a measure that
+  // names its summary type, that type ("Net Amount (Sum)").
+  function autoCaption(field) {
+    const name = typeof field.groupInterval === "string"
+      ? `${field.dataField}_${field.groupInterval}`
+      : field.dataField;
+    const summary = typeof field.aggregation === "string" && field.aggregation !== CALCULATED &&
+      field.expression === undefined
+      ? ` (${field.aggregation.charAt(0).toUpperCase()}${field.aggregation.slice(1)})`
+      : "";
+    return `${titleize(name)}${summary}`;
+  }
+
   function normalizeField(field, index) {
     if (!field || typeof field !== "object") {
       throw new Error(`Field at index ${index} must be an object.`);
@@ -635,7 +662,7 @@
       sortBySummaryPath: sortBySummaryPath === null || sortBySummaryPath.length === 0
         ? null
         : sortBySummaryPath.map(value => value === null || value === undefined ? null : String(value)),
-      caption: field.caption ?? dataField,
+      caption: field.caption ?? autoCaption(field),
       aggregation,
       showAs,
       runningTotal,
@@ -1017,7 +1044,7 @@
   }
 
   PivotForge.PivotRequestBuilder = {
-    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes, selectors,
+    normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes, selectors, titleize, autoCaption,
     normalizeRankings, normalizeValueFilters, comparisonType, parseExpression,
     AGGREGATIONS, CALCULATED, DATA_TYPES, RUNNING_TOTALS, FORMULA_FUNCTIONS, RELATIVE_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
     FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS, VALUE_FILTER_OPERATORS

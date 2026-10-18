@@ -163,7 +163,7 @@ Every field belongs to exactly one of five areas:
 | --- | --- |
 | `row` | Placed on the row axis. |
 | `column` | Placed on the column axis. |
-| `data` | Aggregated as a pivot value. At least one `data` field is required. |
+| `data` | Aggregated as a pivot value. At least one `data` field is required, except on a grid that [discovers its fields](#discovering-fields). |
 | `filter` | Exposed for filtering without appearing in the row/column layout. |
 | `available` | Declared for the [field designer](#field-designer)'s catalog without being placed in the layout. Not used outside a designer. |
 
@@ -173,7 +173,7 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | --- | --- | --- |
 | `dataField` | — | Required, non-empty. |
 | `area` | `"data"` | One of `row`, `column`, `data`, `filter`, `available`. |
-| `caption` | the `dataField` value | Display label. |
+| `caption` | the `dataField` in title case | Display label. Undeclared, it is made as DevExtreme makes it: the data field split at camelCase boundaries and at `_ - .`, each word capitalised, with the interval for a grouped level and the summary type for a measure that declares one — `netAmount` summed reads `Net Amount (Sum)`, `OrderDate` by year `Order Date Year`. An acronym stays as written (`orderID` → `Order ID`). `PivotForge.PivotRequestBuilder.titleize(text)` is the same rule. |
 | `role` | inferred from `area` | One of `dimension`, `measure`. **Required** when `area` is `available`, because there is no placement to infer it from. Elsewhere it is inferred (`data` → `measure`, everything else → `dimension`); an explicit `role` that contradicts its `area` — e.g., `measure` outside `data` — is a validation error. See [role rules](#field-designer). |
 | `aggregation` | `"sum"` (only on `data` fields) | One of `sum`, `count`, `average`, `min`, `max`, `countDistinct`, `median`, `variance`, `standardDeviation`, `variancePopulation`, `standardDeviationPopulation`, `first`, `last`. Setting `aggregation` on a non-`data` field is a validation error. |
 | `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`, `percentOfParentRowTotal`, `percentOfParentColumnTotal` (a value's share of its parent group on that axis — a city's share of its region). A percent mode on a field with no declared `format` is drawn as a percentage (`18.25%`) and exported as `0.00%`, as DevExtreme gives a percent display mode a percent format. Setting `showAs` on a non-`data` field is a validation error. |
@@ -786,6 +786,29 @@ It needs no host element on the page.
 | `field-chooser-layout` | `FieldChooser(layout, ...)` / `layout: 0, 1, 2` | `ListBesideRowsAndColumns` (0) | DevExtreme's layouts: the list beside rows and columns with filters and values below (0), beside the four zones stacked (1), across the top with the zones in two rows (2). Narrow dialogs stack everything. |
 | `field-chooser-all-fields` | `allFields` | `true` | Lists every field, placed or not, each with a checkbox: ticking a measure puts it among the values, any other field on the columns; clearing removes it; a folder's box places its first field, or removes every placed one. Enter on a listed field does the same. `false` lists only the unplaced fields. |
 | `field-chooser-apply-changes-mode` | `applyChangesMode: "instantly" \| "onDemand"` | `Instantly` | `OnDemand` holds every edit until **OK**; **Cancel**, Escape or a click outside puts the layout back as the dialog found it. |
+
+#### Discovering fields
+
+`retrieve-fields="true"` (`RetrieveFields()`, `retrieveFields: true`) is DevExtreme's
+`retrieveFields`: before its first load the grid asks `POST {prefix}/fields` what the record
+type holds and lists every field the page did not declare in the field chooser and designer,
+unplaced. A grid that declares no fields at all discovers them unless `retrieve-fields="false"`;
+it starts with nothing summed and says so until the reader places a measure.
+
+- The fields come from the record type's public properties and fields, in declaration order, so
+  no records are loaded. A nested object or a collection is left out, as is a name starting with
+  `__`, and so is any field off `AllowedFields`.
+- A number is offered as a measure, anything else as a dimension. A date comes as its year,
+  quarter and month in a folder named after it.
+- A declared field (the same data field and interval) stays as declared and takes the
+  discovered data type if it names none.
+- `fieldsPrepared` (`on-fields-prepared`) fires with `e.fields`, the merged list, before the first
+  load; replacing or editing it changes what the grid offers.
+- A stored view that seats a discovered field waits for the fields, then comes back.
+- A failed discovery raises `error` and leaves the declared fields.
+
+Outside ASP.NET Core, `PivotFieldDiscovery.Discover<T>()`, `Discover(DataTable)` and
+`Discover(dictionaries)` in `PivotForge.Core` list the same fields.
 
 The same arrangements are available to a designer the page hosts:
 `field-designer-layout` (`FieldDesignerLayout`, `fieldDesignerLayout`) and
@@ -1603,6 +1626,7 @@ picker.
 | `POST /pivotforge/drill-down` | Return source records matching row and column paths |
 | `POST /pivotforge/field-values` | Return the distinct values a filter on one field can accept; optional `filters` narrow them to the records those filters keep |
 | `POST /pivotforge/excel` | Convert a renderer export model into an `.xlsx` response |
+| `POST /pivotforge/fields` | List the record type's fields, as far as `AllowedFields` reaches, for `retrieveFields` |
 
 A missing or expired large-data session returns HTTP `410 Gone`. Invalid pivot, paging, drill-down, field-values, and Excel requests return HTTP `400 Bad Request`. Request cancellation propagates through the provider and Core calculation.
 

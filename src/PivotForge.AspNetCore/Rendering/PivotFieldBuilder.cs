@@ -53,6 +53,8 @@ public sealed class PivotFieldBuilder
     }
 
     /// <summary>Sets the display caption.</summary>
+    /// <remarks>Undeclared, the caption is the data field in title case, with the summary type for
+    /// a measure that declares one: <c>netAmount</c> summed reads "Net Amount (Sum)".</remarks>
     /// <param name="caption">The caption shown to users.</param>
     /// <returns>The same builder.</returns>
     public PivotFieldBuilder Caption(string caption)
@@ -766,9 +768,15 @@ public sealed class PivotFieldBuilder
         var field = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["dataField"] = _dataField,
-            ["caption"] = _caption ?? _dataField,
             ["area"] = ToCamelCase(_area.ToString())
         };
+
+        // Undeclared, the browser names the field after its data field, as DevExtreme does:
+        // "netAmount" summed reads "Net Amount (Sum)".
+        if (_caption is not null)
+        {
+            field["caption"] = _caption;
+        }
 
         if (_role is { } declaredRole)
         {

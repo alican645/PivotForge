@@ -1584,7 +1584,8 @@ public class PivotTagHelperTests
                 OnCellPrepared = "app.markNegatives",
                 OnCellClick = "app.onClick",
                 OnContextMenuPreparing = "app.menu",
-                OnExpandValueChanging = "app.onExpand"
+                OnExpandValueChanging = "app.onExpand",
+                OnFieldsPrepared = "app.onFields"
             },
             new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum))).GetProperty("events");
 
@@ -1592,6 +1593,7 @@ public class PivotTagHelperTests
         Assert.Equal("app.onClick", events.GetProperty("cellClick").GetString());
         Assert.Equal("app.menu", events.GetProperty("contextMenuPreparing").GetString());
         Assert.Equal("app.onExpand", events.GetProperty("expandValueChanging").GetString());
+        Assert.Equal("app.onFields", events.GetProperty("fieldsPrepared").GetString());
         Assert.Throws<ArgumentException>(() => new PivotGridBuilder().OnCellClick(""));
     }
 
@@ -1845,6 +1847,25 @@ public class PivotTagHelperTests
 
         Assert.True(declared.GetProperty("showRelevantValues").GetBoolean());
         Assert.False(undeclared.TryGetProperty("showRelevantValues", out _));
+    }
+
+    [Fact]
+    public async Task WritesRetrieveFieldsOnlyWhenDeclared()
+    {
+        var on = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RetrieveFields = true },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var off = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RetrieveFields = false },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var undeclared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.True(on.GetProperty("retrieveFields").GetBoolean());
+        // Written when false too: it keeps a grid without fields from discovering them.
+        Assert.False(off.GetProperty("retrieveFields").GetBoolean());
+        Assert.False(undeclared.TryGetProperty("retrieveFields", out _));
     }
 
     [Fact]

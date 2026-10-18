@@ -14,6 +14,27 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Breaking
+
+- A field without a caption is now titled as DevExtreme titles it, rather than
+  shown by its data field: `netAmount` summed reads "Net Amount (Sum)",
+  `OrderDate` by year "Order Date Year". `PivotFieldBuilder` no longer writes
+  the data field as the caption. Declare `caption` to keep a name as it was.
+  (AspNetCore)
+
+### Added
+
+- DevExtreme's `retrieveFields`: `retrieve-fields` / `RetrieveFields()` /
+  `retrieveFields: true` asks the new `POST {prefix}/fields` endpoint for the
+  record type's fields before the first load and lists every undeclared one in
+  the field chooser and designer, unplaced (a date as its year, quarter and
+  month in its own folder; nothing off `AllowedFields`). A grid declaring no
+  fields discovers them by default and starts empty until a measure is placed.
+  `fieldsPrepared` sees and may change the merged list. (AspNetCore)
+- `PivotFieldDiscovery.Discover<T>()` / `Discover(DataTable)` /
+  `Discover(dictionaries)`: the fields a source offers, with their data types.
+  (Core)
+
 ## [0.9.0-preview.1] — 2026-10-18
 
 The field chooser popup in DevExtreme's three layouts, field header rows and

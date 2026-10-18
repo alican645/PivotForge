@@ -119,6 +119,7 @@ public sealed class PivotForgeAspNetCoreTests
         Assert.Contains("/reports/pivot/drill-down", routes);
         Assert.Contains("/reports/pivot/field-values", routes);
         Assert.Contains("/reports/pivot/excel", routes);
+        Assert.Contains("/reports/pivot/fields", routes);
     }
 
     [Fact]
@@ -569,6 +570,57 @@ public sealed class PivotForgeAspNetCoreTests
                 Encoding.UTF8,
                 "application/json"));
             Assert.Equal(System.Net.HttpStatusCode.BadRequest, refused.StatusCode);
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
+    }
+
+    private sealed record DatedSale(string Region, DateTime OrderDate, decimal Amount);
+
+    [Fact]
+    public async Task FieldsEndpoint_OffersTheRecordTypesFields_AsFarAsTheAllowListReaches()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddPivotForge<DatedSale>(
+            (_, _) => throw new InvalidOperationException("Discovery loads no records."),
+            options =>
+            {
+                options.AllowedFields.Add("Region");
+                options.AllowedFields.Add("OrderDate");
+            });
+
+        await using var app = builder.Build();
+        app.MapPivotForgeEndpoints();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        try
+        {
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(5) };
+
+            using var response = await client.PostAsync("/pivotforge/fields",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            response.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var fields = document.RootElement.GetProperty("fields").EnumerateArray().ToArray();
+
+            // Amount is not on the allow-list, so it is not offered.
+            Assert.Equal(
+                ["Region", "OrderDate", "OrderDate", "OrderDate"],
+                fields.Select(field => field.GetProperty("dataField").GetString()));
+            Assert.Equal("string", fields[0].GetProperty("dataType").GetString());
+            Assert.Equal(JsonValueKind.Null, fields[0].GetProperty("groupInterval").ValueKind);
+            Assert.Equal(
+                ["year", "quarter", "month"],
+                fields.Skip(1).Select(field => field.GetProperty("groupInterval").GetString()));
+            Assert.Equal("date", fields[3].GetProperty("dataType").GetString());
+            Assert.Equal("OrderDate", fields[3].GetProperty("groupName").GetString());
+            Assert.Equal(2, fields[3].GetProperty("groupIndex").GetInt32());
         }
         finally
         {

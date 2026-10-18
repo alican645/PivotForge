@@ -4,6 +4,8 @@ namespace PivotForge.AspNetCore.Internal;
 
 internal interface IPivotForgeDataExecutor
 {
+    IReadOnlyList<PivotDiscoveredField> DiscoverFields();
+
     ValueTask<PivotResult> ExecuteAsync(
         PivotRequest request,
         int? sourceRowCount,

@@ -64,7 +64,9 @@
   const VALUES_POSITIONS = ["columns", "rows"];
 
   class PivotLayoutState {
-    constructor(catalog, layout = null) {
+    // options.startEmpty: a catalog with no measure -- fields discovered, none
+    // placed yet -- may start with no value, for the reader to place one.
+    constructor(catalog, layout = null, { startEmpty = false } = {}) {
       const normalized = PivotForge.PivotRequestBuilder.normalizeFields(catalog ?? []);
 
       // Keyed by level rather than by column: one date column grouped by year and
@@ -109,7 +111,10 @@
         this.layout = this.layoutFromCatalog(normalized);
       }
 
-      if (this.layout.values.length === 0) {
+      // Once a value is placed the last one stays, as it always does; a
+      // stored layout may not drop them either.
+      const startsEmpty = startEmpty && !layout && !normalized.some(field => field.visible && field.area === "data");
+      if (this.layout.values.length === 0 && !startsEmpty) {
         throw new Error("A pivot layout requires at least one field in the data area.");
       }
     }

@@ -32,6 +32,11 @@
     // reader can switch its type and value, and hide it from the toolbar's
     // "chart" button; all three are kept with the rest of the view.
     chart: null,
+    // DevExtreme's retrieveFields: before the first load, ask the fields
+    // endpoint what the record type holds and offer every field the page did
+    // not declare in the field list, unplaced. Null discovers only for a grid
+    // that declares no fields at all.
+    retrieveFields: null,
     largeData: false,
     pageSize: 40,
     sourceRowCount: 100000,
@@ -129,6 +134,57 @@
     return PivotForge.isConditionalRule?.(rule) ?? true;
   }
 
+  function hasMeasure(fields) {
+    return (fields ?? []).some(field => field?.visible !== false && (field?.area ?? "data") === "data");
+  }
+
+  // DevExtreme's mergeFields for retrieveFields: a discovered field the page
+  // declared (same data field and interval) is the declared one, which takes
+  // the discovered data type if it names none; every other discovered field is
+  // added after the declared ones, unplaced. A date's levels share a folder
+  // named after the date. Numbers are offered as measures, the rest as
+  // dimensions.
+  function mergeDiscoveredFields(declared, discovered) {
+    const identity = field => `${String(field.dataField).toLowerCase()}\u001f${field.groupInterval ?? ""}`;
+    const types = new Map();
+    for (const field of discovered) {
+      const name = String(field.dataField).toLowerCase();
+      if (!types.has(name) && typeof field.dataType === "string") {
+        types.set(name, field.dataType);
+      }
+    }
+
+    const taken = new Set(declared.map(identity));
+    const merged = declared.map(field => {
+      const dataType = types.get(String(field.dataField).toLowerCase());
+      return field.dataType === undefined && field.expression === undefined && field.selector === undefined &&
+        dataType !== undefined
+        ? { ...field, dataType }
+        : field;
+    });
+
+    for (const field of discovered) {
+      if (typeof field?.dataField !== "string" || taken.has(identity(field))) {
+        continue;
+      }
+
+      taken.add(identity(field));
+      const grouped = typeof field.groupInterval === "string";
+      merged.push({
+        dataField: field.dataField,
+        area: "available",
+        role: field.dataType === "number" && !grouped ? "measure" : "dimension",
+        ...(typeof field.dataType === "string" ? { dataType: field.dataType } : {}),
+        ...(grouped ? { groupInterval: field.groupInterval } : {}),
+        ...(typeof field.groupName === "string"
+          ? { displayFolder: PivotForge.PivotRequestBuilder.titleize(field.groupName) }
+          : {})
+      });
+    }
+
+    return merged;
+  }
+
   // Which pivot each bound chart follows, so binding it elsewhere unbinds it
   // here. Keyed by the chart's instance, or by the function given.
   const chartBindings = new WeakMap();
@@ -190,7 +246,10 @@
     "cellPrepared",
     "cellClick",
     "contextMenuPreparing",
-    "expandValueChanging"
+    "expandValueChanging",
+    // After retrieveFields merged the discovered fields, before the first
+    // load: e.fields is the list the grid will use, and may be edited in place.
+    "fieldsPrepared"
   ];
 
   // Looks up a handler declared by name, so Razor markup can name a function
@@ -312,7 +371,16 @@
       // rewrites to the current layout: an opened report is laid out against
       // every field the page offers, not only the ones on screen.
       this.declaredFields = this.options.fields ?? [];
-      PivotForge.PivotRequestBuilder.buildRequest(this.options.fields ?? []);
+      if (this.options.retrieveFields !== null && this.options.retrieveFields !== undefined &&
+          typeof this.options.retrieveFields !== "boolean") {
+        throw new Error("retrieveFields must be true, false or null.");
+      }
+      this.fieldsToDiscover = this.options.retrieveFields === true ||
+        (this.options.retrieveFields == null && this.declaredFields.length === 0);
+      // Kept after discovery: a grid offering discovered fields may be laid
+      // out with no measure until the reader places one.
+      this.retrievesFields = this.fieldsToDiscover;
+      this.validateFields(this.options.fields ?? []);
 
       // Resolved before anything reads state, and never fatal: a page that
       // cannot persist is a page that keeps working from its declaration.
@@ -469,7 +537,7 @@
         }
       }
 
-      return new PivotForge.PivotLayoutState(this.options.fields);
+      return new PivotForge.PivotLayoutState(this.options.fields, null, { startEmpty: this.retrievesFields });
     }
 
     // Writes the declared direction onto an element the widget owns. Undeclared
@@ -580,6 +648,61 @@
 
     // The state a promised customLoad delivered, applied as a stored view is:
     // a state the fields no longer fit is left aside rather than failing the grid.
+    // Checks a layout as a request would. With discovered fields a layout may
+    // have no measure yet; it is checked field by field and the grid shows
+    // that a value is needed rather than refusing the layout.
+    validateFields(fields) {
+      if (this.retrievesFields && !hasMeasure(fields)) {
+        PivotForge.PivotRequestBuilder.normalizeFields(fields);
+        return;
+      }
+
+      PivotForge.PivotRequestBuilder.buildRequest(fields);
+    }
+
+    // Asks once. A failed request is reported and leaves the declared fields:
+    // the grid still works, only without the fields it would have offered.
+    async applyDiscoveredFields() {
+      this.fieldsToDiscover = false;
+      let payload;
+      try {
+        payload = await this.post("/fields", {});
+      } catch (error) {
+        if (!this.disposed) {
+          this.emit("error", error);
+        }
+        return;
+      }
+
+      if (this.disposed) {
+        return;
+      }
+
+      const discovered = Array.isArray(payload?.fields) ? payload.fields : [];
+      const prepared = { fields: mergeDiscoveredFields(this.declaredFields, discovered) };
+      this.emit("fieldsPrepared", prepared);
+
+      // The layout on screen gains the same fields; it is the declaration
+      // unless the reader moved something before the first load.
+      const layout = this.options.fields === this.declaredFields
+        ? prepared.fields
+        : mergeDiscoveredFields(this.options.fields ?? [], discovered);
+      this.declaredFields = prepared.fields;
+      this.options.fields = layout;
+      this.fields = PivotForge.PivotRequestBuilder.normalizeFields(layout);
+      this.validateFields(layout);
+
+      if (this.layoutState) {
+        const state = new PivotForge.PivotLayoutState(layout, null, { startEmpty: true });
+        state.adoptValuesPosition(this.valuesPosition);
+        this.adoptLayoutState(state);
+      }
+
+      if (this.renderer) {
+        this.renderer = this.createRenderer();
+      }
+    }
+
     async applyPendingState() {
       const pending = this.pendingState;
       this.pendingState = null;
@@ -617,7 +740,18 @@
         return null;
       }
 
-      return payload?.version === STATE_VERSION ? this.parseState(payload) : null;
+      if (payload?.version !== STATE_VERSION) {
+        return null;
+      }
+
+      // A stored view may seat a field only discovery brings, so it waits for
+      // the fields, as a promised customLoad does.
+      if (this.fieldsToDiscover) {
+        this.pendingState = Promise.resolve(payload);
+        return null;
+      }
+
+      return this.parseState(payload);
     }
 
     // What a stored payload -- or an opened report -- restores, with anything
@@ -1634,6 +1768,14 @@
     async refresh() {
       this.assertNotDisposed();
 
+      // The fields first, then the stored view that may name them.
+      if (this.fieldsToDiscover) {
+        await this.applyDiscoveredFields();
+        if (this.disposed) {
+          return;
+        }
+      }
+
       // A promised customLoad is waited for once, so the first request asks for
       // the stored view rather than the declared one.
       if (this.pendingState) {
@@ -1644,6 +1786,17 @@
       }
 
       this.controller?.abort();
+
+      // Nothing to sum yet -- discovered fields, none placed: the grid says
+      // so rather than asking the server for a pivot it cannot build.
+      if (!hasMeasure(this.options.fields)) {
+        this.requestToken++;
+        this.controller = null;
+        this.result = { rowHeaders: [], columnHeaders: [], cells: [], grandTotals: {} };
+        this.render(this.result);
+        return;
+      }
+
       const controller = new AbortController();
       this.controller = controller;
       const token = ++this.requestToken;
@@ -2184,7 +2337,7 @@
       // One call, one refresh: a designer changes several pieces per interaction
       // and must not produce a request per piece.
       if (fields !== undefined) {
-        PivotForge.PivotRequestBuilder.buildRequest(fields);
+        this.validateFields(fields);
         this.options.fields = fields;
         this.fields = PivotForge.PivotRequestBuilder.normalizeFields(fields);
         if (this.renderer) {
@@ -2226,7 +2379,7 @@
     }
 
     async updateFields(fields) {
-      PivotForge.PivotRequestBuilder.buildRequest(fields);
+      this.validateFields(fields);
       this.options.fields = fields;
       this.fields = PivotForge.PivotRequestBuilder.normalizeFields(fields);
       if (this.renderer) {
@@ -2714,6 +2867,7 @@
   }
 
   PivotForge.PivotWidget = PivotWidget;
+  PivotForge.mergeDiscoveredFields = mergeDiscoveredFields;
 
   PivotForge.create = function create(target, options = {}) {
     const widget = new PivotWidget(resolveTarget(target), options);

@@ -64,11 +64,13 @@ public class PivotFieldBuilderTests
     }
 
     [Fact]
-    public void CaptionDefaultsToTheDataFieldName()
+    public void AnUndeclaredCaptionIsLeftToTheBrowser()
     {
+        // The browser titles it after the data field, as DevExtreme does.
         var field = new PivotFieldBuilder().DataField("tutar").Build();
+        Assert.False(field.ContainsKey("caption"));
 
-        Assert.Equal("tutar", field["caption"]);
+        Assert.Equal("Tutar", new PivotFieldBuilder().DataField("tutar").Caption("Tutar").Build()["caption"]);
     }
 
     [Theory]

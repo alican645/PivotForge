@@ -20,6 +20,9 @@ internal sealed class PivotForgeDataExecutor<TRecord>(
             options.Value.CustomSelectors, StringComparer.OrdinalIgnoreCase)
     };
 
+    // Read off the record type, so no records are loaded to answer it.
+    public IReadOnlyList<PivotDiscoveredField> DiscoverFields() => PivotFieldDiscovery.Discover<TRecord>();
+
     public async ValueTask<PivotResult> ExecuteAsync(
         PivotRequest request,
         int? sourceRowCount,

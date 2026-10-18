@@ -614,6 +614,17 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     public PivotGridBuilder ShowRelevantValues(bool show) => Set("showRelevantValues", show);
 
+    /// <summary>Offers every field of the record type, DevExtreme's <c>retrieveFields</c>.</summary>
+    /// <remarks>
+    /// Before its first load the grid asks the <c>fields</c> endpoint what the record type holds
+    /// and adds each field the page did not declare to the field list, unplaced; a date comes as
+    /// its year, quarter and month in a folder of its own. A declared field without a data type
+    /// takes the discovered one. On by default only for a grid that declares no fields.
+    /// </remarks>
+    /// <param name="retrieve">Whether the record type's fields are discovered.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder RetrieveFields(bool retrieve = true) => Set("retrieveFields", retrieve);
+
     /// <summary>Sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
     /// Every string the grid, the field designer, the value picker and the detail modal put
@@ -746,6 +757,14 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
     public PivotGridBuilder OnCellClick(string handler) => SetEvent("cellClick", handler);
+
+    /// <summary>Names a page function called once the discovered fields are merged, DevExtreme's <c>onFieldsPrepared</c>.</summary>
+    /// <remarks>Raised by <see cref="RetrieveFields"/> before the first load, with <c>fields</c>, the
+    /// merged list; what the handler leaves in it is what the grid offers.</remarks>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnFieldsPrepared(string handler) => SetEvent("fieldsPrepared", handler);
 
     /// <summary>Names a page function called before a cell's or header's menu opens, DevExtreme's <c>onContextMenuPreparing</c>.</summary>
     /// <remarks>Its argument's <c>items</c> may be changed in place: an item the page adds is

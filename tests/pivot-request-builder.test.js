@@ -120,12 +120,33 @@ test("value key matches the server key format", () => {
   assert.equal(PivotRequestBuilder.valueKey(field), "tutar_average");
 });
 
-test("normalize defaults caption to the data field name", () => {
-  const [field] = PivotRequestBuilder.normalizeFields([
-    { dataField: "tutar", area: "data" }
-  ]);
+test("an undeclared caption is the data field titled, as DevExtreme makes it", () => {
+  const captions = PivotRequestBuilder.normalizeFields([
+    { dataField: "tutar", area: "data" },
+    { dataField: "netAmount", area: "data", aggregation: "sum" },
+    { dataField: "OrderDate", area: "column", groupInterval: "year" },
+    { dataField: "order_date", area: "row", groupInterval: "dayOfWeek" },
+    { dataField: "customer.city", area: "row" },
+    { dataField: "orderID", area: "row" },
+    { dataField: "kdvTutarı", area: "data", aggregation: "countDistinct" },
+    { dataField: "marj", area: "data", expression: "[a] - [b]" },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+  ]).map(field => field.caption);
 
-  assert.equal(field.caption, "tutar");
+  assert.deepEqual(captions, [
+    // No summary type declared, so none is named.
+    "Tutar",
+    "Net Amount (Sum)",
+    "Order Date Year",
+    "Order Date Day Of Week",
+    "Customer City",
+    "Order ID",
+    "Kdv Tutarı (CountDistinct)",
+    // A formula is no summary type.
+    "Marj",
+    "Tutar"
+  ]);
+  assert.equal(PivotRequestBuilder.titleize("XMLHttpRequest"), "XML Http Request");
 });
 
 test("rejects a configuration without a data field", () => {

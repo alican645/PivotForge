@@ -14,7 +14,8 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("field")]
     public string? Field { get; set; }
 
-    /// <summary>Gets or sets the display caption. Defaults to the source field name.</summary>
+    /// <summary>Gets or sets the display caption. Defaults to the source field name in title case,
+    /// with the summary type for a measure that declares one: "Net Amount (Sum)".</summary>
     [HtmlAttributeName("caption")]
     public string? Caption { get; set; }
 
