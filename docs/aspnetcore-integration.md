@@ -1426,6 +1426,43 @@ C#: `Chart(PivotChartType.Column, PivotChartPosition.Top, height: 320, visible: 
 The chart is not printed with the grid, and in large-data mode it charts the rows of the
 page on screen.
 
+#### Binding an external chart
+
+`bindChart(chart, options)` feeds another chart library the pivot's data, as DevExtreme's
+`bindChart` does: once at the call and again after every load, filter, sort and fold.
+`chart` is a dxChart instance (or anything with an `option(config)` method), a dxChart's
+element or selector, or a function called with the configuration and `{ result }` — for
+Chart.js, ECharts and the like. It returns the function that undoes the binding, or
+`null` when `chart` is none of these; binding the chart to another grid unbinds it here,
+and disposing the grid unbinds every chart.
+
+```js
+// Registered before the grid's markup, as for any pivotforge:ready listener.
+document.addEventListener("pivotforge:ready", event => {
+  const chart = $("#salesChart").dxChart({ commonSeriesSettings: { type: "bar" } }).dxChart("instance");
+  const unbind = event.detail.widget.bindChart(chart, { dataFieldsDisplayMode: "splitPanes" });
+}, true);
+```
+
+The configuration is `{ dataSource, seriesTemplate: { nameField: "series", customizeSeries }, valueAxis, panes }`.
+`dataSource` holds one `{ series, arg, val }` item per row path × column path × data field,
+totals included. Series names are a row path's texts joined with `" - "` and arguments a
+column path's joined with `"/"`. Only the deepest level showing on each axis is charted,
+so folding a group in the grid takes its rows out of the chart.
+
+| Option | Effect |
+|---|---|
+| `dataFieldsDisplayMode` | `"separateAxes"` (default) gives each data field its own value axis, `"singleAxis"` one axis for all, `"splitPanes"` each field its own pane |
+| `putDataFieldsInto` | `"series"`, `"args"` or `"both"`: where `" \| <field>"` is added; with several data fields it goes on the series unless the axis is single |
+| `alternateDataFields` | `false` runs through every cell once per data field rather than every field per cell |
+| `inverted` | the column paths become the series and the row paths the arguments |
+| `processCell(e)` | called for every cell with `rowPath`, `rowPathFormatted`, `rowFields`, `maxRowLevel`, the column counterparts, `dataFields`, `dataIndex`, `dataValues`, `visible` and `chartDataItem`; what it returns is merged in, so `{ visible: true }` charts a total |
+| `customizeSeries(name, options)` | changes a series' options; each series is already on its data field's axis (and pane) |
+| `customizeChart(options)` | what it returns is merged into `valueAxis` and `panes` |
+
+`getChartDataSource(options)` returns the same configuration without binding anything.
+Both need `pivot-chart.js`; the packaged chart does not, and keeps drawing on its own.
+
 ### Localization
 
 Culture is resolved separately on each side, because the two answer different

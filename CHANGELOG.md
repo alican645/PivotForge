@@ -37,6 +37,14 @@ change will require a new major version.
   `excelExport` option, or passed to an export call.
   `PivotExcelDocument.MergeRowFieldValues` / `MergeColumnFieldValues` and
   `PivotExcelCellRole.FieldHeader` carry them to the workbook. (Core, AspNetCore)
+- DevExtreme's `bindChart(chart, options)`: feeds a dxChart, anything with
+  `option()`, or a function with the pivot's `{ dataSource, seriesTemplate,
+  valueAxis, panes }` after every load and fold, charting the deepest level
+  showing on each axis. Options `dataFieldsDisplayMode` (separate axes, single
+  axis, split panes), `putDataFieldsInto`, `alternateDataFields`, `inverted`,
+  `processCell`, `customizeSeries` and `customizeChart`; it returns the unbind
+  function. `getChartDataSource(options)` gives the configuration without
+  binding. (AspNetCore)
 
 ### Fixed
 

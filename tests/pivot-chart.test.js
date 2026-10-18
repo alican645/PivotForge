@@ -493,3 +493,276 @@ test("the Turkish pack names the chart button", () => {
     assert.equal(chartButton(container).textContent, "Grafik");
   }, { chart: true, toolbar: ["chart"], locale: "tr" });
 });
+
+// Region > City on the rows, Year > Quarter on the columns, with every total
+// the engine sends: what bindChart reads.
+const grouped = {
+  rowHeaders: [["Ege", "İzmir"], ["Ege", "Aydın"], ["Marmara", "Bursa"]],
+  columnHeaders: [["2024", "Q1"], ["2024", "Q2"]],
+  cells: [
+    { row: 0, column: 0, values: { a: 1, b: 10 } },
+    { row: 0, column: 1, values: { a: 2, b: 20 } },
+    { row: 1, column: 0, values: { a: 3, b: 30 } },
+    { row: 1, column: 1, values: { a: 4, b: 40 } },
+    { row: 2, column: 0, values: { a: 5, b: 50 } },
+    { row: 2, column: 1, values: { a: 6, b: 60 } }
+  ],
+  rowTotals: [{ index: 0, values: { a: 3 } }, { index: 1, values: { a: 7 } }, { index: 2, values: { a: 11 } }],
+  columnTotals: [{ index: 0, values: { a: 9 } }, { index: 1, values: { a: 12 } }],
+  subtotals: [
+    {
+      rowHeader: ["Ege"],
+      cells: [{ column: 0, values: { a: 4 } }, { column: 1, values: { a: 6 } }],
+      totals: { a: 10 },
+      columnSubtotals: [{ columnHeader: ["2024"], values: { a: 10 } }]
+    },
+    {
+      rowHeader: ["Marmara"],
+      cells: [{ column: 0, values: { a: 5 } }, { column: 1, values: { a: 6 } }],
+      totals: { a: 11 },
+      columnSubtotals: [{ columnHeader: ["2024"], values: { a: 11 } }]
+    }
+  ],
+  columnSubtotals: [{
+    columnHeader: ["2024"],
+    cells: [{ index: 0, values: { a: 3 } }, { index: 1, values: { a: 7 } }, { index: 2, values: { a: 11 } }],
+    totals: { a: 21 }
+  }],
+  grandTotals: { a: 21 }
+};
+const amount = [{ key: "a", label: "Amount" }];
+const twoMeasures = [{ key: "a", label: "Amount" }, { key: "b", label: "Count" }];
+
+test("binding reads every crossing of a leaf, a group and the grand total", () => {
+  const seen = new Map();
+  PivotChart.binding(grouped, { values: amount }, {
+    processCell: cell => {
+      seen.set(`${cell.rowPath.join("/")}|${cell.columnPath.join("/")}`, cell.chartDataItem.val);
+    }
+  });
+
+  assert.equal(seen.get("Ege/İzmir|2024/Q1"), 1);
+  assert.equal(seen.get("Ege/İzmir|2024"), 3);
+  assert.equal(seen.get("Ege/İzmir|"), 3);
+  assert.equal(seen.get("Ege|2024/Q1"), 4);
+  assert.equal(seen.get("Ege|2024"), 10);
+  assert.equal(seen.get("Ege|"), 10);
+  assert.equal(seen.get("|2024/Q1"), 9);
+  assert.equal(seen.get("|2024"), 21);
+  assert.equal(seen.get("|"), 21);
+  // Three row paths of each depth plus the total, the same for the columns.
+  assert.equal(seen.size, 6 * 4);
+});
+
+test("binding charts the deepest level showing on each axis, as series and arguments", () => {
+  const config = PivotChart.binding(grouped, { values: amount, grandTotalText: "Grand Total" });
+
+  assert.deepEqual(config.dataSource.slice(0, 2), [
+    { series: "Ege - İzmir", arg: "2024/Q1", val: 1 },
+    { series: "Ege - İzmir", arg: "2024/Q2", val: 2 }
+  ]);
+  assert.equal(config.dataSource.length, 6);
+  assert.equal(config.seriesTemplate.nameField, "series");
+  assert.equal(config.panes, undefined);
+});
+
+test("a collapsed group leaves its rows out, and the level shown is the deepest one left", () => {
+  const oneFolded = PivotChart.binding(grouped, { values: amount, collapsedRows: new Set(["Ege"]) });
+  assert.deepEqual([...new Set(oneFolded.dataSource.map(item => item.series))], ["Marmara - Bursa"]);
+
+  const allFolded = PivotChart.binding(grouped, {
+    values: amount,
+    collapsedRows: new Set(["Ege", "Marmara"]),
+    collapsedColumns: new Set(["2024"])
+  });
+  assert.deepEqual(allFolded.dataSource, [
+    { series: "Ege", arg: "2024", val: 10 },
+    { series: "Marmara", arg: "2024", val: 11 }
+  ]);
+});
+
+test("inverted makes the columns the series and the rows the arguments", () => {
+  const config = PivotChart.binding(grouped, { values: amount }, { inverted: true });
+  assert.deepEqual(config.dataSource[0], { series: "2024 - Q1", arg: "Ege/İzmir", val: 1 });
+});
+
+test("several measures name the series by default, or the arguments, or both", () => {
+  const series = PivotChart.binding(grouped, { values: twoMeasures });
+  assert.deepEqual(series.dataSource.slice(0, 2), [
+    { series: "Ege - İzmir | Amount", arg: "2024/Q1", val: 1 },
+    { series: "Ege - İzmir | Count", arg: "2024/Q1", val: 10 }
+  ]);
+
+  const args = PivotChart.binding(grouped, { values: twoMeasures }, { putDataFieldsInto: "Args" });
+  assert.deepEqual(args.dataSource[1], { series: "Ege - İzmir", arg: "2024/Q1 | Count", val: 10 });
+
+  const both = PivotChart.binding(grouped, { values: twoMeasures }, { putDataFieldsInto: "both" });
+  assert.deepEqual(both.dataSource[0], { series: "Ege - İzmir | Amount", arg: "2024/Q1 | Amount", val: 1 });
+
+  // One axis for all: nothing to tell the measures apart by unless asked.
+  const single = PivotChart.binding(grouped, { values: twoMeasures }, { dataFieldsDisplayMode: "singleAxis" });
+  assert.equal(single.dataSource[0].series, "Ege - İzmir");
+  assert.throws(() => PivotChart.binding(grouped, {}, { putDataFieldsInto: "legend" }),
+    /Unknown putDataFieldsInto "legend"/);
+});
+
+test("alternateDataFields false runs through every cell once per measure", () => {
+  const config = PivotChart.binding(grouped, { values: twoMeasures }, { alternateDataFields: false });
+  assert.deepEqual(config.dataSource.slice(0, 7).map(item => item.val), [1, 2, 3, 4, 5, 6, 10]);
+});
+
+test("processCell can chart a total and change what an item says", () => {
+  const config = PivotChart.binding(grouped, { values: amount }, {
+    processCell: cell => (cell.rowPath.length === 0 && cell.columnPath.length === 2
+      ? { visible: true, chartDataItem: { series: "All regions" } }
+      : null)
+  });
+
+  assert.deepEqual(config.dataSource.filter(item => item.series === "All regions"), [
+    { series: "All regions", arg: "2024/Q1", val: 9 },
+    { series: "All regions", arg: "2024/Q2", val: 12 }
+  ]);
+});
+
+test("each display mode lays out its value axes, panes and series axes", () => {
+  const formatValue = (value, definition) => `${definition.key}:${value}`;
+
+  const separate = PivotChart.binding(grouped, { values: twoMeasures, formatValue });
+  assert.deepEqual(separate.valueAxis.map(axis => [axis.name, axis.title, axis.valueType]),
+    [["a", "Amount", "numeric"], ["b", "Count", "numeric"]]);
+  assert.equal(separate.valueAxis[1].label.customizeText({ value: 5 }), "b:5");
+  assert.deepEqual(separate.seriesTemplate.customizeSeries("Ege - İzmir | Count"), { axis: "b" });
+
+  const panes = PivotChart.binding(grouped, { values: twoMeasures }, { dataFieldsDisplayMode: "splitPanes" });
+  assert.deepEqual(panes.panes, [{ name: "a" }, { name: "b" }]);
+  assert.equal(panes.valueAxis[1].pane, "b");
+  assert.deepEqual(panes.seriesTemplate.customizeSeries("Ege - İzmir | Count"), { axis: "b", pane: "b" });
+
+  const single = PivotChart.binding(grouped, { values: twoMeasures }, { dataFieldsDisplayMode: "singleAxis" });
+  assert.equal(single.valueAxis.length, 1);
+  assert.deepEqual(single.seriesTemplate.customizeSeries("Ege - İzmir"), {});
+  assert.throws(() => PivotChart.binding(grouped, {}, { dataFieldsDisplayMode: "stacked" }),
+    /Unknown dataFieldsDisplayMode/);
+});
+
+test("customizeSeries and customizeChart change what the chart is given", () => {
+  const config = PivotChart.binding(grouped, { values: twoMeasures }, {
+    customizeSeries: (name, options) => ({ ...options, type: name.endsWith("Count") ? "line" : "bar" }),
+    customizeChart: () => ({ valueAxis: [{ visible: false }, { position: "right" }] })
+  });
+
+  assert.deepEqual(config.seriesTemplate.customizeSeries("Ege - İzmir | Count"), { axis: "b", type: "line" });
+  // Merged into the axes, not put in their place.
+  assert.equal(config.valueAxis[0].name, "a");
+  assert.equal(config.valueAxis[0].visible, false);
+  assert.equal(config.valueAxis[1].position, "right");
+  assert.equal(config.valueAxis[1].title, "Count");
+});
+
+test("with no fields on either axis the one item is the grand total", () => {
+  const config = PivotChart.binding({
+    rowHeaders: [[]],
+    columnHeaders: [[]],
+    cells: [{ row: 0, column: 0, values: { a: 7 } }],
+    grandTotals: { a: 7 }
+  }, { values: amount, grandTotalText: "Total" });
+
+  assert.deepEqual(config.dataSource, [{ series: "Total", arg: "Total", val: 7 }]);
+});
+
+// ---- bindChart. -------------------------------------------------------------
+
+function regionResult(keys, scale = 1) {
+  return {
+    rowHeaders: [["Ege"], ["Marmara"]],
+    columnHeaders: [["2024"]],
+    cells: [
+      { row: 0, column: 0, values: { [keys[0]]: 10 * scale, [keys[1]]: 1 } },
+      { row: 1, column: 0, values: { [keys[0]]: 20 * scale, [keys[1]]: 2 } }
+    ],
+    grandTotals: { [keys[0]]: 30 * scale, [keys[1]]: 3 }
+  };
+}
+
+function fakeChart() {
+  return { written: [], option(config) { this.written.push(config); } };
+}
+
+test("bindChart writes the chart at once and again after every draw, until unbound", () => {
+  withChart(({ widget }) => {
+    const keys = widget.valueDefinitions().map(value => value.key);
+    const chart = fakeChart();
+    widget.result = regionResult(keys);
+
+    const unbind = widget.bindChart(chart, { dataFieldsDisplayMode: "splitPanes" });
+    assert.equal(chart.written.length, 1);
+    assert.deepEqual(chart.written[0].dataSource.map(item => [item.series, item.arg, item.val]), [
+      ["Ege | Tutar", "2024", 10], ["Ege | Adet", "2024", 1],
+      ["Marmara | Tutar", "2024", 20], ["Marmara | Adet", "2024", 2]
+    ]);
+    assert.deepEqual(chart.written[0].panes.map(pane => pane.name), keys);
+
+    widget.result = regionResult(keys, 2);
+    widget.render(widget.result);
+    assert.equal(chart.written.length, 2);
+    assert.equal(chart.written[1].dataSource[0].val, 20);
+
+    unbind();
+    widget.render(widget.result);
+    assert.equal(chart.written.length, 2);
+  });
+});
+
+test("bindChart feeds a function, and getChartDataSource answers without binding", () => {
+  withChart(({ widget }) => {
+    const keys = widget.valueDefinitions().map(value => value.key);
+    const configs = [];
+    // Bound before any data: nothing is written until the first draw.
+    widget.bindChart((config, context) => configs.push({ config, context }), { inverted: true });
+    assert.equal(configs.length, 0);
+
+    widget.result = regionResult(keys);
+    widget.render(widget.result);
+    assert.equal(configs.length, 1);
+    assert.equal(configs[0].context.result, widget.result);
+    assert.equal(configs[0].config.dataSource[0].series, "2024 | Tutar");
+
+    const config = widget.getChartDataSource({ dataFieldsDisplayMode: "singleAxis" });
+    assert.equal(config.dataSource[0].series, "Ege");
+    assert.equal(configs.length, 1);
+  });
+});
+
+test("a chart bound to a second pivot leaves the first, and dispose unbinds every chart", () => {
+  const chart = fakeChart();
+  let first;
+  withChart(({ widget }) => {
+    first = widget;
+    const keys = widget.valueDefinitions().map(value => value.key);
+    widget.result = regionResult(keys);
+    widget.bindChart(chart);
+
+    withChart(({ widget: second }) => {
+      second.result = regionResult(keys, 3);
+      second.bindChart(chart);
+      assert.equal(chart.written.at(-1).dataSource[0].val, 30);
+
+      first.render(first.result);
+      assert.equal(chart.written.at(-1).dataSource[0].val, 30);
+    });
+  });
+
+  // Both are disposed; the chart keeps what it was last given.
+  assert.equal(chart.written.length, 2);
+  assert.equal(first.chartBindings.size, 0);
+});
+
+test("bindChart returns null for what is no chart and refuses an unknown option", () => {
+  withChart(({ widget }) => {
+    assert.equal(widget.bindChart(null), null);
+    assert.equal(widget.bindChart({}), null);
+    assert.throws(() => widget.bindChart(fakeChart(), { dataFieldsDisplayMode: "stacked" }),
+      /Unknown dataFieldsDisplayMode "stacked"/);
+    assert.throws(() => widget.bindChart(fakeChart(), { processCell: "x" }), /processCell must be a function/);
+  });
+});

@@ -129,6 +129,30 @@
     return PivotForge.isConditionalRule?.(rule) ?? true;
   }
 
+  // Which pivot each bound chart follows, so binding it elsewhere unbinds it
+  // here. Keyed by the chart's instance, or by the function given.
+  const chartBindings = new WeakMap();
+
+  // bindChart's target as a writer: a dxChart (or anything with option()),
+  // a function, or a dxChart's element or selector. Null for anything else.
+  function resolveChartTarget(target) {
+    if (typeof target === "function") {
+      return { key: target, write: (config, context) => target(config, context) };
+    }
+
+    let chart = target;
+    if (typeof target === "string" || (target && typeof target === "object" && target.nodeType === 1)) {
+      const element = typeof target === "string" ? root.document?.querySelector(target) : target;
+      chart = element ? root.DevExpress?.viz?.dxChart?.getInstance?.(element) ?? null : null;
+    }
+
+    if (chart && typeof chart === "object" && typeof chart.option === "function") {
+      return { key: chart, write: config => chart.option(config) };
+    }
+
+    return null;
+  }
+
   function resolveTarget(target) {
     if (typeof target === "string") {
       const found = root.document?.querySelector(target);
@@ -1223,7 +1247,10 @@
             this.openConditionalPanel(selection, cell);
           }
           : null,
-        onViewStateChanged: state => bridge("viewStateChanged", state),
+        onViewStateChanged: state => {
+          this.refreshChartBindings();
+          return bridge("viewStateChanged", state);
+        },
         // The renderer reports this as three positional arguments; the event
         // carries them as one object so listeners are not order-dependent.
         onCellCopied: (text, copied, kind) => {
@@ -1657,6 +1684,7 @@
       if (this.options.renderImpl) {
         this.options.renderImpl(result);
         this.renderChart(result);
+        this.refreshChartBindings();
         return;
       }
 
@@ -1671,6 +1699,7 @@
       });
 
       this.renderChart(result);
+      this.refreshChartBindings();
 
       // A redraw while a request is still out (a conditional rule added
       // mid-load) replaces the container's children, the panel among them.
@@ -1798,6 +1827,95 @@
       this.chart.setState(this.chartState);
       this.chartState = { ...this.chart.state };
       this.saveState();
+    }
+
+    // DevExtreme's bindChart: keeps another chart fed with this pivot's data.
+    // target is a chart with an option() method (a dxChart), a function given
+    // the configuration, or a dxChart's element or selector. Returns the
+    // function that undoes the binding, or null when target is no chart.
+    bindChart(target, options = {}) {
+      this.assertNotDisposed();
+      if (!PivotForge.PivotChart?.binding) {
+        throw new Error("bindChart requires pivot-chart.js to be loaded.");
+      }
+
+      const write = resolveChartTarget(target);
+      if (!write) {
+        return null;
+      }
+
+      // Checked here, so a misspelt option fails at the call, not at the
+      // next refresh.
+      PivotForge.PivotChart.normalizeBinding(options);
+      const key = write.key;
+      // A chart shows one pivot: bound to another, it leaves that one first.
+      chartBindings.get(key)?.();
+
+      const binding = { write: write.write, options };
+      this.chartBindings ??= new Set();
+      this.chartBindings.add(binding);
+      const unbind = () => {
+        this.chartBindings?.delete(binding);
+        if (chartBindings.get(key) === unbind) {
+          chartBindings.delete(key);
+        }
+      };
+      binding.unbind = unbind;
+      chartBindings.set(key, unbind);
+
+      if (this.result) {
+        this.writeChartBinding(binding);
+      }
+      return unbind;
+    }
+
+    // What bindChart writes, without binding anything: for a page that feeds
+    // a chart itself.
+    getChartDataSource(options = {}) {
+      this.assertNotDisposed();
+      if (!PivotForge.PivotChart?.binding) {
+        throw new Error("getChartDataSource requires pivot-chart.js to be loaded.");
+      }
+
+      return PivotForge.PivotChart.binding(this.result, this.chartBindingContext(), options);
+    }
+
+    chartBindingContext() {
+      const renderer = this.renderer;
+      const settings = renderer?.lastSettings ?? renderer?.options ?? {};
+      const visible = area => this.fields.filter(field => field.visible && field.area === area);
+      return {
+        values: this.valueDefinitions(),
+        rowFields: visible("row"),
+        columnFields: visible("column"),
+        collapsedRows: renderer?.collapsedRows ?? new Set(),
+        collapsedColumns: renderer?.collapsedColumns ?? new Set(),
+        // The grid's own name for its grand total row and column.
+        grandTotalText: settings.totalText ?? "Total",
+        formatPath: value => (renderer?.displayValue
+          ? renderer.displayValue(value, settings)
+          : value === null || value === undefined || value === "" ? "(blank)" : String(value)),
+        formatValue: (value, definition) => (renderer?.formatValue
+          ? renderer.formatValue(value, settings, definition)
+          : String(value))
+      };
+    }
+
+    writeChartBinding(binding) {
+      const config = PivotForge.PivotChart.binding(this.result, this.chartBindingContext(), binding.options);
+      binding.write(config, { result: this.result });
+    }
+
+    // After every draw, and after a group folds or opens: the chart shows
+    // what the grid shows.
+    refreshChartBindings() {
+      if (!this.chartBindings?.size || !this.result || this.disposed) {
+        return;
+      }
+
+      for (const binding of [...this.chartBindings]) {
+        this.writeChartBinding(binding);
+      }
     }
 
     // Waits before showing, and a newer refresh restarts the wait without
@@ -2584,6 +2702,10 @@
       this.toolbarNode = null;
       this.chart?.dispose();
       this.chart = null;
+      // Each bound chart keeps what it last showed; it is only no longer fed.
+      for (const binding of [...(this.chartBindings ?? [])]) {
+        binding.unbind();
+      }
       this.chartNode?.remove();
       this.chartNode = null;
       this.container.replaceChildren();
