@@ -77,7 +77,17 @@
     // Milliseconds a save waits for the next change, DevExtreme's savingTimeout;
     // a waiting save is written at once when the page is hidden or the grid
     // disposed. Zero writes every change as it happens.
-    stateSavingTimeout: 0
+    stateSavingTimeout: 0,
+    // DevExtreme's exportPivotGrid options, for every Excel and CSV export:
+    // exportFilterFieldHeaders, exportDataFieldHeaders, exportColumnFieldHeaders
+    // and exportRowFieldHeaders (field header rows), mergeRowFieldValues and
+    // mergeColumnFieldValues. An export call's own options win.
+    excelExport: null,
+    // DevExtreme's field chooser popup: true, or { layout: 0 | 1 | 2,
+    // allFields, applyChangesMode: "instantly" | "onDemand", title }. Opened
+    // with showFieldChooser(), the toolbar's fieldChooser button or the cell
+    // menu; "onDemand" holds every edit back until OK.
+    fieldChooser: false
   };
 
   // Bumped only when a stored payload can no longer be read by this code. An
@@ -117,6 +127,30 @@
 
   function isConditionalRule(rule) {
     return PivotForge.isConditionalRule?.(rule) ?? true;
+  }
+
+  // Which pivot each bound chart follows, so binding it elsewhere unbinds it
+  // here. Keyed by the chart's instance, or by the function given.
+  const chartBindings = new WeakMap();
+
+  // bindChart's target as a writer: a dxChart (or anything with option()),
+  // a function, or a dxChart's element or selector. Null for anything else.
+  function resolveChartTarget(target) {
+    if (typeof target === "function") {
+      return { key: target, write: (config, context) => target(config, context) };
+    }
+
+    let chart = target;
+    if (typeof target === "string" || (target && typeof target === "object" && target.nodeType === 1)) {
+      const element = typeof target === "string" ? root.document?.querySelector(target) : target;
+      chart = element ? root.DevExpress?.viz?.dxChart?.getInstance?.(element) ?? null : null;
+    }
+
+    if (chart && typeof chart === "object" && typeof chart.option === "function") {
+      return { key: chart, write: config => chart.option(config) };
+    }
+
+    return null;
   }
 
   function resolveTarget(target) {
@@ -236,12 +270,16 @@
     saveReport: { text: "toolbarSaveReport", label: "Save report" },
     openReport: { text: "toolbarOpenReport", label: "Open report" },
     fullscreen: { text: "toolbarFullscreen", label: "Full screen" },
-    chart: { text: "toolbarChart", label: "Chart" }
+    chart: { text: "toolbarChart", label: "Chart" },
+    fieldChooser: { text: "toolbarFieldChooser", label: "Field chooser" }
   };
 
   // Written into a saved report file beside the state's version, so a file
   // picked by mistake is told apart from a view this grid can open.
   const REPORT_FORMAT = "pivotforge-report";
+
+  // Names each field chooser dialog's title, so it labels its own dialog.
+  let fieldChooserIds = 0;
 
   class PivotWidget {
     constructor(container, options) {
@@ -317,6 +355,9 @@
 
       this.subscribeDeclaredEvents();
 
+      // Before the renderer, whose menus offer it, and the toolbar.
+      this.fieldChooserOptions = this.resolveFieldChooser();
+
       this.renderer = this.options.renderImpl ? null : this.createRenderer();
 
       // Before the toolbar, which offers its chart button only for a chart.
@@ -374,13 +415,37 @@
           widget: this,
           labels: this.designerLabels(),
           allowCalculatedFields: this.options.allowCalculatedFields !== false,
-          deferUpdates: this.options.deferLayoutUpdate
+          deferUpdates: this.options.deferLayoutUpdate,
+          // The field chooser's arrangements and "All fields" list, for a
+          // designer the page hosts itself.
+          layout: this.options.fieldDesignerLayout,
+          allFields: this.options.fieldDesignerAllFields === true
         });
         this.applyDirection(this.designer.host);
         // Caption edits and filter-value picks never travel through a widget
         // method, so subscribing here is what makes them persist at all.
-        this.layoutState.on("change", () => this.saveState());
+        this.watchLayoutState(this.layoutState);
       }
+    }
+
+    // Every change saves, and redraws the other designer when two show one
+    // layout -- the page's panel and the field chooser. After the change has
+    // run its course: the designer making it may rename a field and move its
+    // own open dialog onto the new name first, and draws itself anyway.
+    watchLayoutState(state) {
+      state.on("change", () => {
+        this.saveState();
+        const designers = [this.designer, this.fieldChooser?.designer]
+          .filter(designer => designer && designer.state === state && !designer.disposed);
+        if (designers.length < 2) {
+          return;
+        }
+
+        const source = designers.find(designer => designer.host.contains?.(root.document?.activeElement));
+        queueMicrotask(() => designers
+          .filter(designer => designer !== source && !designer.disposed && designer.state === state)
+          .forEach(designer => designer.render()));
+      });
     }
 
     // A stored layout is a preference, not a contract: the field catalog may
@@ -779,12 +844,7 @@
         this.valuesPosition = state.valuesPosition;
 
         if (this.layoutState) {
-          this.layoutState = state;
-          this.layoutState.on("change", () => this.saveState());
-          if (this.designer) {
-            this.designer.state = state;
-            this.designer.render();
-          }
+          this.adoptLayoutState(state);
         }
 
         if (this.renderer) {
@@ -814,6 +874,188 @@
           this.showChart(report.chart.visible, { save: false });
         }
       }
+    }
+
+    // Puts a layout in place of the current one in every designer showing it.
+    adoptLayoutState(state) {
+      this.layoutState = state;
+      this.watchLayoutState(state);
+      [this.designer, this.fieldChooser?.designer].forEach(designer => {
+        if (designer && !designer.disposed) {
+          designer.state = state;
+          designer.render();
+        }
+      });
+    }
+
+    // --- Field chooser ------------------------------------------------------
+
+    resolveFieldChooser() {
+      const declared = this.options.fieldChooser;
+      if (!declared) {
+        return null;
+      }
+
+      const options = declared === true ? {} : declared;
+      const layout = options.layout ?? 0;
+      if (![0, 1, 2].includes(layout)) {
+        throw new Error(`Unknown fieldChooser layout "${layout}". Expected 0, 1 or 2.`);
+      }
+
+      const applyChangesMode = options.applyChangesMode ?? "instantly";
+      if (!["instantly", "onDemand"].includes(applyChangesMode)) {
+        throw new Error(
+          `Unknown fieldChooser applyChangesMode "${applyChangesMode}". Expected "instantly" or "onDemand".`);
+      }
+
+      if (!PivotForge.PivotLayoutState || !PivotForge.PivotFieldDesigner) {
+        throw new Error("fieldChooser requires pivot-layout-state.js and pivot-field-designer.js to be loaded.");
+      }
+
+      return {
+        layout,
+        allFields: options.allFields !== false,
+        applyChangesMode,
+        title: options.title ?? null
+      };
+    }
+
+    // DevExtreme's field chooser popup: the field designer in a dialog, on the
+    // grid's own layout. With applyChangesMode "onDemand" its edits wait for
+    // OK, and Cancel puts the layout back as it was when the dialog opened.
+    showFieldChooser() {
+      this.assertNotDisposed();
+      const options = this.fieldChooserOptions;
+      if (!options) {
+        throw new Error("Cannot show the field chooser because the grid has none.");
+      }
+
+      if (this.fieldChooser) {
+        return;
+      }
+
+      const document = root.document;
+      if (!this.layoutState) {
+        this.layoutState = this.createLayoutState(null);
+        this.watchLayoutState(this.layoutState);
+      }
+
+      const onDemand = options.applyChangesMode === "onDemand";
+      const overlay = document.createElement("div");
+      overlay.className = "pivot-modal pivot-field-chooser is-open";
+      const dialog = document.createElement("div");
+      dialog.className = "pivot-modal__dialog pivot-field-chooser__dialog";
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-modal", "true");
+      const title = document.createElement("h2");
+      title.className = "pivot-field-chooser__title";
+      title.id = `pivot-field-chooser-${++fieldChooserIds}`;
+      title.textContent = options.title ?? this.tableText("fieldChooserTitle", "Field chooser");
+      dialog.setAttribute("aria-labelledby", title.id);
+      const body = document.createElement("div");
+      body.className = "pivot-field-chooser__body";
+      const footer = document.createElement("div");
+      footer.className = "pivot-field-chooser__footer";
+      const button = (text, fallback, action, primary = false) => {
+        const element = document.createElement("button");
+        element.type = "button";
+        element.className = `pivot-field-chooser__button${primary ? " is-primary" : ""}`;
+        element.dataset.action = action;
+        element.textContent = this.tableText(text, fallback);
+        return element;
+      };
+
+      if (onDemand) {
+        const ok = button("ok", "OK", "ok", true);
+        const cancel = button("cancel", "Cancel", "cancel");
+        ok.addEventListener("click", () => this.hideFieldChooser({ apply: true }));
+        cancel.addEventListener("click", () => this.hideFieldChooser({ apply: false }));
+        footer.append(cancel, ok);
+      } else {
+        const close = button("close", "Close", "close", true);
+        close.addEventListener("click", () => this.hideFieldChooser());
+        footer.append(close);
+      }
+
+      dialog.append(title, body, footer);
+      overlay.appendChild(dialog);
+      this.applyDirection(overlay);
+      PivotForge.matchDirection?.(overlay, this.container);
+      overlay.addEventListener("pointerdown", event => {
+        // A press on the shade outside the dialog closes it, as Cancel would.
+        if (event.target === overlay) {
+          this.hideFieldChooser({ apply: !onDemand });
+        }
+      });
+      // On the document rather than the dialog: a redraw of the designer can
+      // take focus with the element it replaced. A dialog the chooser opened
+      // -- field settings, a formula -- takes its own Escape first.
+      const escape = event => {
+        const designer = this.fieldChooser?.designer;
+        if (event.key !== "Escape" || event.defaultPrevented || designer?.settingsFor || designer?.formulaFor !== null) {
+          return;
+        }
+
+        event.preventDefault();
+        this.hideFieldChooser({ apply: !onDemand });
+      };
+      document.addEventListener("keydown", escape);
+      document.body.appendChild(overlay);
+
+      const designer = new PivotForge.PivotFieldDesigner(body, {
+        state: this.layoutState,
+        widget: this,
+        labels: this.designerLabels(),
+        allowCalculatedFields: this.options.allowCalculatedFields !== false,
+        layout: options.layout,
+        allFields: options.allFields,
+        deferUpdates: onDemand ? true : undefined,
+        showDeferBox: false
+      });
+
+      this.fieldChooser = {
+        overlay,
+        designer,
+        // Read back by Cancel: the layout as the dialog found it.
+        snapshot: onDemand ? this.layoutState.getState() : null,
+        returnFocus: document.activeElement,
+        escape
+      };
+      (dialog.querySelector('[data-action="search"]') ?? footer.querySelector("button"))?.focus?.();
+    }
+
+    async hideFieldChooser({ apply = true } = {}) {
+      const chooser = this.fieldChooser;
+      if (!chooser) {
+        return;
+      }
+
+      this.fieldChooser = null;
+      const { designer, snapshot } = chooser;
+
+      if (snapshot && !apply) {
+        // The panel already shows the edits, so the layout itself goes back.
+        designer.pendingUpdate = null;
+        this.adoptLayoutState(new PivotForge.PivotLayoutState(this.options.fields, snapshot));
+      }
+
+      root.document.removeEventListener("keydown", chooser.escape);
+      designer.dispose();
+      chooser.overlay.remove();
+      chooser.returnFocus?.focus?.();
+
+      if (snapshot && apply && designer.pendingUpdate) {
+        await designer.applyPending();
+      }
+    }
+
+    // A field button's menu, DevExtreme's onContextMenuPreparing with a field:
+    // the page fills items, and the designer opens a menu only if it did.
+    prepareFieldMenu(payload) {
+      this.withFieldContext(payload);
+      this.emit("contextMenuPreparing", payload);
+      this.options.rendererOptions?.onContextMenuPreparing?.(payload);
+      return payload.items;
     }
 
     clearState() {
@@ -1005,7 +1247,10 @@
             this.openConditionalPanel(selection, cell);
           }
           : null,
-        onViewStateChanged: state => bridge("viewStateChanged", state),
+        onViewStateChanged: state => {
+          this.refreshChartBindings();
+          return bridge("viewStateChanged", state);
+        },
         // The renderer reports this as three positional arguments; the event
         // carries them as one object so listeners are not order-dependent.
         onCellCopied: (text, copied, kind) => {
@@ -1019,7 +1264,9 @@
           (this.handlers.get("cellPrepared")?.size ?? 0) > 0 || typeof consumer.onCellPrepared === "function",
         onCellClick: payload => bridge("cellClick", this.withFieldContext(payload)),
         onContextMenuPreparing: payload => bridge("contextMenuPreparing", this.withFieldContext(payload)),
-        onExpandValueChanging: payload => bridge("expandValueChanging", payload)
+        onExpandValueChanging: payload => bridge("expandValueChanging", payload),
+        // The cell and header menus' "Show field chooser", when there is one.
+        onShowFieldChooser: this.fieldChooserOptions ? () => this.showFieldChooser() : null
       });
     }
 
@@ -1437,6 +1684,7 @@
       if (this.options.renderImpl) {
         this.options.renderImpl(result);
         this.renderChart(result);
+        this.refreshChartBindings();
         return;
       }
 
@@ -1451,6 +1699,7 @@
       });
 
       this.renderChart(result);
+      this.refreshChartBindings();
 
       // A redraw while a request is still out (a conditional rule added
       // mid-load) replaces the container's children, the panel among them.
@@ -1580,6 +1829,95 @@
       this.saveState();
     }
 
+    // DevExtreme's bindChart: keeps another chart fed with this pivot's data.
+    // target is a chart with an option() method (a dxChart), a function given
+    // the configuration, or a dxChart's element or selector. Returns the
+    // function that undoes the binding, or null when target is no chart.
+    bindChart(target, options = {}) {
+      this.assertNotDisposed();
+      if (!PivotForge.PivotChart?.binding) {
+        throw new Error("bindChart requires pivot-chart.js to be loaded.");
+      }
+
+      const write = resolveChartTarget(target);
+      if (!write) {
+        return null;
+      }
+
+      // Checked here, so a misspelt option fails at the call, not at the
+      // next refresh.
+      PivotForge.PivotChart.normalizeBinding(options);
+      const key = write.key;
+      // A chart shows one pivot: bound to another, it leaves that one first.
+      chartBindings.get(key)?.();
+
+      const binding = { write: write.write, options };
+      this.chartBindings ??= new Set();
+      this.chartBindings.add(binding);
+      const unbind = () => {
+        this.chartBindings?.delete(binding);
+        if (chartBindings.get(key) === unbind) {
+          chartBindings.delete(key);
+        }
+      };
+      binding.unbind = unbind;
+      chartBindings.set(key, unbind);
+
+      if (this.result) {
+        this.writeChartBinding(binding);
+      }
+      return unbind;
+    }
+
+    // What bindChart writes, without binding anything: for a page that feeds
+    // a chart itself.
+    getChartDataSource(options = {}) {
+      this.assertNotDisposed();
+      if (!PivotForge.PivotChart?.binding) {
+        throw new Error("getChartDataSource requires pivot-chart.js to be loaded.");
+      }
+
+      return PivotForge.PivotChart.binding(this.result, this.chartBindingContext(), options);
+    }
+
+    chartBindingContext() {
+      const renderer = this.renderer;
+      const settings = renderer?.lastSettings ?? renderer?.options ?? {};
+      const visible = area => this.fields.filter(field => field.visible && field.area === area);
+      return {
+        values: this.valueDefinitions(),
+        rowFields: visible("row"),
+        columnFields: visible("column"),
+        collapsedRows: renderer?.collapsedRows ?? new Set(),
+        collapsedColumns: renderer?.collapsedColumns ?? new Set(),
+        // The grid's own name for its grand total row and column.
+        grandTotalText: settings.totalText ?? "Total",
+        formatPath: value => (renderer?.displayValue
+          ? renderer.displayValue(value, settings)
+          : value === null || value === undefined || value === "" ? "(blank)" : String(value)),
+        formatValue: (value, definition) => (renderer?.formatValue
+          ? renderer.formatValue(value, settings, definition)
+          : String(value))
+      };
+    }
+
+    writeChartBinding(binding) {
+      const config = PivotForge.PivotChart.binding(this.result, this.chartBindingContext(), binding.options);
+      binding.write(config, { result: this.result });
+    }
+
+    // After every draw, and after a group folds or opens: the chart shows
+    // what the grid shows.
+    refreshChartBindings() {
+      if (!this.chartBindings?.size || !this.result || this.disposed) {
+        return;
+      }
+
+      for (const binding of [...this.chartBindings]) {
+        this.writeChartBinding(binding);
+      }
+    }
+
     // Waits before showing, and a newer refresh restarts the wait without
     // hiding a panel already on screen, so a run of quick re-sorts reads as one
     // load rather than a flicker.
@@ -1657,6 +1995,10 @@
 
         if (item === "chart") {
           return Boolean(this.chartOptions);
+        }
+
+        if (item === "fieldChooser") {
+          return Boolean(this.fieldChooserOptions);
         }
 
         return item === "excel" ? this.options.allowExcelExport === true : Boolean(this.renderer);
@@ -1738,6 +2080,9 @@
             break;
           case "chart":
             this.showChart();
+            break;
+          case "fieldChooser":
+            this.showFieldChooser();
             break;
         }
       } catch (error) {
@@ -2018,6 +2363,19 @@
       };
     }
 
+    // The grid's declared export options under the call's own, with the filter
+    // fields' captions a filter field header row names.
+    exportOptions(options = {}) {
+      const filterFieldLabels = this.fields
+        .filter(field => field.visible && field.area === "filter")
+        .map(field => field.caption);
+      return {
+        ...(filterFieldLabels.length > 0 ? { filterFieldLabels } : {}),
+        ...(this.options.excelExport ?? {}),
+        ...options
+      };
+    }
+
     async exportToExcel(options = {}) {
       this.assertNotDisposed();
 
@@ -2033,7 +2391,7 @@
         );
       }
 
-      const document = this.renderer.getExcelExportModel(options);
+      const document = this.renderer.getExcelExportModel(this.exportOptions(options));
       if (!document) {
         throw new Error("Cannot export because no pivot table has been rendered yet.");
       }
@@ -2079,7 +2437,7 @@
         );
       }
 
-      const model = this.renderer.getExcelExportModel(options);
+      const model = this.renderer.getExcelExportModel(this.exportOptions(options));
       if (!model) {
         throw new Error("Cannot export because no pivot table has been rendered yet.");
       }
@@ -2325,6 +2683,12 @@
       this.errorNode = null;
       this.designer?.dispose();
       this.designer = null;
+      if (this.fieldChooser) {
+        root.document?.removeEventListener?.("keydown", this.fieldChooser.escape);
+        this.fieldChooser.designer.dispose();
+        this.fieldChooser.overlay.remove();
+        this.fieldChooser = null;
+      }
       this.headerFilterPicker?.dispose();
       this.conditionalPanel?.dispose();
       this.conditionalPanel = null;
@@ -2338,6 +2702,10 @@
       this.toolbarNode = null;
       this.chart?.dispose();
       this.chart = null;
+      // Each bound chart keeps what it last showed; it is only no longer fed.
+      for (const binding of [...(this.chartBindings ?? [])]) {
+        binding.unbind();
+      }
       this.chartNode?.remove();
       this.chartNode = null;
       this.container.replaceChildren();

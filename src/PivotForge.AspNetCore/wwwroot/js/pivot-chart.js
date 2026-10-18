@@ -427,7 +427,25 @@
       return this.values?.find(value => value.key === this.state.valueKey) ?? null;
     }
 
+    // A redraw replaces the scroller. When it had focus -- a reader stepping
+    // through categories while the box resizes -- focus and the category it
+    // was on carry over to the new one rather than being lost with the old.
     draw() {
+      const active = root.document?.activeElement;
+      const hadFocus = Boolean(active?.classList?.contains("pivot-chart__scroller") && this.host.contains?.(active));
+      this.redrawing = true;
+      try {
+        this.drawContent();
+      } finally {
+        this.redrawing = false;
+      }
+
+      if (hadFocus) {
+        this.host.querySelector?.(".pivot-chart__scroller")?.focus?.({ preventScroll: true });
+      }
+    }
+
+    drawContent() {
       if (!this.result || this.disposed) {
         return;
       }
@@ -737,7 +755,11 @@
         show(inside && index >= 0 && index < categoryCount ? index : -1);
       });
       scroller.addEventListener("pointerleave", () => show(-1));
-      scroller.addEventListener("blur", () => show(-1));
+      scroller.addEventListener("blur", () => {
+        if (!this.redrawing) {
+          show(-1);
+        }
+      });
       scroller.addEventListener("keydown", event => {
         const next = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
         if (next) {
@@ -830,6 +852,278 @@
     }
   }
 
+  // DevExtreme's bindChart options. Its own fallback for an unknown display
+  // mode is an axis per measure; that is named here so a typo is not silent.
+  const DISPLAY_MODES = ["separateAxes", "singleAxis", "splitPanes"];
+  const DATA_FIELD_PLACES = ["series", "args", "both"];
+
+  function pickName(value, names, option) {
+    if (value === undefined || value === null) {
+      return null;
+    }
+
+    const found = names.find(name => name.toLowerCase() === String(value).toLowerCase());
+    if (!found) {
+      throw new Error(`Unknown ${option} "${value}". Expected one of: ${names.join(", ")}.`);
+    }
+
+    return found;
+  }
+
+  function normalizeBinding(options = {}) {
+    if (typeof options !== "object" || options === null) {
+      throw new Error("bindChart options must be an object.");
+    }
+
+    for (const name of ["processCell", "customizeSeries", "customizeChart"]) {
+      if (options[name] !== undefined && options[name] !== null && typeof options[name] !== "function") {
+        throw new Error(`bindChart ${name} must be a function.`);
+      }
+    }
+
+    return {
+      dataFieldsDisplayMode: pickName(options.dataFieldsDisplayMode, DISPLAY_MODES, "dataFieldsDisplayMode") ??
+        "separateAxes",
+      putDataFieldsInto: pickName(options.putDataFieldsInto, DATA_FIELD_PLACES, "putDataFieldsInto"),
+      alternateDataFields: options.alternateDataFields !== false,
+      inverted: options.inverted === true,
+      processCell: options.processCell ?? null,
+      customizeSeries: options.customizeSeries ?? null,
+      customizeChart: options.customizeChart ?? null
+    };
+  }
+
+  function pathKey(path) {
+    return path.map(value => value ?? "").join("\u001f");
+  }
+
+  // Every path an axis shows, the grand total first, then each group before
+  // the groups and items inside it, in the engine's order. A path under a
+  // collapsed group is not on screen and is left out; the collapsed group
+  // itself stays, as the one total it is folded to.
+  function axisPaths(headers, collapsed) {
+    const paths = [{ path: [], index: null }];
+    const seen = new Set();
+    const hidden = path => {
+      for (let level = 1; level < path.length; level++) {
+        if (collapsed?.has(pathKey(path.slice(0, level)))) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    (headers ?? []).forEach((header, index) => {
+      if (!header?.length) {
+        return;
+      }
+
+      for (let level = 1; level <= header.length; level++) {
+        const path = header.slice(0, level);
+        const key = pathKey(path);
+        if (seen.has(key) || hidden(path)) {
+          continue;
+        }
+
+        seen.add(key);
+        paths.push({ path, index: level === header.length ? index : null });
+      }
+    });
+
+    return paths;
+  }
+
+  function deepMerge(target, source) {
+    if (Array.isArray(source)) {
+      const base = Array.isArray(target) ? [...target] : [];
+      source.forEach((item, index) => {
+        base[index] = deepMerge(base[index], item);
+      });
+      return base;
+    }
+
+    if (source && typeof source === "object" && !(source instanceof Function)) {
+      const base = target && typeof target === "object" && !Array.isArray(target) ? { ...target } : {};
+      for (const [name, value] of Object.entries(source)) {
+        base[name] = deepMerge(base[name], value);
+      }
+      return base;
+    }
+
+    return source === undefined ? target : source;
+  }
+
+  // What DevExtreme's bindChart writes to a chart, read off a pivot result:
+  // one data item per row path x column path x measure, totals included, of
+  // which only the deepest level showing on each axis is charted unless
+  // processCell says otherwise. context carries what the result does not:
+  //   values            the measures on screen (key, label, format...)
+  //   rowFields         the row fields, columnFields likewise
+  //   collapsedRows     keys of the folded row groups, collapsedColumns likewise
+  //   grandTotalText    the grand total's name on either axis
+  //   formatPath        (value) => the header text the grid shows
+  //   formatValue       (value, valueDefinition) => the grid's text for a value
+  function chartBinding(result, context = {}, options = {}) {
+    const settings = normalizeBinding(options);
+    const values = context.values ?? [];
+    const grandTotalText = context.grandTotalText ?? "Grand Total";
+    const formatPath = context.formatPath ??
+      (value => (value === null || value === undefined || value === "" ? TEXTS.blank : String(value)));
+    const formatValue = context.formatValue ?? (value => String(value));
+    const rowHeaders = result?.rowHeaders ?? [];
+    const columnHeaders = result?.columnHeaders ?? [];
+    const rowDepth = Math.max(0, ...rowHeaders.map(header => header?.length ?? 0));
+    const columnDepth = Math.max(0, ...columnHeaders.map(header => header?.length ?? 0));
+
+    const cells = new Map((result?.cells ?? []).map(cell => [`${cell.row}:${cell.column}`, cell.values]));
+    const rowTotals = new Map((result?.rowTotals ?? []).map(total => [total.index, total.values]));
+    const columnTotals = new Map((result?.columnTotals ?? []).map(total => [total.index, total.values]));
+    const subtotals = new Map((result?.subtotals ?? []).map(subtotal => [pathKey(subtotal.rowHeader ?? []), subtotal]));
+    const columnSubtotals = new Map((result?.columnSubtotals ?? [])
+      .map(subtotal => [pathKey(subtotal.columnHeader ?? []), subtotal]));
+
+    // The nine crossings of a leaf, a group and the grand total on each axis.
+    const read = (row, column) => {
+      const rowGrand = row.path.length === 0;
+      const columnGrand = column.path.length === 0;
+      if (rowGrand && columnGrand) {
+        return result?.grandTotals;
+      }
+      if (rowGrand) {
+        if (column.index !== null) {
+          return columnTotals.get(column.index) ?? (rowDepth === 0 ? cells.get(`0:${column.index}`) : undefined);
+        }
+        return columnSubtotals.get(pathKey(column.path))?.totals;
+      }
+      if (row.index !== null) {
+        if (columnGrand) {
+          return rowTotals.get(row.index) ?? (columnDepth === 0 ? cells.get(`${row.index}:0`) : undefined);
+        }
+        return column.index !== null
+          ? cells.get(`${row.index}:${column.index}`)
+          : columnSubtotals.get(pathKey(column.path))?.cells?.find(cell => cell.index === row.index)?.values;
+      }
+
+      const group = subtotals.get(pathKey(row.path));
+      if (columnGrand) {
+        return group?.totals;
+      }
+      if (column.index !== null) {
+        return group?.cells?.find(cell => cell.column === column.index)?.values;
+      }
+      const key = pathKey(column.path);
+      return group?.columnSubtotals?.find(cell => pathKey(cell.columnHeader ?? []) === key)?.values;
+    };
+
+    const rows = axisPaths(rowHeaders, context.collapsedRows);
+    const columns = axisPaths(columnHeaders, context.collapsedColumns);
+    const maxRowLevel = Math.max(...rows.map(row => row.path.length));
+    const maxColumnLevel = Math.max(...columns.map(column => column.path.length));
+    const texts = path => (path.length === 0 ? [grandTotalText] : path.map(formatPath));
+    const multiple = values.length > 1;
+    const place = settings.putDataFieldsInto ??
+      (multiple && settings.dataFieldsDisplayMode !== "singleAxis" ? "series" : null);
+    const intoSeries = place === "series" || place === "both";
+    const intoArgs = place === "args" || place === "both";
+
+    const dataSource = [];
+    // Which measure a series plots, for the axis (and pane) it is drawn on.
+    const seriesFields = new Map();
+    const emit = (row, column, dataIndex) => {
+      const definition = values[dataIndex];
+      const rowTexts = texts(row.path);
+      const columnTexts = texts(column.path);
+      const measure = definition.label ?? definition.key;
+      let series = (settings.inverted ? columnTexts : rowTexts).join(" - ");
+      let arg = (settings.inverted ? rowTexts : columnTexts).join("/");
+      if (intoSeries) {
+        series += ` | ${measure}`;
+      }
+      if (intoArgs) {
+        arg += ` | ${measure}`;
+      }
+
+      const cellValues = read(row, column);
+      const dataValues = values.map(value => readValue(cellValues, value.key));
+      const cell = {
+        rowPath: [...row.path],
+        rowPathFormatted: row.path.map(formatPath),
+        rowFields: context.rowFields ?? [],
+        maxRowLevel,
+        columnPath: [...column.path],
+        columnPathFormatted: column.path.map(formatPath),
+        columnFields: context.columnFields ?? [],
+        maxColumnLevel,
+        dataFields: values,
+        dataIndex,
+        dataValues,
+        visible: row.path.length === maxRowLevel && column.path.length === maxColumnLevel,
+        chartDataItem: { series, arg, val: dataValues[dataIndex] }
+      };
+
+      const changed = settings.processCell?.(cell);
+      if (changed && typeof changed === "object") {
+        const item = changed.chartDataItem ? { ...cell.chartDataItem, ...changed.chartDataItem } : cell.chartDataItem;
+        Object.assign(cell, changed, { chartDataItem: item });
+      }
+
+      if (cell.visible) {
+        dataSource.push(cell.chartDataItem);
+        seriesFields.set(cell.chartDataItem.series, definition);
+      }
+    };
+
+    if (settings.alternateDataFields) {
+      rows.forEach(row => columns.forEach(column => values.forEach((_, index) => emit(row, column, index))));
+    } else {
+      values.forEach((_, index) => rows.forEach(row => columns.forEach(column => emit(row, column, index))));
+    }
+
+    const mode = settings.dataFieldsDisplayMode;
+    const axisOf = definition => ({
+      name: definition.key,
+      title: definition.label ?? definition.key,
+      valueType: "numeric",
+      label: { customizeText: info => formatValue(info.value, definition) },
+      ...(mode === "splitPanes" ? { pane: definition.key } : {})
+    });
+    let chartOptions = {
+      valueAxis: mode === "singleAxis" || values.length === 0
+        ? [{
+          valueType: "numeric",
+          ...(values.length === 1 ? { title: values[0].label ?? values[0].key } : {}),
+          label: { customizeText: info => formatValue(info.value, values[0] ?? null) }
+        }]
+        : values.map(axisOf),
+      ...(mode === "splitPanes" ? { panes: values.map(value => ({ name: value.key })) } : {})
+    };
+    if (settings.customizeChart) {
+      const changed = settings.customizeChart(chartOptions);
+      if (changed && typeof changed === "object") {
+        chartOptions = deepMerge(chartOptions, changed);
+      }
+    }
+
+    return {
+      dataSource,
+      seriesTemplate: {
+        nameField: "series",
+        customizeSeries: seriesName => {
+          const definition = seriesFields.get(seriesName);
+          const seriesOptions = {};
+          if (definition && mode !== "singleAxis" && values.length > 0) {
+            seriesOptions.axis = definition.key;
+            if (mode === "splitPanes") {
+              seriesOptions.pane = definition.key;
+            }
+          }
+          return settings.customizeSeries?.(seriesName, seriesOptions) ?? seriesOptions;
+        }
+      },
+      ...chartOptions
+    };
+  }
+
   PivotChart.TYPES = CHART_TYPES;
   PivotChart.TEXTS = TEXTS;
   PivotChart.MAX_SERIES = MAX_SERIES;
@@ -838,6 +1132,9 @@
   PivotChart.niceTicks = niceTicks;
   PivotChart.axisFormatter = axisFormatter;
   PivotChart.SeriesColors = SeriesColors;
+  PivotChart.binding = chartBinding;
+  PivotChart.normalizeBinding = normalizeBinding;
+  PivotChart.DISPLAY_MODES = DISPLAY_MODES;
   PivotForge.PivotChart = PivotChart;
 
   if (typeof module !== "undefined" && module.exports) {

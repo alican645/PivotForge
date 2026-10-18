@@ -984,3 +984,38 @@ test("the cell events are among the events a page may declare", () => {
 
   widget.dispose();
 });
+
+// --- Field chooser options --------------------------------------------------
+
+test("the field chooser button is offered only to a grid that has one", () => {
+  const plain = build({ options: { toolbar: true, stateStoring: null } });
+  assert.equal(plain.widget.toolbarItems().includes("fieldChooser"), false);
+  plain.widget.dispose();
+
+  const chooser = build({ options: { toolbar: true, stateStoring: null, fieldChooser: { layout: 1, applyChangesMode: "onDemand" } } });
+  assert.equal(chooser.widget.toolbarItems().includes("fieldChooser"), true);
+  assert.deepEqual(chooser.widget.fieldChooserOptions,
+    { layout: 1, allFields: true, applyChangesMode: "onDemand", title: null });
+  chooser.widget.dispose();
+});
+
+test("an unknown field chooser layout or mode is refused where it is written", () => {
+  assert.throws(() => build({ options: { fieldChooser: { layout: 3 } } }), /layout/);
+  assert.throws(() => build({ options: { fieldChooser: { applyChangesMode: "later" } } }), /applyChangesMode/);
+});
+
+test("a field's menu goes out as contextMenuPreparing with the field", () => {
+  const { widget } = build({ options: { stateStoring: null } });
+  const seen = [];
+  widget.on("contextMenuPreparing", event => {
+    seen.push(event);
+    event.items.push({ label: "Not al" });
+  });
+
+  const items = widget.prepareFieldMenu({ field: { dataField: "Region" }, area: "row", items: [] });
+
+  assert.equal(seen[0].field.dataField, "Region");
+  assert.ok(Array.isArray(seen[0].rowFields));
+  assert.equal(items.length, 1);
+  widget.dispose();
+});

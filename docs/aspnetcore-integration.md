@@ -767,6 +767,33 @@ The catalog is fixed at construction — it is every field the grid declared, re
 
 The designer renders a **search input** above the available-field list that filters it case-insensitively by matching the field's **caption**, not its `dataField` name. Search is a display-only filter — it never touches `PivotLayoutState` and never triggers `widget.update()`.
 
+### Field chooser
+
+DevExtreme's field chooser popup: the field designer in a dialog, on the grid's own
+layout, opened from the cell and header menus (**Show field chooser** / "Alan
+seçiciyi göster"), the `FieldChooser` toolbar button or `widget.showFieldChooser()`.
+It needs no host element on the page.
+
+```cshtml
+<pivot-grid id="pivotGrid" toolbar-items="FieldChooser"
+            field-chooser-layout="ListOnTop"
+            field-chooser-apply-changes-mode="OnDemand">
+```
+
+| Attribute | Builder / JavaScript | Default | Meaning |
+| --- | --- | --- | --- |
+| `field-chooser` | `FieldChooser(true)` / `fieldChooser: true` | off | Gives the grid one. Any of the attributes below implies it. |
+| `field-chooser-layout` | `FieldChooser(layout, ...)` / `layout: 0, 1, 2` | `ListBesideRowsAndColumns` (0) | DevExtreme's layouts: the list beside rows and columns with filters and values below (0), beside the four zones stacked (1), across the top with the zones in two rows (2). Narrow dialogs stack everything. |
+| `field-chooser-all-fields` | `allFields` | `true` | Lists every field, placed or not, each with a checkbox: ticking a measure puts it among the values, any other field on the columns; clearing removes it; a folder's box places its first field, or removes every placed one. Enter on a listed field does the same. `false` lists only the unplaced fields. |
+| `field-chooser-apply-changes-mode` | `applyChangesMode: "instantly" \| "onDemand"` | `Instantly` | `OnDemand` holds every edit until **OK**; **Cancel**, Escape or a click outside puts the layout back as the dialog found it. |
+
+The same arrangements are available to a designer the page hosts:
+`field-designer-layout` (`FieldDesignerLayout`, `fieldDesignerLayout`) and
+`field-designer-all-fields` (`FieldDesignerAllFields`, `fieldDesignerAllFields`).
+A right click (or the menu key) on a field chip raises `contextMenuPreparing` with
+`field` and `area` instead of a cell; the menu has no entries of its own and opens
+only when the page adds some.
+
 ### Top-N
 
 `pivot-top-n` limits one row header level to its highest or lowest ranking groups:
@@ -1125,6 +1152,36 @@ Both exports read the table as it currently stands, not the last result — so a
 collapsed group exports collapsed, and a resized or reordered grid exports the
 way it looks.
 
+
+#### Field header rows and merging
+
+DevExtreme's `exportPivotGrid` options, for every Excel and CSV export of the grid —
+declared once, or passed to an export call, whose own options win:
+
+```cshtml
+<pivot-grid id="pivotGrid" allow-excel-export="true"
+            excel-filter-field-headers="true"
+            excel-data-field-headers="true"
+            excel-column-field-headers="true"
+            excel-merge-row-field-values="false">
+```
+
+| Attribute | JavaScript | Default | Meaning |
+| --- | --- | --- | --- |
+| `excel-filter-field-headers` | `exportFilterFieldHeaders` | `false` | A row above the table naming the filter fields. |
+| `excel-data-field-headers` | `exportDataFieldHeaders` | `false` | The data fields named above the row headers. |
+| `excel-column-field-headers` | `exportColumnFieldHeaders` | `false` | The column fields named above the column headers. A grid whose corner already names them (sorting or filtering on its columns) is not given a second row. |
+| `excel-row-field-headers` | `exportRowFieldHeaders` | `true` | The corner names the row fields, as on screen. DevExtreme leaves it blank unless asked; `false` does the same here. |
+| `excel-merge-row-field-values` | `mergeRowFieldValues` | `true` | `false` writes a row header into every row it spans instead of one merged cell, so the sheet sorts and filters row by row. |
+| `excel-merge-column-field-values` | `mergeColumnFieldValues` | `true` | The same for a column header across its columns. |
+
+Each field takes a cell of its own while there is room, the last stretching to the
+edge; with more fields than columns their captions share one cell. Field header cells
+are bold with a thin grey border, stay merged, freeze with the table's head, and
+carry `source: { area: "fieldHeader", headerType }` in the `exporting` event. The
+builder takes `ExcelExport(new PivotExcelExportOptions { ... })`; in JavaScript the
+widget option is `excelExport`.
+
 ### Filter operators
 
 A filter compares its values with an operator. The default, `Equals`, reads them as
@@ -1368,6 +1425,43 @@ C#: `Chart(PivotChartType.Column, PivotChartPosition.Top, height: 320, visible: 
 `chart: "column"` or `chart: { type: "line", position: "bottom", height: 280, valueKey: "Amount_sum", visible: true }`.
 The chart is not printed with the grid, and in large-data mode it charts the rows of the
 page on screen.
+
+#### Binding an external chart
+
+`bindChart(chart, options)` feeds another chart library the pivot's data, as DevExtreme's
+`bindChart` does: once at the call and again after every load, filter, sort and fold.
+`chart` is a dxChart instance (or anything with an `option(config)` method), a dxChart's
+element or selector, or a function called with the configuration and `{ result }` — for
+Chart.js, ECharts and the like. It returns the function that undoes the binding, or
+`null` when `chart` is none of these; binding the chart to another grid unbinds it here,
+and disposing the grid unbinds every chart.
+
+```js
+// Registered before the grid's markup, as for any pivotforge:ready listener.
+document.addEventListener("pivotforge:ready", event => {
+  const chart = $("#salesChart").dxChart({ commonSeriesSettings: { type: "bar" } }).dxChart("instance");
+  const unbind = event.detail.widget.bindChart(chart, { dataFieldsDisplayMode: "splitPanes" });
+}, true);
+```
+
+The configuration is `{ dataSource, seriesTemplate: { nameField: "series", customizeSeries }, valueAxis, panes }`.
+`dataSource` holds one `{ series, arg, val }` item per row path × column path × data field,
+totals included. Series names are a row path's texts joined with `" - "` and arguments a
+column path's joined with `"/"`. Only the deepest level showing on each axis is charted,
+so folding a group in the grid takes its rows out of the chart.
+
+| Option | Effect |
+|---|---|
+| `dataFieldsDisplayMode` | `"separateAxes"` (default) gives each data field its own value axis, `"singleAxis"` one axis for all, `"splitPanes"` each field its own pane |
+| `putDataFieldsInto` | `"series"`, `"args"` or `"both"`: where `" \| <field>"` is added; with several data fields it goes on the series unless the axis is single |
+| `alternateDataFields` | `false` runs through every cell once per data field rather than every field per cell |
+| `inverted` | the column paths become the series and the row paths the arguments |
+| `processCell(e)` | called for every cell with `rowPath`, `rowPathFormatted`, `rowFields`, `maxRowLevel`, the column counterparts, `dataFields`, `dataIndex`, `dataValues`, `visible` and `chartDataItem`; what it returns is merged in, so `{ visible: true }` charts a total |
+| `customizeSeries(name, options)` | changes a series' options; each series is already on its data field's axis (and pane) |
+| `customizeChart(options)` | what it returns is merged into `valueAxis` and `panes` |
+
+`getChartDataSource(options)` returns the same configuration without binding anything.
+Both need `pivot-chart.js`; the packaged chart does not, and keeps drawing on its own.
 
 ### Localization
 

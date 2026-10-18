@@ -572,3 +572,26 @@ test("download reports failure instead of throwing when there is nothing to save
     assert.equal(PivotForge.download({ fileName: "bos.csv" }), false);
   });
 });
+
+test("the declared excelExport options reach the model, under a call's own, with the filter captions", async () => {
+  const { widget } = createWidget(() => ({ ok: true, status: 200, blob: async () => ({ size: 1 }) }), {
+    allowExcelExport: true,
+    excelExport: { exportFilterFieldHeaders: true, mergeRowFieldValues: false },
+    fields: [
+      { caption: "Ürün", dataField: "urun", area: "row" },
+      { caption: "Bölge", dataField: "bolge", area: "filter" },
+      { caption: "Tutar", dataField: "tutar", area: "data", aggregation: "sum" }
+    ]
+  });
+  const requested = [];
+  widget.renderer = { getExcelExportModel: options => { requested.push(options); return { rows: [] }; } };
+
+  await widget.exportToExcel({ mergeRowFieldValues: true });
+
+  assert.deepEqual(requested[0], {
+    filterFieldLabels: ["Bölge"],
+    exportFilterFieldHeaders: true,
+    mergeRowFieldValues: true
+  });
+  widget.dispose();
+});

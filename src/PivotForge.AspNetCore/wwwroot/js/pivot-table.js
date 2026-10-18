@@ -21,6 +21,8 @@ const TEXTS = {
   sortColumnsByValue: "Sort columns by this row",
   filterByValue: "Filter by this value",
   addConditionalFormat: "Add conditional formatting",
+  // DevExtreme's "Show Field Chooser", in every menu while the grid has one.
+  showFieldChooser: "Show field chooser",
   resizeColumn: "Resize column",
   sortField: "Sort {0}",
   sortActive: "{0} is sorted",
@@ -348,6 +350,90 @@ PivotForge.isConditionalRule = function isConditionalRule(rule) {
 };
 
 // Compact and tree both put every row field in one indented column.
+// DevExtreme's export field header rows, above the table: the filter fields
+// across the whole width, then the data fields over the row headers and the
+// column fields over the column headers. A field takes a cell of its own while
+// there is room, the last stretching to the edge; with more fields than
+// columns their captions share one cell. A side left out stays blank.
+function fieldHeaderRows({
+  width,
+  rowHeaderWidth,
+  filterLabels = [],
+  dataLabels = [],
+  columnLabels = [],
+  exportFilterFieldHeaders = false,
+  exportDataFieldHeaders = false,
+  exportColumnFieldHeaders = false
+}) {
+  const cell = (text, columnSpan, headerType) => ({
+    text,
+    number: null,
+    rowSpan: 1,
+    columnSpan,
+    width: 118 * columnSpan,
+    numberFormat: null,
+    role: "FieldHeader",
+    highlight: "None",
+    fillColor: null,
+    source: { area: "fieldHeader", headerType }
+  });
+  // One cell per caption across `span` columns, or one cell for all of them.
+  const spread = (labels, span, headerType) => {
+    if (labels.length === 0) {
+      return [cell("", span, headerType)];
+    }
+
+    if (labels.length > span) {
+      return [cell(labels.join(", "), span, headerType)];
+    }
+
+    return labels.map((label, index) =>
+      cell(label, index === labels.length - 1 ? span - index : 1, headerType));
+  };
+  const rows = [];
+  const total = Math.max(1, width);
+  const left = Math.max(1, Math.min(rowHeaderWidth, total));
+
+  if (exportFilterFieldHeaders && filterLabels.length > 0) {
+    rows.push({ cells: spread(filterLabels, total, "filter") });
+  }
+
+  const showData = exportDataFieldHeaders && dataLabels.length > 0;
+  const showColumns = exportColumnFieldHeaders && columnLabels.length > 0 && total > left;
+  if (showData || showColumns) {
+    rows.push({
+      cells: [
+        cell(showData ? dataLabels.join(", ") : "", left, "data"),
+        ...(total > left ? spread(showColumns ? columnLabels : [], total - left, "column") : [])
+      ]
+    });
+  }
+
+  return rows;
+}
+
+// How many columns a table's rows span, counting the cells that reach down
+// into a row from one above.
+function tableWidth(rows) {
+  const carried = new Map();
+  let widest = 0;
+
+  rows.forEach((row, index) => {
+    let width = carried.get(index) ?? 0;
+    for (const cell of row.cells) {
+      width += cell.columnSpan || 1;
+      for (let below = 1; below < (cell.rowSpan || 1); below++) {
+        carried.set(index + below, (carried.get(index + below) ?? 0) + (cell.columnSpan || 1));
+      }
+    }
+    widest = Math.max(widest, width);
+  });
+
+  return widest;
+}
+
+PivotForge.excelFieldHeaderRows = fieldHeaderRows;
+
 function isOneColumnLayout(settings) {
   return settings?.layoutMode === "compact" || settings?.layoutMode === "tree";
 }
@@ -978,20 +1064,50 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       ? Array.from(bodyRow.children).findIndex(cell => cell.tagName === "TD")
       : 0;
 
+    const rows = Array.from(table.rows)
+      .filter(row => !row.hidden && row.style.display !== "none")
+      .map(row => ({
+        cells: Array.from(row.children).map(cell => {
+          const exported = this.createExcelExportCell(cell, row);
+          // DevExtreme leaves the corner blank unless asked; here it names the row
+          // fields unless asked not to, as every earlier export did.
+          if (options.exportRowFieldHeaders === false && cell.classList.contains("pivot-table__corner") &&
+              !cell.classList.contains("pivot-table__column-field") &&
+              !cell.classList.contains("pivot-table__values-corner")) {
+            exported.text = "";
+          }
+          return exported;
+        })
+      }));
+    // A grid whose corner already names its column fields -- one with sorting
+    // or filtering on its column axis -- is not given a second row of them.
+    const namesColumnFields = Boolean(table.querySelector?.(".pivot-table__column-field"));
+    const settings = this.lastSettings ?? this.options;
+    const fieldRows = fieldHeaderRows({
+      width: tableWidth(rows),
+      rowHeaderWidth: Math.max(1, frozenColumnCount),
+      filterLabels: options.filterFieldLabels ?? [],
+      dataLabels: options.dataFieldLabels ?? (settings?.values ?? []).map(value => value.label ?? value.key),
+      columnLabels: namesColumnFields ? [] : settings?.columnFieldLabels ?? [],
+      exportFilterFieldHeaders: options.exportFilterFieldHeaders === true,
+      exportDataFieldHeaders: options.exportDataFieldHeaders === true,
+      exportColumnFieldHeaders: options.exportColumnFieldHeaders === true
+    });
+
     return {
       title: options.title ?? "Pivot Tablo",
       filterSummary: options.filterSummary ?? "Aktif filtre yok",
       filterLabel: options.filterLabel ?? "Filtreler",
       sheetName: options.sheetName ?? "Pivot Tablo",
-      headerRowCount: table.tHead?.rows.length ?? 0,
+      // The field header rows freeze with the table's own head.
+      headerRowCount: (table.tHead?.rows.length ?? 0) + fieldRows.length,
       frozenColumnCount: Math.max(0, frozenColumnCount),
       // Written only for a right-to-left grid, so every other model is unchanged.
       ...(PivotForge.isRtl(table) ? { rightToLeft: true } : {}),
-      rows: Array.from(table.rows)
-        .filter(row => !row.hidden && row.style.display !== "none")
-        .map(row => ({
-          cells: Array.from(row.children).map(cell => this.createExcelExportCell(cell, row))
-        }))
+      // Written only when switched off, for the same reason.
+      ...(options.mergeRowFieldValues === false ? { mergeRowFieldValues: false } : {}),
+      ...(options.mergeColumnFieldValues === false ? { mergeColumnFieldValues: false } : {}),
+      rows: [...fieldRows, ...rows]
     };
   }
 
@@ -2396,7 +2512,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       const isCopy = isCell && (event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("tr") === "c";
       const isMenuKey = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
 
-      if (!isCell && isMenuKey && settings.contextMenu && this.headerLevelOf(target)) {
+      if (!isCell && isMenuKey && settings.contextMenu &&
+          (this.headerLevelOf(target) || typeof settings.onShowFieldChooser === "function")) {
         event.preventDefault();
         const rect = target.getBoundingClientRect();
         const x = PivotForge.isRtl(target) ? rect.right - 12 : rect.left + 12;
@@ -2470,8 +2587,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // header has one only when the page offers items for it.
       const header = target ? null : event.target.closest("th");
       if (header && table.contains(header) &&
-          (this.headerLevelOf(header) || (typeof settings.onContextMenuPreparing === "function" &&
-            this.describeCell(header, settings)))) {
+          (this.headerLevelOf(header) || typeof settings.onShowFieldChooser === "function" ||
+            (typeof settings.onContextMenuPreparing === "function" && this.describeCell(header, settings)))) {
         event.preventDefault();
         this.openHeaderMenu(header, event.clientX, event.clientY, settings, event);
         return;
@@ -2892,9 +3009,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     // A header without groups below it has no menu of its own, but a page may
     // still give it one through contextMenuPreparing.
+    const chooser = this.fieldChooserItem(settings.texts ?? TEXTS, settings);
+    const chooserItems = chooser.available ? [chooser] : [];
+    const pickChooser = action => {
+      this.closeContextMenu();
+      if (action === "field-chooser") {
+        settings.onShowFieldChooser?.();
+      }
+    };
+
     if (!target) {
-      return this.presentPreparedMenu(header, (settings.texts ?? TEXTS).headerActions, [],
-        () => this.closeContextMenu(), clientX, clientY, settings, event);
+      return this.presentPreparedMenu(header, (settings.texts ?? TEXTS).headerActions, chooserItems,
+        pickChooser, clientX, clientY, settings, event);
     }
 
     const texts = settings.texts ?? TEXTS;
@@ -2909,11 +3035,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       texts.headerActions,
       [
         { action: "expand-level", label: formatText(texts.expandLevel, caption), disabled: closedCount === 0 },
-        { action: "collapse-level", label: formatText(texts.collapseLevel, caption), disabled: closedCount === keys.length }
+        { action: "collapse-level", label: formatText(texts.collapseLevel, caption), disabled: closedCount === keys.length },
+        ...chooserItems
       ],
       action => {
         this.closeContextMenu();
-        if (action === "expand-level") {
+        if (action === "field-chooser") {
+          pickChooser(action);
+        } else if (action === "expand-level") {
           this.expandLevel(target.axis, target.level);
         } else {
           this.collapseLevel(target.axis, target.level);
@@ -3111,8 +3240,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         label: texts.addConditionalFormat,
         disabled: !isNumeric || !selection?.valueKey,
         available: Boolean(settings?.onConditionalFormatRequested)
-      }
+      },
+      this.fieldChooserItem(texts, settings)
     ].filter(item => item.available !== false);
+  }
+
+  fieldChooserItem(texts = TEXTS, settings = this.lastSettings) {
+    return {
+      action: "field-chooser",
+      label: texts.showFieldChooser ?? TEXTS.showFieldChooser,
+      disabled: false,
+      available: typeof settings?.onShowFieldChooser === "function"
+    };
   }
 
   handleContextMenuAction(action, cell, settings = this.lastSettings) {
@@ -3144,6 +3283,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         break;
       case "conditional":
         settings?.onConditionalFormatRequested?.(this.cloneSelection(selection), cell);
+        break;
+      case "field-chooser":
+        settings?.onShowFieldChooser?.();
         break;
     }
   }

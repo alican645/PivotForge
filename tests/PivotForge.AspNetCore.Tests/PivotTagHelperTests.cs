@@ -2262,6 +2262,74 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesTheFieldChooserAsDeclared()
+    {
+        var plain = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", FieldChooser = true }, MinimalFields));
+        Assert.True(plain.GetProperty("fieldChooser").GetBoolean());
+
+        var detailed = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                FieldChooserLayout = PivotFieldChooserLayout.ListOnTop,
+                FieldChooserApplyChangesMode = PivotApplyChangesMode.OnDemand,
+                FieldDesigner = "#designer",
+                FieldDesignerLayout = PivotFieldChooserLayout.ListBesideAllZones,
+                FieldDesignerAllFields = true
+            },
+            ["field-chooser-layout", "field-chooser-apply-changes-mode", "field-designer-layout"],
+            MinimalFields));
+        var chooser = detailed.GetProperty("fieldChooser");
+        Assert.Equal(2, chooser.GetProperty("layout").GetInt32());
+        Assert.True(chooser.GetProperty("allFields").GetBoolean());
+        Assert.Equal("onDemand", chooser.GetProperty("applyChangesMode").GetString());
+        Assert.Equal(1, detailed.GetProperty("fieldDesignerLayout").GetInt32());
+        Assert.True(detailed.GetProperty("fieldDesignerAllFields").GetBoolean());
+
+        var none = ConfigOf(await RenderAsync(new PivotGridTagHelper { Id = "pivotGrid" }, MinimalFields));
+        Assert.False(none.TryGetProperty("fieldChooser", out _));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", FieldChooser = false, FieldChooserAllFields = false },
+            ["field-chooser", "field-chooser-all-fields"],
+            MinimalFields));
+        Assert.Equal(
+            ["fieldChooser"],
+            ConfigOf(RenderBuilder(new PivotGridBuilder().Id("pivotGrid").Toolbar(PivotToolbarItem.FieldChooser)
+                .Fields(fields => fields.Add().DataField("Amount").Area(PivotArea.Data).Aggregation(PivotAggregation.Sum))))
+                .GetProperty("toolbar").EnumerateArray().Select(item => item.GetString()));
+    }
+
+    [Fact]
+    public async Task WritesOnlyTheExcelExportOptionsThatDifferFromTheDefaults()
+    {
+        var plain = ConfigOf(await RenderAsync(new PivotGridTagHelper { Id = "pivotGrid" }, MinimalFields));
+        Assert.False(plain.TryGetProperty("excelExport", out _));
+
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid",
+                ExcelFilterFieldHeaders = true,
+                ExcelColumnFieldHeaders = true,
+                ExcelRowFieldHeaders = false,
+                ExcelMergeColumnFieldValues = false,
+                // The default, so it is not written.
+                ExcelMergeRowFieldValues = true
+            },
+            MinimalFields)).GetProperty("excelExport");
+
+        Assert.Equal(
+            ["exportColumnFieldHeaders", "exportFilterFieldHeaders", "exportRowFieldHeaders", "mergeColumnFieldValues"],
+            declared.EnumerateObject().Select(property => property.Name).Order());
+        Assert.True(declared.GetProperty("exportFilterFieldHeaders").GetBoolean());
+        Assert.False(declared.GetProperty("exportRowFieldHeaders").GetBoolean());
+        Assert.False(declared.GetProperty("mergeColumnFieldValues").GetBoolean());
+        Assert.Throws<ArgumentNullException>(() => new PivotGridBuilder().ExcelExport(null!));
+    }
+
+    [Fact]
     public async Task StateStoringMatchesTheEquivalentBuilderConfiguration()
     {
         var fromTagHelper = await RenderAsync(
