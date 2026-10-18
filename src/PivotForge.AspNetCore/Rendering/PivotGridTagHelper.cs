@@ -329,6 +329,22 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("remote-load")]
     public string? RemoteLoad { get; set; }
 
+    /// <summary>Gets or sets the XMLA endpoint the grid reads an OLAP cube from instead of the
+    /// PivotForge endpoints.</summary>
+    /// <remarks>Declared with <c>xmla-catalog</c> and <c>xmla-cube</c>; see
+    /// <see cref="PivotGridBuilder.XmlaStore"/>. Needs <c>js/pivot-result-assembler.js</c> and
+    /// <c>js/pivot-xmla-store.js</c> on the page.</remarks>
+    [HtmlAttributeName("xmla-url")]
+    public string? XmlaUrl { get; set; }
+
+    /// <summary>Gets or sets the database (catalog) of the cube named by <c>xmla-cube</c>.</summary>
+    [HtmlAttributeName("xmla-catalog")]
+    public string? XmlaCatalog { get; set; }
+
+    /// <summary>Gets or sets the cube an <c>xmla-url</c> grid reads.</summary>
+    [HtmlAttributeName("xmla-cube")]
+    public string? XmlaCube { get; set; }
+
     /// <summary>Gets or sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
     /// Left unset it follows the request's UI culture, so a Turkish request gets
@@ -714,6 +730,24 @@ public sealed class PivotGridTagHelper : TagHelper
         {
             throw new InvalidOperationException(
                 "remote-load-url and remote-load both name where the grid loads from; declare one of them.");
+        }
+
+        var xmlaDeclared = XmlaUrl is not null || XmlaCatalog is not null || XmlaCube is not null;
+        if (xmlaDeclared && (RemoteLoadUrl is not null || RemoteLoad is not null))
+        {
+            throw new InvalidOperationException(
+                "xmla-url and remote-load-url / remote-load both name where the grid loads from; declare one of them.");
+        }
+
+        if (xmlaDeclared)
+        {
+            if (string.IsNullOrWhiteSpace(XmlaUrl) || string.IsNullOrWhiteSpace(XmlaCatalog) || string.IsNullOrWhiteSpace(XmlaCube))
+            {
+                throw new InvalidOperationException(
+                    "An OLAP grid needs xmla-url, xmla-catalog and xmla-cube: the endpoint, the database and the cube it reads.");
+            }
+
+            builder.XmlaStore(XmlaUrl, XmlaCatalog, XmlaCube);
         }
 
         if (RemoteLoadUrl is { } remoteLoadUrl)

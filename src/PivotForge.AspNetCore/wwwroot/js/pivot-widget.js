@@ -41,6 +41,8 @@
     // load } groups and sums on a DataSourceLoader backend instead of the
     // PivotForge endpoints, and the browser builds the pivot from what comes
     // back. Needs pivot-result-assembler.js and pivot-remote-store.js.
+    // { type: "xmla", url, catalog, cube } reads an OLAP cube the same way and
+    // needs pivot-result-assembler.js and pivot-xmla-store.js.
     store: null,
     largeData: false,
     pageSize: 40,
@@ -175,10 +177,16 @@
 
       taken.add(identity(field));
       const grouped = typeof field.groupInterval === "string";
+      // A source that knows its fields (a cube's schema) names their role,
+      // caption and folder; anything else is guessed from the data type.
       merged.push({
         dataField: field.dataField,
         area: "available",
-        role: field.dataType === "number" && !grouped ? "measure" : "dimension",
+        role: field.role === "measure" || field.role === "dimension"
+          ? field.role
+          : field.dataType === "number" && !grouped ? "measure" : "dimension",
+        ...(typeof field.caption === "string" ? { caption: field.caption } : {}),
+        ...(typeof field.displayFolder === "string" ? { displayFolder: field.displayFolder } : {}),
         ...(typeof field.dataType === "string" ? { dataType: field.dataType } : {}),
         ...(grouped ? { groupInterval: field.groupInterval } : {}),
         ...(typeof field.groupName === "string" && Number.isInteger(field.groupIndex)
@@ -385,7 +393,7 @@
       // Kept after discovery: a grid offering discovered fields may be laid
       // out with no measure until the reader places one.
       this.retrievesFields = this.fieldsToDiscover;
-      this.remoteStore = this.createRemoteStore();
+      this.store = this.createStore();
       this.validateFields(this.options.fields ?? []);
 
       // Resolved before anything reads state, and never fatal: a page that
@@ -656,8 +664,8 @@
     // have no measure yet; it is checked field by field and the grid shows
     // that a value is needed rather than refusing the layout.
     validateFields(fields) {
-      if (this.remoteStore) {
-        PivotForge.RemoteStore.validateFields(PivotForge.PivotRequestBuilder.normalizeFields(fields));
+      if (this.store) {
+        this.storeModule.validateFields(PivotForge.PivotRequestBuilder.normalizeFields(fields));
       }
 
       if (this.retrievesFields && !hasMeasure(fields)) {
@@ -672,30 +680,38 @@
     // the PivotForge endpoints. What only the engine can do -- a ranking, a
     // value filter, a page of a large result -- is refused here, where the
     // grid is declared, rather than discovered as a failed load.
-    createRemoteStore() {
+    createStore() {
       const store = this.options.store;
       if (store === null || store === undefined) {
         return null;
       }
 
-      if (store?.type !== "remote") {
-        throw new Error(`Unknown store type "${store?.type}". Expected "remote".`);
+      const kinds = {
+        remote: { module: "RemoteStore", script: "pivot-remote-store.js", name: "a remote store" },
+        xmla: { module: "XmlaStore", script: "pivot-xmla-store.js", name: "an XMLA store" }
+      };
+      const kind = kinds[store?.type];
+      if (!kind) {
+        throw new Error(`Unknown store type "${store?.type}". Expected "remote" or "xmla".`);
       }
 
-      if (!PivotForge.RemoteStore || !PivotForge.ResultAssembler) {
-        throw new Error("A remote store requires pivot-result-assembler.js and pivot-remote-store.js to be loaded.");
+      const module = PivotForge[kind.module];
+      if (!module || !PivotForge.ResultAssembler) {
+        throw new Error(`${kind.name[0].toUpperCase()}${kind.name.slice(1)} requires pivot-result-assembler.js and ${kind.script} to be loaded.`);
       }
 
       if (this.options.largeData) {
-        throw new Error("largeData pages a result the PivotForge endpoints keep; a remote store builds the whole result in the browser.");
+        throw new Error(`largeData pages a result the PivotForge endpoints keep; ${kind.name} builds the whole result in the browser.`);
       }
 
-      PivotForge.RemoteStore.validateRequest({
+      module.validateRequest({
         topN: PivotForge.PivotRequestBuilder.normalizeRankings(this.options.topN),
         valueFilters: this.valueFilters
       });
 
-      return PivotForge.RemoteStore.create(store, {
+      this.storeModule = module;
+      this.storeType = store.type;
+      return module.create(store, {
         fetchImpl: this.options.fetchImpl,
         // Looked up when the first load runs, like an event handler, so the
         // function may be defined further down the page.
@@ -709,16 +725,22 @@
       return this.options.rendererOptions?.culture ?? this.locale?.table?.culture ?? null;
     }
 
-    // What a designer may offer: a remote grid has no formula engine and only
-    // the summaries the load protocol carries.
+    // What a designer may offer: a store has no formula engine; a remote one
+    // has only the summaries the load protocol carries, and a cube sums its
+    // measures itself, so an XMLA grid offers no choice of summary at all.
     designerCapabilities() {
-      return this.remoteStore
-        ? { allowCalculatedFields: false, aggregations: Object.keys(PivotForge.RemoteStore.SUMMARY_TYPES) }
-        : { allowCalculatedFields: this.options.allowCalculatedFields !== false };
+      if (!this.store) {
+        return { allowCalculatedFields: this.options.allowCalculatedFields !== false };
+      }
+
+      return {
+        allowCalculatedFields: false,
+        aggregations: this.storeType === "remote" ? Object.keys(PivotForge.RemoteStore.SUMMARY_TYPES) : []
+      };
     }
 
     get supportsValueFilters() {
-      return !this.remoteStore;
+      return !this.store;
     }
 
     // Asks once. A failed request is reported and leaves the declared fields:
@@ -727,8 +749,8 @@
       this.fieldsToDiscover = false;
       let payload;
       try {
-        payload = this.remoteStore
-          ? await this.remoteStore.fields()
+        payload = this.store
+          ? await this.store.fields({ culture: this.remoteCulture() })
           : await this.post("/fields", {});
       } catch (error) {
         if (!this.disposed) {
@@ -1783,8 +1805,8 @@
         throw new Error("Cannot filter because allowFiltering is disabled.");
       }
 
-      if (filter && this.remoteStore) {
-        PivotForge.RemoteStore.validateRequest({ valueFilters: [filter] });
+      if (filter && this.store) {
+        this.storeModule.validateRequest({ valueFilters: [filter] });
       }
 
       const others = this.valueFilters.filter(entry => entry.field !== field);
@@ -1879,8 +1901,8 @@
       try {
         const result = this.options.largeData
           ? await this.startLargeSession(controller.signal)
-          : this.remoteStore
-            ? await this.remoteStore.pivot(this.request, { culture: this.remoteCulture(), signal: controller.signal })
+          : this.store
+            ? await this.store.pivot(this.request, { culture: this.remoteCulture(), signal: controller.signal })
             : await this.post("/pivot", this.request, controller.signal);
         if (token !== this.requestToken || this.disposed) {
           return;
@@ -2524,8 +2546,8 @@
         throw new Error("Cannot drill down because allowDrillDown is disabled.");
       }
 
-      if (this.remoteStore) {
-        return await this.remoteStore.drillDown(
+      if (this.store) {
+        return await this.store.drillDown(
           { request: this.buildRequest(), rowPath, columnPath, valueKey },
           { culture: this.remoteCulture() });
       }
@@ -2555,8 +2577,8 @@
       // filter it applied would match nothing.
       const level = this.fields.find(entry => entry.key === field) ?? null;
 
-      if (this.remoteStore) {
-        return await this.remoteStore.fieldValues({
+      if (this.store) {
+        return await this.store.fieldValues({
           field: level?.dataField ?? field,
           interval: level?.groupInterval ?? null,
           binSize: level?.groupSize ?? null,

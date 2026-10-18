@@ -376,13 +376,25 @@
     return entry ? entry[1] : null;
   }
 
-  function axisOrder(levels, sorts, kinds, dataTypes, labels, arrival) {
+  // A rank map orders a level's labels the way the source keeps its members
+  // (an OLAP cube's member order) instead of by what the labels say.
+  function rankComparer(ranks) {
+    if (!ranks) {
+      return null;
+    }
+
+    const rankOf = label => ranks.get(label) ?? Number.MAX_SAFE_INTEGER;
+    return (left, right) => rankOf(left) - rankOf(right);
+  }
+
+  function axisOrder(levels, sorts, kinds, dataTypes, labels, arrival, ranks = []) {
     const neutral = [];
     const byLabel = [];
+    const ranked = levels.map((_, index) => rankComparer(ranks[index] ?? null));
 
     levels.forEach((level, index) => {
       const sort = sorts[index] ?? null;
-      const value = valueComparer(level, kinds[index] ?? null, dataTypes, labels);
+      const value = ranked[index] ?? valueComparer(level, kinds[index] ?? null, dataTypes, labels);
       neutral[index] = value;
       byLabel[index] = sort?.sortBy === "DisplayText" ? labels.ignoreCase
         : sort?.sortBy === "None" ? null
@@ -395,6 +407,7 @@
       direction: level => sorts[level]?.direction ?? null,
       labels: labelsAt,
       neutral: level => (level < neutral.length ? neutral[level] : labels.ignoreCase),
+      ranked: level => ranked[level] ?? null,
       compare(left, right, level) {
         const comparer = labelsAt(level);
         return comparer
@@ -404,7 +417,7 @@
     };
   }
 
-  function rowAxisOrder(levels, sorts, kinds, dataTypes, labels, arrivedHeaders) {
+  function rowAxisOrder(levels, sorts, kinds, dataTypes, labels, arrivedHeaders, ranks) {
     let firstSeen = null;
     return axisOrder(levels, sorts, kinds, dataTypes, labels, (path, level) => {
       if (!firstSeen) {
@@ -420,10 +433,10 @@
       }
 
       return firstSeen.get(keyOf(path.slice(0, level + 1))) ?? Number.MAX_SAFE_INTEGER;
-    });
+    }, ranks);
   }
 
-  function columnAxisOrder(levels, sorts, kinds, dataTypes, labels, levelValues) {
+  function columnAxisOrder(levels, sorts, kinds, dataTypes, labels, levelValues, levelRanks) {
     const ranks = levelValues.map(values => {
       const rank = new Map();
       let blank = Number.MAX_SAFE_INTEGER;
@@ -444,7 +457,7 @@
       return value !== null && value !== undefined
         ? ranks[level].rank.get(value) ?? Number.MAX_SAFE_INTEGER
         : ranks[level].blank;
-    });
+    }, levelRanks);
   }
 
   // A stable sort by comparer, LINQ's OrderBy.
@@ -480,9 +493,9 @@
       }
 
       // An undeclared level keeps its arrival order, unless its labels are an
-      // interval's, whose order the engine knows.
-      const intervalComparer = labels.intervalOrder(levels[level] ? levelInterval(levels[level]) : null);
-      return intervalComparer ? orderBy(values, intervalComparer) : values;
+      // interval's, whose order the engine knows, or the source ranked them.
+      const known = labels.intervalOrder(levels[level] ? levelInterval(levels[level]) : null) ?? order.ranked(level);
+      return known ? orderBy(values, known) : values;
     });
 
     const headers = [];
@@ -1664,15 +1677,17 @@
   //   subtotals: Map pathKey -> { rowHeader, cells: Map column -> values, totals },
   //   columnSubtotals: Map pathKey -> { columnHeader, cells: Map row -> values,
   //     totals, rowGroups: Map rowPathKey -> values },
-  //   grandTotals, sourceRowCount.
+  //   grandTotals, sourceRowCount,
+  //   rowRanks / columnRanks (optional): per level, a Map label -> rank giving
+  //     the source's own member order.
   function assemble(scan, request, { culture = null } = {}) {
     const labels = createLabels(culture);
     const definitions = request.values;
     const dataTypes = request.dataTypes ?? {};
     const rowOrder = rowAxisOrder(request.rows, resolveLevelSorts(request.rows, request.fieldSorts),
-      scan.rowKinds, dataTypes, labels, scan.rowHeaders);
+      scan.rowKinds, dataTypes, labels, scan.rowHeaders, scan.rowRanks ?? []);
     const columnOrder = columnAxisOrder(request.columns, resolveLevelSorts(request.columns, request.fieldSorts),
-      scan.columnKinds, dataTypes, labels, scan.columnLevelValues);
+      scan.columnKinds, dataTypes, labels, scan.columnLevelValues, scan.columnRanks ?? []);
     const columnHeaders = createColumnHeaders(scan.columnHeaders, scan.columnLevelValues, request.columns,
       columnOrder, definitions.some(isVariation), labels);
     const columnLookup = new Map(columnHeaders.map((header, index) => [keyOf(header), index]));

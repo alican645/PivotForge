@@ -104,7 +104,7 @@ test("what only the PivotForge endpoints can do is refused when the grid is decl
   assert.throws(() => createWidget({ topN: [{ field: "Region", count: 1 }] }), /cannot rank groups/);
   assert.throws(() => createWidget({ fields: [fields[0], { dataField: "Amount", area: "data", aggregation: "median" }] }),
     /summarized by "median"/);
-  assert.throws(() => createWidget({ store: { type: "xmla" } }), /Unknown store type "xmla"/);
+  assert.throws(() => createWidget({ store: { type: "olap" } }), /Unknown store type "olap"\. Expected "remote" or "xmla"/);
 });
 
 test("value filters are not offered, and one set from code is refused", async () => {

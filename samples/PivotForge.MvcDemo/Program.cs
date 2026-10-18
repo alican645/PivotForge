@@ -5,6 +5,7 @@ using DevExtreme.AspNet.Data.Helpers;
 using PivotForge.AspNetCore.DependencyInjection;
 using PivotForge.AspNetCore.Endpoints;
 using PivotForge.MvcDemo.Models;
+using PivotForge.MvcDemo.Xmla;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -103,6 +104,11 @@ app.MapGet("/api/sales/load", (HttpRequest request, int? count) =>
     });
     return Results.Json(DataSourceLoader.Load(records, loadOptions));
 });
+
+// An OLAP endpoint for grids declared with xmla-url: a small msmdpump.dll
+// stand-in answering the MDX the XmlaStore writes over the same records, as a
+// cube PivotForgeDemo/Sales. 100 records unless asked, as the provider gives.
+app.MapDemoXmla("/api/xmla");
 
 
 app.Run();

@@ -1852,7 +1852,8 @@
         settings.body.appendChild(formula);
       }
 
-      if (area === "data" && !this.state.isCalculated?.(name)) {
+      // A cube sums its measures itself, so an XMLA grid offers no choice.
+      if (area === "data" && !this.state.isCalculated?.(name) && this.aggregations.length > 0) {
         // --- Aggregation --------------------------------------------------
         const aggregation = this.settingsSection(this.labels.aggregation);
         this.settingsChoices(

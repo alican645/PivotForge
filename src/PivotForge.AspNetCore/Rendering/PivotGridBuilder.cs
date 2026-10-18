@@ -648,6 +648,36 @@ public sealed class PivotGridBuilder : IHtmlContent
         });
     }
 
+    /// <summary>Reads the grid from an OLAP cube over XMLA instead of the PivotForge endpoints, DevExtreme's <c>XmlaStore</c>.</summary>
+    /// <remarks>
+    /// The browser posts SOAP <c>Discover</c> and <c>Execute</c> requests to <paramref name="url"/> --
+    /// SQL Server Analysis Services' <c>msmdpump.dll</c>, or any XMLA provider -- and builds the result
+    /// from the cells of one MDX query, so totals are the cube's own and display modes, running totals
+    /// and ordering by a summary run in the browser. Fields name levels, hierarchies and measures by
+    /// their unique names, such as <c>[Date].[Calendar].[Year]</c> and <c>[Measures].[Sales Amount]</c>.
+    /// Reference <c>js/pivot-result-assembler.js</c> and <c>js/pivot-xmla-store.js</c> on the page.
+    /// Refused when the grid starts: calculated fields, a <c>groupInterval</c>, <c>selector</c>,
+    /// <c>sortingMethod</c>, top N, value filters and <c>largeData</c>.
+    /// </remarks>
+    /// <param name="url">The XMLA endpoint.</param>
+    /// <param name="catalog">The database (catalog) the cube is in.</param>
+    /// <param name="cube">The cube's name.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">Any argument is null or blank.</exception>
+    public PivotGridBuilder XmlaStore(string url, string catalog, string cube)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        ArgumentException.ThrowIfNullOrWhiteSpace(catalog);
+        ArgumentException.ThrowIfNullOrWhiteSpace(cube);
+        return Set("store", new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["type"] = "xmla",
+            ["url"] = url,
+            ["catalog"] = catalog,
+            ["cube"] = cube
+        });
+    }
+
     /// <summary>Loads the grid through a page function speaking the <c>DataSourceLoader.Load</c> protocol.</summary>
     /// <remarks>
     /// The function receives the load options -- <c>group</c>, <c>groupSummary</c>,

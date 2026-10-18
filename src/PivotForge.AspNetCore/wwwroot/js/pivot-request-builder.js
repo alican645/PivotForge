@@ -305,6 +305,12 @@
   // spaces, each started with a capital. "netAmount" reads "Net Amount".
   // An acronym is left as written: "orderID" reads "Order ID".
   function titleize(text) {
+    // An OLAP name, [Dimension].[Hierarchy].[Level], reads as its last part.
+    const bracketed = /\[([^\]]+)\]$/.exec(String(text ?? ""));
+    if (bracketed) {
+      return bracketed[1];
+    }
+
     return String(text ?? "")
       .replace(/([\p{Ll}\d])(\p{Lu})/gu, "$1 $2")
       .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2")

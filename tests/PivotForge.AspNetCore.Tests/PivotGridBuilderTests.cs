@@ -371,4 +371,24 @@ public class PivotGridBuilderTests
         Assert.Throws<ArgumentException>(() => SalesGrid().RemoteStore(" "));
         Assert.Throws<ArgumentException>(() => SalesGrid().RemoteStoreLoad(""));
     }
+
+    [Fact]
+    public void AnXmlaStoreIsWrittenWithItsEndpointCatalogAndCube()
+    {
+        var store = ConfigOf(SalesGrid().XmlaStore("/olap/msmdpump.dll", "Adventure Works DW", "Adventure Works"))
+            .GetProperty("store");
+
+        Assert.Equal("xmla", store.GetProperty("type").GetString());
+        Assert.Equal("/olap/msmdpump.dll", store.GetProperty("url").GetString());
+        Assert.Equal("Adventure Works DW", store.GetProperty("catalog").GetString());
+        Assert.Equal("Adventure Works", store.GetProperty("cube").GetString());
+    }
+
+    [Fact]
+    public void AnXmlaStoreMissingAPartIsRefused()
+    {
+        Assert.Throws<ArgumentException>(() => SalesGrid().XmlaStore(" ", "Catalog", "Cube"));
+        Assert.Throws<ArgumentException>(() => SalesGrid().XmlaStore("/olap", "", "Cube"));
+        Assert.Throws<ArgumentException>(() => SalesGrid().XmlaStore("/olap", "Catalog", " "));
+    }
 }
