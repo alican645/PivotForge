@@ -80,6 +80,12 @@
     moveDown: "Move down",
     removeField: "Remove field",
     close: "Close",
+    runningTotal: "Running total",
+    runningTotalLabels: {
+      none: "None",
+      row: "Along rows",
+      column: "Down columns"
+    },
     showAsLabels: {
       normal: "Normal",
       percentOfRowTotal: "% of row total",
@@ -87,7 +93,9 @@
       percentOfGrandTotal: "% of grand total",
       differenceFromPrevious: "Difference from previous",
       percentDifferenceFromPrevious: "% difference from previous",
-      runningTotal: "Running total"
+      runningTotal: "Running total",
+      percentOfParentRowTotal: "% of parent row total",
+      percentOfParentColumnTotal: "% of parent column total"
     },
     formatGrouping: "Thousands separator",
     formatCompact: "Short numbers (1.2M)",
@@ -134,6 +142,8 @@
       emptyReference: "[] names no field.",
       number: "'{0}' is not a number.",
       argument: "{0}() takes a field in brackets, such as {0}([Amount]).",
+      sliceField: "{0}() takes a field in brackets after the formula, such as {0}([Amount], [Year], -1).",
+      sliceOffset: "{0}() moves a whole number of members, such as {0}([Amount], [Year], -1).",
       expected: "'{0}' is missing.",
       unknownField: "There is no field called [{0}]."
     },
@@ -178,7 +188,9 @@
     "percentOfGrandTotal",
     "differenceFromPrevious",
     "percentDifferenceFromPrevious",
-    "runningTotal"
+    "runningTotal",
+    "percentOfParentRowTotal",
+    "percentOfParentColumnTotal"
   ];
   const FORMAT_TYPES = ["number", "currency", "percent"];
   const DECIMAL_CHOICES = [0, 1, 2, 3, 4, 5, 6];
@@ -1658,6 +1670,25 @@
           picked => this.apply(() => this.state.setShowAs(name, picked))
         ).classList.add("is-stacked");
         settings.body.appendChild(showAs);
+
+        // --- Running total -------------------------------------------------
+        // Applied after the display mode, so "% of parent row total" down the
+        // columns is a cumulative share.
+        if (typeof this.state.setRunningTotal === "function") {
+          const running = this.settingsSection(this.labels.runningTotal);
+          this.settingsChoices(
+            running,
+            "running-total",
+            [
+              { value: "none", label: this.labels.runningTotalLabels.none },
+              { value: "row", label: this.labels.runningTotalLabels.row },
+              { value: "column", label: this.labels.runningTotalLabels.column }
+            ],
+            value?.runningTotal ?? "none",
+            picked => this.apply(() => this.state.setRunningTotal(name, picked === "none" ? null : picked))
+          );
+          settings.body.appendChild(running);
+        }
 
         // --- Formatting ---------------------------------------------------
         const formatting = this.settingsSection(this.labels.formatting);

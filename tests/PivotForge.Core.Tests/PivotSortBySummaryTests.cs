@@ -59,9 +59,9 @@ public sealed class PivotSortBySummaryTests
             FieldSorts = [new PivotFieldSort("Category", PivotSortDirection.Descending, "Amount_sum", ["2025"])]
         });
 
-        // Groups without a 2025 value have no rank and fall back to their labels, last.
+        // Missing 2025 values sort last descending, then by descending label.
         Assert.Equal(
-            ["East/Alpha", "East/Beta", "East/Gamma", "West/Beta", "West/Alpha", "West/Delta"],
+            ["East/Alpha", "East/Beta", "East/Gamma", "West/Beta", "West/Delta", "West/Alpha"],
             Paths(result.RowHeaders));
     }
 
@@ -111,8 +111,8 @@ public sealed class PivotSortBySummaryTests
             FieldSorts = [new PivotFieldSort("Category", PivotSortDirection.Ascending, "Amount_sum", ["East"])]
         });
 
-        // East holds no Delta, so Delta has no rank and goes last even ascending.
-        Assert.Equal(["Gamma", "Beta", "Alpha", "Delta"], Paths(result.ColumnHeaders));
+        // East holds no Delta; the missing summary sorts first ascending.
+        Assert.Equal(["Delta", "Gamma", "Beta", "Alpha"], Paths(result.ColumnHeaders));
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class PivotSortBySummaryTests
     }
 
     [Fact]
-    public void APathMatchingNothingLeavesAscendingLabelOrder()
+    public void APathMatchingNothingLeavesTheRequestedLabelOrder()
     {
         var result = Engine.Execute(Sales, new PivotRequest
         {
@@ -193,8 +193,8 @@ public sealed class PivotSortBySummaryTests
             FieldSorts = [new PivotFieldSort("Category", PivotSortDirection.Descending, "Amount_sum", ["1999"])]
         });
 
-        // No group has a value, and equal values break on the label, ascending.
-        Assert.Equal(["Alpha", "Beta", "Delta", "Gamma"], Paths(result.RowHeaders));
+        // No group has a value; equal values use the requested descending label order.
+        Assert.Equal(["Gamma", "Delta", "Beta", "Alpha"], Paths(result.RowHeaders));
     }
 
     [Fact]

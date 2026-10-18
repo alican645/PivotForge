@@ -14,8 +14,61 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Breaking
+
+- Observed all-null sums now return zero, matching DevExtreme 26.1.3; an entirely
+  empty source still has no sum. Zero sums remain visible under empty-cell hiding
+  and participate in formulas, value filters and Top-N. Use Average/Min/Max when
+  an all-null group must remain empty. Null summaries sort first ascending and
+  last descending; equal summaries use the requested direction for label ties.
+  (Core)
+
+### Compatibility
+
+- Added an offline corpus generated from real DevExtreme 26.1.3 / Chromium
+  151.0.7922.34 runs: 275 passing calculation/sorting scenarios, including NaN
+  summary ordering on both axes up to 1,024 groups.
+  See `tests/compatibility/README.md` for provenance, scope and reproduction.
+- Empty averages retain their NaN distinction internally for summary sorting;
+  affected sibling groups use reference-compatible PowerSort traversal. Public
+  numeric results remain nullable decimal and no runtime dependency is added.
+- Variations now calculate in neutral ascending column order before display
+  sorting, including sibling column subtotals. Sparse dictionary records treat
+  an omitted known field as empty while unknown schema fields still fail. (Core)
+
 ### Added
 
+- Formulas that read other cells, DevExtreme's cell API: `Prev(x)` / `Next(x)`
+  (previous / next column), `PrevRow(x)` / `NextRow(x)`, `ParentRow(x)` /
+  `ParentColumn(x)`, `RowTotal(x)` / `ColumnTotal(x)` / `GrandTotal(x)` and
+  `Slice(x, [Field], n)` (`Slice([Amount], [Year], -1)` is last year), each
+  taking any formula: `([Amount] - Prev([Amount])) / Prev([Amount])` is the
+  growth on the previous period. Rows run in their labels' order, columns as
+  drawn (skipping columns no record fell into); a missing cell reads as
+  empty; `AllowCrossGroupCalculation = false` keeps neighbours inside the
+  parent group; display modes apply to the result. The browser's parser and
+  the designer's formula check accept the same grammar. (Core, AspNetCore)
+- Running totals in either direction, DevExtreme's `runningTotal`:
+  `PivotValueDefinition.RunningTotal` (`PivotRunningTotal.Row` along each row,
+  `Column` down each column) / `running-total="Row|Column"` /
+  `RunningTotal(PivotRunningTotal)` / `runningTotal: "row" | "column"`, and a
+  **Running total** section in the designer's value settings ("Kümülatif
+  toplam": Yok / Satır boyunca / Sütun boyunca). It runs after the display mode
+  and after sorting, in the order the grid is drawn, so a percent of the
+  parent accumulates into a cumulative share; a subtotal accumulates among
+  its own level, the totals it runs towards stay as they are, and
+  `AllowCrossGroupCalculation = false` starts it again in each parent group.
+  `PivotShowAs.RunningTotal` stays as the along-the-row case. (Core,
+  AspNetCore)
+- Percent of the parent group: `PivotShowAs.PercentOfParentRowTotal` /
+  `PercentOfParentColumnTotal` (`show-as`, `showAs: "percentOfParentRowTotal"`,
+  "% of parent row / column total", "Üst satır / sütun toplamının %'si"),
+  Excel's "% of Parent Row / Column Total" and DevExtreme's
+  `percentOfColumnTotal` / `percentOfRowTotal`: each value divided by its
+  parent group on one axis -- a city's share of its region in every column --
+  with a top-level group's parent being that axis' grand total. Subtotal rows
+  and columns, their crossings and the totals follow the same rule.
+  (Core, AspNetCore)
 - Right to left: `rtl-enabled="true|false"` / `RtlEnabled(bool)` /
   `rtlEnabled`, DevExtreme's `rtlEnabled`. Undeclared, the grid follows the
   page's own direction -- the stylesheet now uses logical properties
@@ -62,6 +115,10 @@ change will require a new major version.
 
 ### Fixed
 
+- A percent display mode on a field with no declared format was drawn as a
+  bare ratio (`0.18`). It is drawn as a percentage (`18%`) and exported with
+  a `0.00%` number format, as DevExtreme gives a percent display mode a
+  percent format. (AspNetCore)
 - The frozen headers were not frozen: a general `th` rule outranked the
   rules making the row headers and the head rows sticky, so the row headers
   scrolled away sideways and the head scrolled up out of view. They stick

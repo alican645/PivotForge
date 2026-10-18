@@ -47,21 +47,21 @@ public sealed class PivotValueFilterTests
     }
 
     [Fact]
-    public void AGroupWithNoValueMeetsNoCondition()
+    public void AnAllNullSumIsZeroAndMeetsANumericCondition()
     {
         var result = Run([new PivotValueFilter("Region", PivotValueFilterOperator.LessThan, 1000m)]);
 
-        Assert.DoesNotContain("Karadeniz", Regions(result));
-        Assert.Equal(3, Regions(result).Length);
+        Assert.Contains("Karadeniz", Regions(result));
+        Assert.Equal(4, Regions(result).Length);
     }
 
     [Theory]
     [InlineData(PivotValueFilterOperator.GreaterThanOrEqual, 190, null, new[] { "Ege", "Marmara" })]
-    [InlineData(PivotValueFilterOperator.LessThanOrEqual, 190, null, new[] { "Akdeniz", "Marmara" })]
+    [InlineData(PivotValueFilterOperator.LessThanOrEqual, 190, null, new[] { "Akdeniz", "Karadeniz", "Marmara" })]
     [InlineData(PivotValueFilterOperator.Equal, 30, null, new[] { "Akdeniz" })]
-    [InlineData(PivotValueFilterOperator.NotEqual, 30, null, new[] { "Ege", "Marmara" })]
+    [InlineData(PivotValueFilterOperator.NotEqual, 30, null, new[] { "Ege", "Karadeniz", "Marmara" })]
     [InlineData(PivotValueFilterOperator.Between, 200, 30, new[] { "Akdeniz", "Marmara" })]
-    [InlineData(PivotValueFilterOperator.NotBetween, 30, 200, new[] { "Ege" })]
+    [InlineData(PivotValueFilterOperator.NotBetween, 30, 200, new[] { "Ege", "Karadeniz" })]
     public void EachOperatorKeepsWhatItSays(PivotValueFilterOperator op, int value, int? value2, string[] kept)
     {
         var result = Run([new PivotValueFilter("Region", op, (decimal)value, (decimal?)value2)]);

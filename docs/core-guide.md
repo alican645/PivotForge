@@ -73,7 +73,7 @@ var request = new PivotRequest
 };
 ```
 
-Available aggregations are `Sum`, `Count`, `Average`, `Min`, `Max`, `CountDistinct`, `Median`, `Variance`, `StandardDeviation`, `VariancePopulation`, `StandardDeviationPopulation`, `First`, and `Last`. `CountDistinct` counts distinct non-empty values of any type, as `Count` does; the rest need numbers. `Variance` and `StandardDeviation` are the sample statistics (divided by n − 1, like Excel's `VAR.S` and `STDEV.S`) and stay empty below two values; `VariancePopulation` and `StandardDeviationPopulation` divide by n, like `VAR.P` and `STDEV.P`, and are 0 for a single value. `First` and `Last` are the first and last non-empty values in the order the source yields its records. Every subtotal and grand total is computed from the records behind it, so a median or a distinct count is exact at every level rather than a combination of the cells above it. A value key is generated from the field and aggregation, such as `Amount_sum`.
+Available aggregations are `Sum`, `Count`, `Average`, `Min`, `Max`, `CountDistinct`, `Median`, `Variance`, `StandardDeviation`, `VariancePopulation`, `StandardDeviationPopulation`, `First`, and `Last`. `CountDistinct` counts distinct non-empty values of any type, as `Count` does; the rest need numbers. `Variance` and `StandardDeviation` are the sample statistics (divided by n − 1, like Excel's `VAR.S` and `STDEV.S`) and stay empty below two values; `VariancePopulation` and `StandardDeviationPopulation` divide by n, like `VAR.P` and `STDEV.P`, and are 0 for a single value. `First` and `Last` are the first and last non-empty values in the order the source yields its records. Every subtotal and grand total is computed from the records behind it, so a median or a distinct count is exact at every level rather than a combination of the cells above it. A `Sum` over records whose values are all empty is 0, as in DevExtreme; a cell with no records stays empty. A value key is generated from the field and aggregation, such as `Amount_sum`.
 
 Filters are applied before grouping. Multiple filters use AND semantics; the values inside one filter use OR semantics.
 
@@ -132,8 +132,26 @@ Supported modes:
 - `DifferenceFromPrevious`
 - `PercentDifferenceFromPrevious`
 - `RunningTotal`
+- `PercentOfParentRowTotal`
+- `PercentOfParentColumnTotal`
 
 Percentage modes return ratios. For example, `0.25m` represents 25 percent; formatting belongs to the consuming UI.
+
+`PercentOfRowTotal` and `PercentOfColumnTotal` divide by the grand total of the row or the column (DevExtreme's `percentOfRowGrandTotal` / `percentOfColumnGrandTotal`). The parent modes divide by the group one level up instead (Excel's "% of Parent Row / Column Total", DevExtreme's `percentOfColumnTotal` / `percentOfRowTotal`): with Region and City on the rows, `PercentOfParentRowTotal` gives each city's share of its region in every column, and each region's share of the column's grand total. Every part of the result follows the same rule -- a subtotal row, a column subtotal, where the two cross, and the totals; the root of the chosen axis (the bottom total row for the row parent, the right-hand total for the column parent) reads 100%.
+
+### Running totals in either direction
+
+`RunningTotal` on the value (DevExtreme's `runningTotal`) accumulates after the display mode and after sorting, in the order the result is drawn:
+
+```csharp
+PivotValueDefinition.Sum("Amount").As(PivotShowAs.PercentOfParentRowTotal) with
+{
+    RunningTotal = PivotRunningTotal.Column,      // down each column
+    AllowCrossGroupCalculation = false            // starting again in each region
+}
+```
+
+That is a cumulative share: each region's last city reaches 100%. `PivotRunningTotal.Row` runs along each row instead. A subtotal row (or column) accumulates among the subtotals of its own level; the totals it runs towards -- the bottom row for `Column`, the right-hand total for `Row` -- and the grand total are left as they are. An empty position carries the total so far.
 
 `RunningTotal`, `DifferenceFromPrevious` and `PercentDifferenceFromPrevious` walk each row from the first column to the last. With more than one column level, `AllowCrossGroupCalculation = false` keeps them inside each outer column group instead — the running total starts again every year, and a year's first quarter has no previous column. The group is the last column level's parent, so with Year, Quarter and Month it starts again every quarter:
 
@@ -168,6 +186,25 @@ The grammar:
 - Numbers are written with a dot as the decimal separator, whatever the culture.
 - Function and field names are matched without regard to case.
 - An empty summary or a division by zero leaves the cell empty.
+
+### Reading other cells
+
+A formula can read another cell than its own -- DevExtreme's cell API (`prev`, `next`, `parent`, `grandTotal`, `slice`) written as functions that take a formula:
+
+| Function | Reads its formula at |
+|---|---|
+| `Prev(x)` / `Next(x)` | the previous / next column of the same level, in the same row |
+| `PrevRow(x)` / `NextRow(x)` | the previous / next row of the same level, in the same column |
+| `ParentRow(x)` / `ParentColumn(x)` | the parent group on that axis (a top-level one's parent is the axis' total) |
+| `RowTotal(x)` / `ColumnTotal(x)` / `GrandTotal(x)` | the right-hand total of the row / the bottom total of the column / the grand total |
+| `Slice(x, [Field], n)` | the cell whose `[Field]` level is `n` members along -- `Slice([Amount], [Year], -1)` is last year |
+
+```csharp
+PivotValueDefinition.Calculated("Growth", "([Amount] - Prev([Amount])) / Prev([Amount])")
+PivotValueDefinition.Calculated("VersusLastYear", "[Amount] / Slice([Amount], [Year], -1) - 1")
+```
+
+A cell that does not exist -- the first column's previous one, a year with no data -- reads as empty. Rows run in their labels' order (the neutral order, so a user's sort does not change the numbers) and columns in the order they are drawn; a column no record fell into is skipped. `AllowCrossGroupCalculation = false` keeps `Prev`, `Next`, `PrevRow` and `NextRow` inside the parent group. Display modes apply to what the formula comes to. A `Slice` level that is on neither axis reads as empty; the level is one of the fields `PivotExpression.Fields` lists.
 
 `PivotExpression.Parse(text)` reads a formula without running it and lists the source fields it names; a formula that cannot be read throws `PivotExpressionException`, which carries the character `Position` the problem starts at.
 

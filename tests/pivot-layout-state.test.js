@@ -1408,3 +1408,15 @@ test("a field's data type moves with it", () => {
     PivotForge.PivotRequestBuilder.buildRequest(state.toFields()).dataTypes,
     { Code: "Number" });
 });
+
+test("a value's running total is set, cleared and carried into the fields", () => {
+  const state = create();
+
+  state.setRunningTotal("Amount", "column");
+  assert.equal(state.toFields().find(field => field.dataField === "Amount").runningTotal, "column");
+  assert.equal(new PivotForge.PivotLayoutState(catalog, state.getState()).getState().values[0].runningTotal, "column");
+
+  state.setRunningTotal("Amount", null);
+  assert.equal("runningTotal" in state.toFields().find(field => field.dataField === "Amount"), false);
+  assert.throws(() => state.setRunningTotal("Amount", "diagonal"), /Unknown runningTotal/);
+});

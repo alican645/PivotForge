@@ -124,6 +124,16 @@ internal sealed class MeasurePlan
             result[key] = expression is null
                 ? summaries[input]
                 : PivotExpression.Evaluate(expression.Root, inputs!.Select(index => summaries[index]).ToArray());
+
+            // A formula that reads other cells is worked out again once they all exist, from
+            // the summaries kept here; PivotRelativeFormulas takes these keys away afterwards.
+            if (expression is { IsRelative: true })
+            {
+                for (var index = 0; index < inputs!.Length; index++)
+                {
+                    result[PivotRelativeFormulas.HiddenKey(key, index)] = summaries[inputs[index]];
+                }
+            }
         }
 
         return result;

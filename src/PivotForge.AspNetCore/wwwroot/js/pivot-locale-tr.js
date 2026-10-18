@@ -117,6 +117,12 @@
       moveDown: "Aşağı taşı",
       removeField: "Alanı kaldır",
       close: "Kapat",
+      runningTotal: "Kümülatif toplam",
+      runningTotalLabels: {
+        none: "Yok",
+        row: "Satır boyunca",
+        column: "Sütun boyunca"
+      },
       showAsLabels: {
         normal: "Normal",
         percentOfRowTotal: "Satır toplamının %'si",
@@ -124,7 +130,9 @@
         percentOfGrandTotal: "Genel toplamın %'si",
         differenceFromPrevious: "Öncekinden fark",
         percentDifferenceFromPrevious: "Öncekinden % fark",
-        runningTotal: "Kümülatif toplam"
+        runningTotal: "Kümülatif toplam",
+        percentOfParentRowTotal: "Üst satır toplamının %'si",
+        percentOfParentColumnTotal: "Üst sütun toplamının %'si"
       },
       formatGrouping: "Binlik ayracı",
       formatCompact: "Kısa sayı (1,2 Mn)",
@@ -169,6 +177,8 @@
         emptyReference: "[] hiçbir alanı adlandırmıyor.",
         number: "'{0}' bir sayı değil.",
         argument: "{0}() köşeli parantezli bir alan alır, örneğin {0}([Tutar]).",
+        sliceField: "{0}() formülden sonra köşeli parantezli bir alan alır, örneğin {0}([Tutar], [Yıl], -1).",
+        sliceOffset: "{0}() tam sayı kadar kaydırır, örneğin {0}([Tutar], [Yıl], -1).",
         expected: "'{0}' eksik.",
         unknownField: "[{0}] adında bir alan yok."
       },

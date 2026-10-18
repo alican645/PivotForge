@@ -19,6 +19,15 @@ public sealed record PivotValueDefinition(string Field, PivotAggregation Aggrega
     /// </remarks>
     public bool AllowCrossGroupCalculation { get; init; } = true;
 
+    /// <summary>Gets the direction this value's running total accumulates in, if any.</summary>
+    /// <remarks>
+    /// DevExtreme's <c>runningTotal</c>. Applied after <see cref="ShowAs"/> and after sorting, so
+    /// <see cref="PivotShowAs.PercentOfParentRowTotal"/> with <see cref="PivotRunningTotal.Column"/>
+    /// is a cumulative share. <see cref="PivotShowAs.RunningTotal"/> is the along-the-row case
+    /// written as a display mode, kept for the requests that already say it that way.
+    /// </remarks>
+    public PivotRunningTotal RunningTotal { get; init; } = PivotRunningTotal.None;
+
     /// <summary>Gets the formula of a calculated value.</summary>
     /// <remarks>
     /// Set exactly when <see cref="Aggregation"/> is <see cref="PivotAggregation.Calculated"/>, and

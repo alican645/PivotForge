@@ -1090,7 +1090,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const format = valueDefinition?.format;
 
     if (!format) {
-      return "#,##0.00";
+      // The sheet's half of the percent default above.
+      return this.isPercentShowAs(valueDefinition?.showAs) ? "0.00%" : "#,##0.00";
     }
 
     const decimals = Number.isInteger(format.decimals) ? Math.max(0, Math.min(6, format.decimals)) : 2;
@@ -3779,6 +3780,15 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       .some(member => format[member] !== undefined);
 
     if (!shapesNumber) {
+      // A share or a percentage change is a ratio: undeclared, it reads as a
+      // percentage, as DevExtreme gives a percent display mode a percent format.
+      if (this.isPercentShowAs(valueDefinition?.showAs)) {
+        return new Intl.NumberFormat(settings.culture ?? undefined, {
+          style: "percent",
+          maximumFractionDigits: 2
+        }).format(value);
+      }
+
       return settings.formatter.format(value);
     }
 
@@ -3851,6 +3861,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     return showAs === "percentOfRowTotal" ||
       showAs === "percentOfColumnTotal" ||
       showAs === "percentOfGrandTotal" ||
+      showAs === "percentOfParentRowTotal" ||
+      showAs === "percentOfParentColumnTotal" ||
       showAs === "percentDifferenceFromPrevious";
   }
 };

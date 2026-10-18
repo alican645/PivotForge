@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <None Include="../compatibility/calculations.json" Link="compatibility/calculations.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1354,3 +1354,18 @@ test("virtual columns draw a window of pages around the view, with absolute posi
   container.scrollLeft = 2000;
   assert.equal(renderer.resolveColumnWindow(plan, 2, settings).before, 7);
 });
+
+test("a percent display mode without a declared format reads as a percentage, on screen and in the sheet", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({}, { culture: "en-US" });
+  const settings = { ...renderer.options };
+
+  for (const showAs of ["percentOfGrandTotal", "percentOfParentRowTotal", "percentOfParentColumnTotal"]) {
+    assert.equal(renderer.formatNumber(0.1825, settings, { showAs }), "18.25%");
+    assert.equal(renderer.getExcelNumberFormat({ showAs }), "0.00%");
+  }
+
+  // A plain value keeps the grid's number, and a declared format still wins.
+  assert.equal(renderer.formatNumber(0.5, settings, { showAs: "normal" }), "0.5");
+  assert.equal(renderer.getExcelNumberFormat({ showAs: "normal" }), "#,##0.00");
+  assert.equal(renderer.formatNumber(0.5, settings, { showAs: "percentOfGrandTotal", format: { type: "number", decimals: 1 } }), "0.5");
+});

@@ -25,7 +25,9 @@ internal sealed class DictionaryRecordReader : IRecordReader
             }
         }
 
-        throw new PivotFieldNotFoundException(field);
+        // Schema validation rejects unknown fields before scanning. A known field
+        // omitted by this particular record is an empty value.
+        return HasField(field) ? null : throw new PivotFieldNotFoundException(field);
     }
 
     private static object? NormalizeValue(object? value)

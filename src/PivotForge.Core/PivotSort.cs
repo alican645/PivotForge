@@ -53,10 +53,10 @@ public sealed record PivotSort(
 /// With a <paramref name="ValueKey"/>, a level orders its groups by that value's summary instead
 /// of their labels (DevExpress <c>sortBySummaryField</c>): an inner level by its subtotal, the
 /// deepest level by its total, both as shown after <see cref="PivotShowAs"/>. This works on the
-/// row and the column axis alike. A group with no value sorts last in either direction; equal
-/// values break on the label, ascending on the row axis and in the level's label order on the
-/// column axis. A key that is not among the request's values leaves the level in
-/// label order.
+/// row and the column axis alike. A group with no value sorts first ascending and last descending; equal
+/// values break on the label in the requested direction. Empty averages preserve the
+/// reference NaN comparison behavior internally. A key that is not among the request's
+/// values leaves the level in label order.
 /// </para>
 /// <para>
 /// <paramref name="SummaryPath"/> picks which summary on the other axis is compared (DevExpress

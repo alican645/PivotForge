@@ -17,7 +17,9 @@
         "percentOfGrandTotal",
         "differenceFromPrevious",
         "percentDifferenceFromPrevious",
-        "runningTotal"
+        "runningTotal",
+        "percentOfParentRowTotal",
+        "percentOfParentColumnTotal"
       ]);
       this.conditionalOperators = new Set(["greaterThan", "greaterThanOrEqual", "lessThan", "lessThanOrEqual", "equal", "between"]);
       this.conditionalColors = new Set(["green", "amber", "red", "blue"]);

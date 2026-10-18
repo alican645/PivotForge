@@ -836,3 +836,42 @@ test("a column typed two ways, an unknown type, or a typed formula is refused", 
     { dataField: "Margin", area: "data", expression: "[Amount] / 2", dataType: "number" }
   ]), /cannot be combined with "expression"/);
 });
+
+test("a value's running total is sent as the engine's direction, and only on a value", () => {
+  const request = PivotForge.PivotRequestBuilder.buildRequest([
+    { dataField: "Region", area: "row" },
+    { dataField: "Amount", area: "data", aggregation: "sum", runningTotal: "column" },
+    { dataField: "Quantity", area: "data", aggregation: "sum" }
+  ]);
+
+  assert.equal(request.values[0].runningTotal, "Column");
+  assert.equal("runningTotal" in request.values[1], false);
+  assert.throws(() => PivotForge.PivotRequestBuilder.buildRequest([
+    { dataField: "Region", area: "row", runningTotal: "row" },
+    { dataField: "Amount", area: "data", aggregation: "sum" }
+  ]), /only valid on a "data" field/);
+  assert.throws(() => PivotForge.PivotRequestBuilder.buildRequest([
+    { dataField: "Amount", area: "data", aggregation: "sum", runningTotal: "diagonal" }
+  ]), /Unknown runningTotal/);
+});
+
+test("the formula parser reads the relative functions the engine does", () => {
+  const parse = PivotForge.PivotRequestBuilder.parseExpression;
+
+  const growth = parse("([Amount] - Prev([Amount])) / prev([Amount])");
+  assert.deepEqual(growth.fields, ["Amount"]);
+
+  const slice = parse("Slice([Amount] - [Cost], [Year], -1)");
+  assert.deepEqual(slice.fields, ["Amount", "Cost"]);
+  assert.deepEqual(slice.sliceFields, ["Year"]);
+
+  for (const [formula, code] of [
+    ["Prev()", "unexpected"],
+    ["Slice([Amount], -1)", "sliceField"],
+    ["Slice([Amount], [Year], x)", "sliceOffset"],
+    ["Slice([Amount], [Year])", "expected"],
+    ["GrandTotal([Amount]", "end"]
+  ]) {
+    assert.throws(() => parse(formula), error => error.code === code, formula);
+  }
+});

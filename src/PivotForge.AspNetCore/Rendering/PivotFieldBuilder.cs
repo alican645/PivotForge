@@ -35,6 +35,7 @@ public sealed class PivotFieldBuilder
     private IReadOnlyList<string?>? _sortBySummaryPath;
     private PivotGroupInterval? _groupInterval;
     private PivotDataType? _dataType;
+    private PivotRunningTotal? _runningTotal;
     private decimal? _groupSize;
     private string? _expression;
 
@@ -441,6 +442,20 @@ public sealed class PivotFieldBuilder
         return this;
     }
 
+    /// <summary>Accumulates this value along each row or down each column, DevExtreme's <c>runningTotal</c>.</summary>
+    /// <remarks>
+    /// Applied after <see cref="ShowAs"/> and after sorting, in the order the grid is drawn, so a share
+    /// accumulates into a cumulative share. A subtotal accumulates among the subtotals of its level;
+    /// the totals it runs towards are left as they are. Valid on <see cref="PivotArea.Data"/> fields.
+    /// </remarks>
+    /// <param name="runningTotal">The direction, or <see cref="PivotRunningTotal.None"/>.</param>
+    /// <returns>The same builder.</returns>
+    public PivotFieldBuilder RunningTotal(PivotRunningTotal runningTotal)
+    {
+        _runningTotal = runningTotal;
+        return this;
+    }
+
     /// <summary>Converts the source column's values to a type when they are read.</summary>
     /// <remarks>
     /// For a source that carries everything as text: <see cref="PivotDataType.Number"/> lets
@@ -597,6 +612,13 @@ public sealed class PivotFieldBuilder
                 "SortBySummaryPath only says which summary the value sort compares.");
         }
 
+        if (_runningTotal is not null and not PivotRunningTotal.None && _area != PivotArea.Data)
+        {
+            throw new InvalidOperationException(
+                $"Field \"{_dataField}\" sets RunningTotal, but its Area is \"{_area}\". " +
+                "RunningTotal is only valid on fields whose Area is Data.");
+        }
+
         // A formula's result is computed, not read, so there is nothing to convert.
         if (_expression is not null && _dataType is not null and not PivotDataType.Auto)
         {
@@ -677,6 +699,11 @@ public sealed class PivotFieldBuilder
         if (_dataType is { } dataType and not PivotDataType.Auto)
         {
             field["dataType"] = ToCamelCase(dataType.ToString());
+        }
+
+        if (_runningTotal is { } runningTotal and not PivotRunningTotal.None)
+        {
+            field["runningTotal"] = ToCamelCase(runningTotal.ToString());
         }
 
         if (_groupSize is { } groupSize)
