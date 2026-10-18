@@ -16,6 +16,18 @@ change will require a new major version.
 
 ### Added
 
+- Running totals in either direction, DevExtreme's `runningTotal`:
+  `PivotValueDefinition.RunningTotal` (`PivotRunningTotal.Row` along each row,
+  `Column` down each column) / `running-total="Row|Column"` /
+  `RunningTotal(PivotRunningTotal)` / `runningTotal: "row" | "column"`, and a
+  **Running total** section in the designer's value settings ("Kümülatif
+  toplam": Yok / Satır boyunca / Sütun boyunca). It runs after the display mode
+  and after sorting, in the order the grid is drawn, so a percent of the
+  parent accumulates into a cumulative share; a subtotal accumulates among
+  its own level, the totals it runs towards stay as they are, and
+  `AllowCrossGroupCalculation = false` starts it again in each parent group.
+  `PivotShowAs.RunningTotal` stays as the along-the-row case. (Core,
+  AspNetCore)
 - Percent of the parent group: `PivotShowAs.PercentOfParentRowTotal` /
   `PercentOfParentColumnTotal` (`show-as`, `showAs: "percentOfParentRowTotal"`,
   "% of parent row / column total", "Üst satır / sütun toplamının %'si"),

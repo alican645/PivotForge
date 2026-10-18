@@ -80,6 +80,12 @@
     moveDown: "Move down",
     removeField: "Remove field",
     close: "Close",
+    runningTotal: "Running total",
+    runningTotalLabels: {
+      none: "None",
+      row: "Along rows",
+      column: "Down columns"
+    },
     showAsLabels: {
       normal: "Normal",
       percentOfRowTotal: "% of row total",
@@ -1662,6 +1668,25 @@
           picked => this.apply(() => this.state.setShowAs(name, picked))
         ).classList.add("is-stacked");
         settings.body.appendChild(showAs);
+
+        // --- Running total -------------------------------------------------
+        // Applied after the display mode, so "% of parent row total" down the
+        // columns is a cumulative share.
+        if (typeof this.state.setRunningTotal === "function") {
+          const running = this.settingsSection(this.labels.runningTotal);
+          this.settingsChoices(
+            running,
+            "running-total",
+            [
+              { value: "none", label: this.labels.runningTotalLabels.none },
+              { value: "row", label: this.labels.runningTotalLabels.row },
+              { value: "column", label: this.labels.runningTotalLabels.column }
+            ],
+            value?.runningTotal ?? "none",
+            picked => this.apply(() => this.state.setRunningTotal(name, picked === "none" ? null : picked))
+          );
+          settings.body.appendChild(running);
+        }
 
         // --- Formatting ---------------------------------------------------
         const formatting = this.settingsSection(this.labels.formatting);

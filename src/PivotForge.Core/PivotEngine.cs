@@ -598,7 +598,8 @@ public sealed class PivotEngine
             culture);
         cancellationToken.ThrowIfCancellationRequested();
 
-        return new PivotResult
+        // Last of all: a running total accumulates in the order the result is drawn.
+        return PivotRunningTotals.Apply(new PivotResult
         {
             RowHeaders = sortedRows.Headers,
             ColumnHeaders = populated.ColumnHeaders,
@@ -615,7 +616,7 @@ public sealed class PivotEngine
                 ColumnHeaderCount = populated.ColumnHeaders.Count,
                 CellCount = sortedRows.Cells.Count
             }
-        };
+        }, request.Values);
     }
 
     // One pass over the source records, accumulating every bucket the result is built

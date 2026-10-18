@@ -63,6 +63,9 @@
   // What a source column's values are converted to as they are read (DevExtreme's
   // dataType). Sent as the engine's enum name.
   const DATA_TYPES = ["string", "number", "date"];
+  // A value's running total, DevExtreme's runningTotal: along each row or down
+  // each column, after the display mode.
+  const RUNNING_TOTALS = ["row", "column"];
 
   const TOP_N_MODES = ["Top", "Bottom"];
   // How a value filter compares a group's summary value. The two ranges read a
@@ -355,6 +358,19 @@
       );
     }
 
+    if (!isData && field.runningTotal !== undefined) {
+      throw new Error(
+        `"runningTotal" is only valid on a "data" field, but was set on "${dataField}" in area "${area}".`
+      );
+    }
+
+    const runningTotal = isData ? field.runningTotal ?? null : null;
+    if (runningTotal !== null && !RUNNING_TOTALS.includes(runningTotal)) {
+      throw new Error(
+        `Unknown runningTotal "${runningTotal}" on field "${dataField}". Expected one of: ${RUNNING_TOTALS.join(", ")}.`
+      );
+    }
+
     const showAs = isData ? field.showAs ?? "normal" : null;
     if (isData && !SHOW_AS.includes(showAs)) {
       throw new Error(
@@ -529,6 +545,7 @@
       caption: field.caption ?? dataField,
       aggregation,
       showAs,
+      runningTotal,
       expression,
       format: field.format ?? null,
       // Default true, so an undeclared field behaves exactly as it did before
@@ -691,6 +708,8 @@
         field: field.dataField,
         aggregation: field.aggregation,
         showAs: field.showAs,
+        // Sent only when declared, so a request written before it existed is unchanged.
+        ...(field.runningTotal ? { runningTotal: field.runningTotal === "row" ? "Row" : "Column" } : {}),
         ...(field.expression !== null ? { expression: field.expression } : {}),
         // Sent only when switched off, so every request written before it existed
         // is unchanged.
@@ -866,7 +885,7 @@
   PivotForge.PivotRequestBuilder = {
     normalizeFields, normalizeFilter, buildRequest, valueKey, restricts, dataTypes,
     normalizeRankings, normalizeValueFilters, comparisonType, parseExpression,
-    AGGREGATIONS, CALCULATED, DATA_TYPES, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
+    AGGREGATIONS, CALCULATED, DATA_TYPES, RUNNING_TOTALS, FORMULA_FUNCTIONS, SHOW_AS, FORMAT_TYPES, NEGATIVE_FORMATS, SORT_ORDERS, FILTER_MODES,
     FILTER_OPERATORS, FILTER_ARGUMENTS, TOP_N_MODES, COMPARISON_OPERATORS, VALUE_FILTER_OPERATORS
   };
 

@@ -41,7 +41,8 @@ public class PivotTagHelperTests
         bool? AllowCrossGroupCalculation = null,
         string? DisplayFolder = null,
         decimal? GroupSize = null,
-        PivotDataType? FieldType = null);
+        PivotDataType? FieldType = null,
+        PivotRunningTotal? RunningTotal = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -143,6 +144,12 @@ public class PivotTagHelperTests
         {
             helper.GroupInterval = groupInterval;
             attributes.Add(new TagHelperAttribute("group-interval", groupInterval.ToString()));
+        }
+
+        if (spec.RunningTotal is { } runningTotal)
+        {
+            helper.RunningTotal = runningTotal;
+            attributes.Add(new TagHelperAttribute("running-total", runningTotal.ToString()));
         }
 
         if (spec.FieldType is { } fieldType)
@@ -1148,6 +1155,20 @@ public class PivotTagHelperTests
         Assert.Equal("date", fields[0].GetProperty("dataType").GetString());
         Assert.False(fields[1].TryGetProperty("dataType", out _));
         Assert.Equal("number", fields[2].GetProperty("dataType").GetString());
+    }
+
+    [Fact]
+    public async Task WritesADeclaredRunningTotalOnAValueAndRefusesItElsewhere()
+    {
+        var config = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Region", PivotArea.Row),
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum, RunningTotal: PivotRunningTotal.Column)));
+
+        Assert.Equal("column", config.GetProperty("fields")[1].GetProperty("runningTotal").GetString());
+        Assert.False(config.GetProperty("fields")[0].TryGetProperty("runningTotal", out _));
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
+            .DataField("Region").Area(PivotArea.Row).RunningTotal(PivotRunningTotal.Row).Build());
     }
 
     [Fact]

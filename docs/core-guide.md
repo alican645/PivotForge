@@ -139,6 +139,20 @@ Percentage modes return ratios. For example, `0.25m` represents 25 percent; form
 
 `PercentOfRowTotal` and `PercentOfColumnTotal` divide by the grand total of the row or the column (DevExtreme's `percentOfRowGrandTotal` / `percentOfColumnGrandTotal`). The parent modes divide by the group one level up instead (Excel's "% of Parent Row / Column Total", DevExtreme's `percentOfColumnTotal` / `percentOfRowTotal`): with Region and City on the rows, `PercentOfParentRowTotal` gives each city's share of its region in every column, and each region's share of the column's grand total. Every part of the result follows the same rule -- a subtotal row, a column subtotal, where the two cross, and the totals; the root of the chosen axis (the bottom total row for the row parent, the right-hand total for the column parent) reads 100%.
 
+### Running totals in either direction
+
+`RunningTotal` on the value (DevExtreme's `runningTotal`) accumulates after the display mode and after sorting, in the order the result is drawn:
+
+```csharp
+PivotValueDefinition.Sum("Amount").As(PivotShowAs.PercentOfParentRowTotal) with
+{
+    RunningTotal = PivotRunningTotal.Column,      // down each column
+    AllowCrossGroupCalculation = false            // starting again in each region
+}
+```
+
+That is a cumulative share: each region's last city reaches 100%. `PivotRunningTotal.Row` runs along each row instead. A subtotal row (or column) accumulates among the subtotals of its own level; the totals it runs towards -- the bottom row for `Column`, the right-hand total for `Row` -- and the grand total are left as they are. An empty position carries the total so far.
+
 `RunningTotal`, `DifferenceFromPrevious` and `PercentDifferenceFromPrevious` walk each row from the first column to the last. With more than one column level, `AllowCrossGroupCalculation = false` keeps them inside each outer column group instead — the running total starts again every year, and a year's first quarter has no previous column. The group is the last column level's parent, so with Year, Quarter and Month it starts again every quarter:
 
 ```csharp

@@ -117,6 +117,12 @@
       moveDown: "Aşağı taşı",
       removeField: "Alanı kaldır",
       close: "Kapat",
+      runningTotal: "Kümülatif toplam",
+      runningTotalLabels: {
+        none: "Yok",
+        row: "Satır boyunca",
+        column: "Sütun boyunca"
+      },
       showAsLabels: {
         normal: "Normal",
         percentOfRowTotal: "Satır toplamının %'si",

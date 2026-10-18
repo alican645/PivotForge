@@ -189,6 +189,11 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("field-type")]
     public PivotDataType FieldType { get; set; }
 
+    /// <summary>Gets or sets the direction this value's running total accumulates in.</summary>
+    /// <remarks>Non-nullable for the same reason as <see cref="GroupInterval"/>.</remarks>
+    [HtmlAttributeName("running-total")]
+    public PivotRunningTotal RunningTotal { get; set; }
+
     /// <summary>Gets or sets the width of each range when <c>group-interval="Range"</c>, such as 100.</summary>
     [HtmlAttributeName("group-size")]
     public decimal? GroupSize { get; set; }
@@ -372,6 +377,11 @@ public sealed class PivotFieldTagHelper : TagHelper
         if (_writtenAttributes.Contains("field-type"))
         {
             builder.DataType(FieldType);
+        }
+
+        if (_writtenAttributes.Contains("running-total"))
+        {
+            builder.RunningTotal(RunningTotal);
         }
 
         if (GroupSize is { } groupSize)

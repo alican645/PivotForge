@@ -128,6 +128,7 @@
           field: field.key,
           aggregation: this.defaultAggregation(field.key),
           showAs: field.showAs ?? "normal",
+          ...(field.runningTotal ? { runningTotal: field.runningTotal } : {}),
           ...(field.format ? { format: checkFormat(field.key, field.format) } : {})
         })),
         filters: inArea("filter").map(field =>
@@ -199,6 +200,10 @@
             field: value.field,
             aggregation: value.aggregation ?? this.defaultAggregation(value.field),
             showAs: value.showAs ?? "normal",
+            // A direction this build does not know is dropped rather than refusing the view.
+            ...(PivotForge.PivotRequestBuilder.RUNNING_TOTALS.includes(value.runningTotal)
+              ? { runningTotal: value.runningTotal }
+              : {}),
             ...(format ? { format } : {})
           };
         }),
@@ -821,6 +826,28 @@
       this.emitChange();
     }
 
+    // Null takes the running total away.
+    setRunningTotal(name, runningTotal) {
+      const value = this.layout.values.find(entry => entry.field === name);
+      if (!value) {
+        throw new Error(`Field "${name}" is not in the data area.`);
+      }
+
+      const { RUNNING_TOTALS } = PivotForge.PivotRequestBuilder;
+      if (runningTotal !== null && !RUNNING_TOTALS.includes(runningTotal)) {
+        throw new Error(
+          `Unknown runningTotal "${runningTotal}". Expected one of: ${RUNNING_TOTALS.join(", ")}, or null.`
+        );
+      }
+
+      if (runningTotal === null) {
+        delete value.runningTotal;
+      } else {
+        value.runningTotal = runningTotal;
+      }
+      this.emitChange();
+    }
+
     // The filter entry for a field, created on first use. A field filtered from
     // a row header keeps its seat there and gains an entry all the same; only a
     // measure has nothing to filter, which is the rule the filter area already
@@ -985,6 +1012,7 @@
           area: "data",
           aggregation: value.aggregation,
           showAs: value.showAs,
+          ...(value.runningTotal ? { runningTotal: value.runningTotal } : {}),
           format: value.format ?? null,
           visible: visibleOf(value.field),
           // Only a data field may hold it, so it rides along with this area
