@@ -61,6 +61,10 @@ The default endpoint prefix is `/pivotforge`. Static assets are available at:
 <!-- Optional: a grid loading from a DevExtreme.AspNet.Data backend (RemoteStore). -->
 <script src="/_content/PivotForge.AspNetCore/js/pivot-result-assembler.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-remote-store.js"></script>
+
+<!-- Optional: a grid reading an OLAP cube over XMLA (XmlaStore). -->
+<script src="/_content/PivotForge.AspNetCore/js/pivot-result-assembler.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-xmla-store.js"></script>
 ```
 
 Load them in `<head>`, not at the end of `<body>`, and in the order shown: `pivot-table.js` must load before `pivot-widget.js`, `pivot-layout-state.js` and `pivot-field-designer.js` must load before `pivot-widget.js` is asked to build a designer, and any Razor helper that calls `PivotForge.create` inline (see below) needs all of them already loaded when its markup runs.

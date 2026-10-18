@@ -1919,6 +1919,37 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesAnXmlaStoreFromItsThreeAttributes()
+    {
+        var store = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", XmlaUrl = "/api/xmla", XmlaCatalog = "PivotForgeDemo", XmlaCube = "Sales" },
+            new FieldSpec("[Measures].[Amount]", PivotArea.Data, "Tutar", PivotAggregation.Sum))).GetProperty("store");
+
+        Assert.Equal("xmla", store.GetProperty("type").GetString());
+        Assert.Equal("/api/xmla", store.GetProperty("url").GetString());
+        Assert.Equal("PivotForgeDemo", store.GetProperty("catalog").GetString());
+        Assert.Equal("Sales", store.GetProperty("cube").GetString());
+    }
+
+    [Fact]
+    public async Task RefusesAnXmlaStoreMissingItsCubeOrBesideARemoteOne()
+    {
+        var partial = await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", XmlaUrl = "/api/xmla", XmlaCatalog = "PivotForgeDemo" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var both = await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper
+            {
+                Id = "pivotGrid", XmlaUrl = "/api/xmla", XmlaCatalog = "PivotForgeDemo", XmlaCube = "Sales",
+                RemoteLoadUrl = "/api/sales/load"
+            },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Contains("xmla-cube", partial.Message);
+        Assert.Contains("declare one of them", both.Message);
+    }
+
+    [Fact]
     public async Task RefusesBothRemoteAttributesAtOnce()
     {
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
