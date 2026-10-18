@@ -87,7 +87,9 @@
       percentOfGrandTotal: "% of grand total",
       differenceFromPrevious: "Difference from previous",
       percentDifferenceFromPrevious: "% difference from previous",
-      runningTotal: "Running total"
+      runningTotal: "Running total",
+      percentOfParentRowTotal: "% of parent row total",
+      percentOfParentColumnTotal: "% of parent column total"
     },
     formatGrouping: "Thousands separator",
     formatCompact: "Short numbers (1.2M)",
@@ -178,7 +180,9 @@
     "percentOfGrandTotal",
     "differenceFromPrevious",
     "percentDifferenceFromPrevious",
-    "runningTotal"
+    "runningTotal",
+    "percentOfParentRowTotal",
+    "percentOfParentColumnTotal"
   ];
   const FORMAT_TYPES = ["number", "currency", "percent"];
   const DECIMAL_CHOICES = [0, 1, 2, 3, 4, 5, 6];

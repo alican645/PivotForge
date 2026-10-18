@@ -124,7 +124,9 @@
         percentOfGrandTotal: "Genel toplamın %'si",
         differenceFromPrevious: "Öncekinden fark",
         percentDifferenceFromPrevious: "Öncekinden % fark",
-        runningTotal: "Kümülatif toplam"
+        runningTotal: "Kümülatif toplam",
+        percentOfParentRowTotal: "Üst satır toplamının %'si",
+        percentOfParentColumnTotal: "Üst sütun toplamının %'si"
       },
       formatGrouping: "Binlik ayracı",
       formatCompact: "Kısa sayı (1,2 Mn)",

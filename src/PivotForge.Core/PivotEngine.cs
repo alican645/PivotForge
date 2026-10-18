@@ -568,7 +568,7 @@ public sealed class PivotEngine
             scan.ColumnSubtotals.Values.Select(subtotal => subtotal.Finalize()),
             columnHeaders);
         var transformed = TransformValues(
-            rowIndex.Headers.Count,
+            rowIndex.Headers,
             columnHeaders,
             request.Values,
             rawCells,
@@ -913,7 +913,7 @@ public sealed class PivotEngine
     }
 
     private static TransformedResult TransformValues(
-        int rowCount,
+        IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
         IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
         IReadOnlyList<PivotValueDefinition> definitions,
         IReadOnlyList<PivotCell> rawCells,
@@ -923,6 +923,7 @@ public sealed class PivotEngine
         IReadOnlyList<PivotColumnSubtotal> rawColumnSubtotals,
         IReadOnlyDictionary<string, decimal?> rawGrandTotals)
     {
+        var rowCount = rowHeaders.Count;
         var columnCount = columnHeaders.Count;
         var groupStarts = GroupStarts(columnHeaders);
         var rowTotalLookup = rawRowTotals.ToDictionary(total => total.Index, total => total.Values);
@@ -994,13 +995,224 @@ public sealed class PivotEngine
             definition => TransformGrandTotal(GetValue(rawGrandTotals, definition.Key), definition.ShowAs),
             StringComparer.Ordinal);
 
-        return new TransformedResult(
+        var result = new TransformedResult(
             transformedCells,
             transformedRowTotals,
             transformedColumnTotals,
             transformedSubtotals,
             transformedColumnSubtotals,
             transformedGrandTotals);
+
+        return definitions.Any(IsParentShare)
+            ? ApplyParentShares(
+                result,
+                definitions,
+                new ParentShareSource(
+                    rowHeaders,
+                    columnHeaders,
+                    cellLookup,
+                    rowTotalLookup,
+                    columnTotalLookup,
+                    rawSubtotals,
+                    rawColumnSubtotals,
+                    rawGrandTotals))
+            : result;
+    }
+
+    private static bool IsParentShare(PivotValueDefinition definition) =>
+        definition.ShowAs is PivotShowAs.PercentOfParentRowTotal or PivotShowAs.PercentOfParentColumnTotal;
+
+    // Percent of the parent group. Every value in the result sits where one row reference
+    // crosses one column reference, each a single header, a group (a header prefix) or the
+    // axis' root (the totals). The parent of a reference is the group one level up; the
+    // parent of a top-level one is the root. A value is divided by the value at its parent on
+    // the chosen axis and its own reference on the other -- which is why this runs over the
+    // raw result after the other transforms: a parent is a different part of the result.
+    private static TransformedResult ApplyParentShares(
+        TransformedResult result,
+        IReadOnlyList<PivotValueDefinition> definitions,
+        ParentShareSource source)
+    {
+        var shares = definitions.Where(IsParentShare).ToArray();
+
+        IReadOnlyDictionary<string, decimal?> Share(
+            IReadOnlyDictionary<string, decimal?> transformed, AxisRef row, AxisRef column)
+        {
+            var values = new Dictionary<string, decimal?>(transformed, StringComparer.Ordinal);
+
+            foreach (var definition in shares)
+            {
+                var raw = source.Value(row, column, definition.Key);
+                var parent = definition.ShowAs == PivotShowAs.PercentOfParentRowTotal
+                    ? row.Parent is { } rowParent ? source.Value(rowParent, column, definition.Key) : null
+                    : column.Parent is { } columnParent ? source.Value(row, columnParent, definition.Key) : null;
+                var isRoot = definition.ShowAs == PivotShowAs.PercentOfParentRowTotal ? row.Parent is null : column.Parent is null;
+
+                values[definition.Key] = isRoot ? OneWhenNonZero(raw) : Divide(raw, parent);
+            }
+
+            return values;
+        }
+
+        var cells = result.Cells
+            .Select(cell => new PivotCell
+            {
+                Row = cell.Row,
+                Column = cell.Column,
+                Values = Share(cell.Values, source.RowDetail(cell.Row), source.ColumnDetail(cell.Column))
+            })
+            .ToArray();
+        var rowTotals = result.RowTotals
+            .Select(total => new PivotTotal
+            {
+                Index = total.Index,
+                Values = Share(total.Values, source.RowDetail(total.Index), AxisRef.Root)
+            })
+            .ToArray();
+        var columnTotals = result.ColumnTotals
+            .Select(total => new PivotTotal
+            {
+                Index = total.Index,
+                Values = Share(total.Values, AxisRef.Root, source.ColumnDetail(total.Index))
+            })
+            .ToArray();
+        var subtotals = result.Subtotals
+            .Select(subtotal =>
+            {
+                var row = AxisRef.Group(subtotal.RowHeader);
+                return new PivotSubtotal
+                {
+                    RowHeader = subtotal.RowHeader,
+                    Cells = subtotal.Cells
+                        .Select(cell => new PivotCell
+                        {
+                            Row = cell.Row,
+                            Column = cell.Column,
+                            Values = Share(cell.Values, row, source.ColumnDetail(cell.Column))
+                        })
+                        .ToArray(),
+                    Totals = Share(subtotal.Totals, row, AxisRef.Root),
+                    ColumnSubtotals = subtotal.ColumnSubtotals
+                        .Select(cell => new PivotColumnSubtotalCell
+                        {
+                            ColumnHeader = cell.ColumnHeader,
+                            Values = Share(cell.Values, row, AxisRef.Group(cell.ColumnHeader))
+                        })
+                        .ToArray()
+                };
+            })
+            .ToArray();
+        var columnSubtotals = result.ColumnSubtotals
+            .Select(subtotal =>
+            {
+                var column = AxisRef.Group(subtotal.ColumnHeader);
+                return new PivotColumnSubtotal
+                {
+                    ColumnHeader = subtotal.ColumnHeader,
+                    Cells = subtotal.Cells
+                        .Select(cell => new PivotTotal
+                        {
+                            Index = cell.Index,
+                            Values = Share(cell.Values, source.RowDetail(cell.Index), column)
+                        })
+                        .ToArray(),
+                    Totals = Share(subtotal.Totals, AxisRef.Root, column)
+                };
+            })
+            .ToArray();
+
+        return new TransformedResult(
+            cells,
+            rowTotals,
+            columnTotals,
+            subtotals,
+            columnSubtotals,
+            Share(result.GrandTotals, AxisRef.Root, AxisRef.Root));
+    }
+
+    /// <summary>One axis' half of where a value sits: a header, a group of headers, or the root.</summary>
+    private sealed record AxisRef(int? Index, IReadOnlyList<string?> Path)
+    {
+        public static readonly AxisRef Root = new(null, []);
+
+        public static AxisRef Group(IReadOnlyList<string?> path) => path.Count == 0 ? Root : new(null, path);
+
+        public bool IsRoot => Index is null && Path.Count == 0;
+
+        /// <summary>The group one level up, the root above a top-level reference, null above the root.</summary>
+        public AxisRef? Parent => IsRoot ? null : Group(Path.Take(Path.Count - 1).ToArray());
+    }
+
+    // Indexed once, so a result with many groups is not scanned per value.
+    private sealed class ParentShareSource
+    {
+        private readonly IReadOnlyList<IReadOnlyList<string?>> _rowHeaders;
+        private readonly IReadOnlyList<IReadOnlyList<string?>> _columnHeaders;
+        private readonly IReadOnlyDictionary<CellKey, IReadOnlyDictionary<string, decimal?>> _cells;
+        private readonly IReadOnlyDictionary<int, IReadOnlyDictionary<string, decimal?>> _rowTotals;
+        private readonly IReadOnlyDictionary<int, IReadOnlyDictionary<string, decimal?>> _columnTotals;
+        private readonly IReadOnlyDictionary<string, decimal?> _grandTotals;
+        private readonly Dictionary<HeaderKey, IReadOnlyDictionary<string, decimal?>> _groupTotals = [];
+        private readonly Dictionary<HeaderKey, Dictionary<int, IReadOnlyDictionary<string, decimal?>>> _groupCells = [];
+        private readonly Dictionary<HeaderKey, Dictionary<HeaderKey, IReadOnlyDictionary<string, decimal?>>> _crossings = [];
+        private readonly Dictionary<HeaderKey, IReadOnlyDictionary<string, decimal?>> _columnGroupTotals = [];
+        private readonly Dictionary<HeaderKey, Dictionary<int, IReadOnlyDictionary<string, decimal?>>> _columnGroupCells = [];
+
+        public ParentShareSource(
+            IReadOnlyList<IReadOnlyList<string?>> rowHeaders,
+            IReadOnlyList<IReadOnlyList<string?>> columnHeaders,
+            IReadOnlyDictionary<CellKey, IReadOnlyDictionary<string, decimal?>> cells,
+            IReadOnlyDictionary<int, IReadOnlyDictionary<string, decimal?>> rowTotals,
+            IReadOnlyDictionary<int, IReadOnlyDictionary<string, decimal?>> columnTotals,
+            IEnumerable<PivotSubtotal> subtotals,
+            IEnumerable<PivotColumnSubtotal> columnSubtotals,
+            IReadOnlyDictionary<string, decimal?> grandTotals)
+        {
+            _rowHeaders = rowHeaders;
+            _columnHeaders = columnHeaders;
+            _cells = cells;
+            _rowTotals = rowTotals;
+            _columnTotals = columnTotals;
+            _grandTotals = grandTotals;
+
+            foreach (var subtotal in subtotals)
+            {
+                var key = new HeaderKey(subtotal.RowHeader);
+                _groupTotals[key] = subtotal.Totals;
+                _groupCells[key] = subtotal.Cells.ToDictionary(cell => cell.Column, cell => cell.Values);
+                _crossings[key] = subtotal.ColumnSubtotals.ToDictionary(cell => new HeaderKey(cell.ColumnHeader), cell => cell.Values);
+            }
+
+            foreach (var subtotal in columnSubtotals)
+            {
+                var key = new HeaderKey(subtotal.ColumnHeader);
+                _columnGroupTotals[key] = subtotal.Totals;
+                _columnGroupCells[key] = subtotal.Cells.ToDictionary(cell => cell.Index, cell => cell.Values);
+            }
+        }
+
+        public AxisRef RowDetail(int row) => new(row, _rowHeaders[row]);
+
+        public AxisRef ColumnDetail(int column) => new(column, _columnHeaders[column]);
+
+        // The raw value where a row reference crosses a column reference.
+        public decimal? Value(AxisRef row, AxisRef column, string key)
+        {
+            IReadOnlyDictionary<string, decimal?>? values = (row, column) switch
+            {
+                ({ IsRoot: true }, { IsRoot: true }) => _grandTotals,
+                ({ IsRoot: true }, { Index: { } c }) => _columnTotals.GetValueOrDefault(c),
+                ({ IsRoot: true }, _) => _columnGroupTotals.GetValueOrDefault(new HeaderKey(column.Path)),
+                ({ Index: { } r }, { IsRoot: true }) => _rowTotals.GetValueOrDefault(r),
+                ({ Index: { } r }, { Index: { } c }) => _cells.GetValueOrDefault(new CellKey(r, c)),
+                ({ Index: { } r }, _) => _columnGroupCells.GetValueOrDefault(new HeaderKey(column.Path))?.GetValueOrDefault(r),
+                (_, { IsRoot: true }) => _groupTotals.GetValueOrDefault(new HeaderKey(row.Path)),
+                (_, { Index: { } c }) => _groupCells.GetValueOrDefault(new HeaderKey(row.Path))?.GetValueOrDefault(c),
+                _ => _crossings.GetValueOrDefault(new HeaderKey(row.Path))?.GetValueOrDefault(new HeaderKey(column.Path))
+            };
+
+            return values is null ? null : GetValue(values, key);
+        }
     }
 
     private static IReadOnlyList<PivotCell> TransformCellMatrix(
@@ -1226,6 +1438,8 @@ public sealed class PivotEngine
             PivotShowAs.PercentOfColumnTotal => Divide(raw, columnTotal),
             PivotShowAs.PercentOfGrandTotal => Divide(raw, grandTotal),
             PivotShowAs.DifferenceFromPrevious or PivotShowAs.PercentDifferenceFromPrevious => null,
+            // Read across the whole result, so ApplyParentShares works them out afterwards.
+            PivotShowAs.PercentOfParentRowTotal or PivotShowAs.PercentOfParentColumnTotal => raw,
             _ => throw new ArgumentOutOfRangeException(nameof(showAs), showAs, "Unsupported show-as calculation.")
         };
     }
@@ -1273,6 +1487,8 @@ public sealed class PivotEngine
             PivotShowAs.DifferenceFromPrevious => Difference(raw, previous),
             PivotShowAs.PercentDifferenceFromPrevious => Divide(Difference(raw, previous), previous),
             PivotShowAs.RunningTotal => runningTotal,
+            // Read across the whole result, so ApplyParentShares works them out afterwards.
+            PivotShowAs.PercentOfParentRowTotal or PivotShowAs.PercentOfParentColumnTotal => raw,
             _ => throw new ArgumentOutOfRangeException(nameof(showAs), showAs, "Unsupported show-as calculation.")
         };
     }
@@ -1285,6 +1501,8 @@ public sealed class PivotEngine
             PivotShowAs.PercentOfRowTotal => OneWhenNonZero(raw),
             PivotShowAs.PercentOfColumnTotal or PivotShowAs.PercentOfGrandTotal => Divide(raw, grandTotal),
             PivotShowAs.DifferenceFromPrevious or PivotShowAs.PercentDifferenceFromPrevious => null,
+            // Read across the whole result, so ApplyParentShares works them out afterwards.
+            PivotShowAs.PercentOfParentRowTotal or PivotShowAs.PercentOfParentColumnTotal => raw,
             _ => throw new ArgumentOutOfRangeException(nameof(showAs), showAs, "Unsupported show-as calculation.")
         };
     }
@@ -1304,6 +1522,8 @@ public sealed class PivotEngine
             PivotShowAs.DifferenceFromPrevious => Difference(raw, previous),
             PivotShowAs.PercentDifferenceFromPrevious => Divide(Difference(raw, previous), previous),
             PivotShowAs.RunningTotal => runningTotal,
+            // Read across the whole result, so ApplyParentShares works them out afterwards.
+            PivotShowAs.PercentOfParentRowTotal or PivotShowAs.PercentOfParentColumnTotal => raw,
             _ => throw new ArgumentOutOfRangeException(nameof(showAs), showAs, "Unsupported show-as calculation.")
         };
     }
@@ -1315,6 +1535,8 @@ public sealed class PivotEngine
             PivotShowAs.Normal or PivotShowAs.RunningTotal => raw,
             PivotShowAs.PercentOfRowTotal or PivotShowAs.PercentOfColumnTotal or PivotShowAs.PercentOfGrandTotal => OneWhenNonZero(raw),
             PivotShowAs.DifferenceFromPrevious or PivotShowAs.PercentDifferenceFromPrevious => null,
+            // Read across the whole result, so ApplyParentShares works them out afterwards.
+            PivotShowAs.PercentOfParentRowTotal or PivotShowAs.PercentOfParentColumnTotal => raw,
             _ => throw new ArgumentOutOfRangeException(nameof(showAs), showAs, "Unsupported show-as calculation.")
         };
     }

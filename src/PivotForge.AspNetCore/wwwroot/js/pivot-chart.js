@@ -258,7 +258,8 @@
   function axisFormatter(valueDefinition, culture) {
     const showAs = valueDefinition?.showAs;
     const percentShowAs = showAs === "percentOfRowTotal" || showAs === "percentOfColumnTotal" ||
-      showAs === "percentOfGrandTotal" || showAs === "percentDifferenceFromPrevious";
+      showAs === "percentOfGrandTotal" || showAs === "percentOfParentRowTotal" ||
+      showAs === "percentOfParentColumnTotal" || showAs === "percentDifferenceFromPrevious";
     const formatType = valueDefinition?.format?.type;
 
     if (percentShowAs || formatType === "percent") {

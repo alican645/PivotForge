@@ -132,8 +132,12 @@ Supported modes:
 - `DifferenceFromPrevious`
 - `PercentDifferenceFromPrevious`
 - `RunningTotal`
+- `PercentOfParentRowTotal`
+- `PercentOfParentColumnTotal`
 
 Percentage modes return ratios. For example, `0.25m` represents 25 percent; formatting belongs to the consuming UI.
+
+`PercentOfRowTotal` and `PercentOfColumnTotal` divide by the grand total of the row or the column (DevExtreme's `percentOfRowGrandTotal` / `percentOfColumnGrandTotal`). The parent modes divide by the group one level up instead (Excel's "% of Parent Row / Column Total", DevExtreme's `percentOfColumnTotal` / `percentOfRowTotal`): with Region and City on the rows, `PercentOfParentRowTotal` gives each city's share of its region in every column, and each region's share of the column's grand total. Every part of the result follows the same rule -- a subtotal row, a column subtotal, where the two cross, and the totals; the root of the chosen axis (the bottom total row for the row parent, the right-hand total for the column parent) reads 100%.
 
 `RunningTotal`, `DifferenceFromPrevious` and `PercentDifferenceFromPrevious` walk each row from the first column to the last. With more than one column level, `AllowCrossGroupCalculation = false` keeps them inside each outer column group instead — the running total starts again every year, and a year's first quarter has no previous column. The group is the last column level's parent, so with Year, Quarter and Month it starts again every quarter:
 

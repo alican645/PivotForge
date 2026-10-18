@@ -79,7 +79,9 @@
     "percentOfGrandTotal",
     "differenceFromPrevious",
     "percentDifferenceFromPrevious",
-    "runningTotal"
+    "runningTotal",
+    "percentOfParentRowTotal",
+    "percentOfParentColumnTotal"
   ];
 
   // Mirrors PivotExpression on the server, so a formula typed into the designer is

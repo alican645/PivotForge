@@ -16,6 +16,15 @@ change will require a new major version.
 
 ### Added
 
+- Percent of the parent group: `PivotShowAs.PercentOfParentRowTotal` /
+  `PercentOfParentColumnTotal` (`show-as`, `showAs: "percentOfParentRowTotal"`,
+  "% of parent row / column total", "Üst satır / sütun toplamının %'si"),
+  Excel's "% of Parent Row / Column Total" and DevExtreme's
+  `percentOfColumnTotal` / `percentOfRowTotal`: each value divided by its
+  parent group on one axis -- a city's share of its region in every column --
+  with a top-level group's parent being that axis' grand total. Subtotal rows
+  and columns, their crossings and the totals follow the same rule.
+  (Core, AspNetCore)
 - Right to left: `rtl-enabled="true|false"` / `RtlEnabled(bool)` /
   `rtlEnabled`, DevExtreme's `rtlEnabled`. Undeclared, the grid follows the
   page's own direction -- the stylesheet now uses logical properties
@@ -62,6 +71,10 @@ change will require a new major version.
 
 ### Fixed
 
+- A percent display mode on a field with no declared format was drawn as a
+  bare ratio (`0.18`). It is drawn as a percentage (`18%`) and exported with
+  a `0.00%` number format, as DevExtreme gives a percent display mode a
+  percent format. (AspNetCore)
 - The frozen headers were not frozen: a general `th` rule outranked the
   rules making the row headers and the head rows sticky, so the row headers
   scrolled away sideways and the head scrolled up out of view. They stick
