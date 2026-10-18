@@ -137,6 +137,9 @@
         columnWidths: this.normalizeColumnWidths(state.columnWidths),
         collapsedGroups: Array.isArray(state.collapsedGroups)
           ? [...new Set(state.collapsedGroups.filter(key => typeof key === "string"))]
+          : [],
+        collapsedColumnGroups: Array.isArray(state.collapsedColumnGroups)
+          ? [...new Set(state.collapsedColumnGroups.filter(key => typeof key === "string"))]
           : []
       };
     }

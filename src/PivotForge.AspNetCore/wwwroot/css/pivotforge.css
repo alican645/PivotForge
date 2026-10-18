@@ -1423,6 +1423,13 @@ select {
   background: var(--pt-panel);
 }
 
+/* Virtual columns: the spacer standing in for the columns not drawn. */
+.pivot-table__table .pivot-table__virtual-column {
+  padding: 0 !important;
+  border-inline-width: 0 !important;
+  background: var(--pt-panel) !important;
+}
+
 .pivot-table.is-page-loading {
   cursor: progress;
   box-shadow: inset 0 3px 0 var(--pt-accent);
@@ -1940,6 +1947,21 @@ select {
   font-weight: 800;
 }
 
+/* The frozen headers. Said again at the table's specificity, because the rule
+   above outranks the single-class rules that make them sticky: without this
+   the row headers scrolled away sideways and the column headers upwards. A
+   sticky cell still positions the resize handle inside it, as relative did. */
+.pivot-table__table .pivot-table__corner,
+.pivot-table__table .pivot-table__column-header,
+.pivot-table__table .pivot-table__measure-header,
+.pivot-table__table .pivot-table__value-header,
+.pivot-table__table .pivot-table__column-field-filler,
+.pivot-table__table .pivot-table__row-header,
+.pivot-table__table .pivot-table__row-total-label,
+.pivot-table__table .pivot-table__subtotal-header {
+  position: sticky;
+}
+
 .pivot-table__corner,
 .pivot-table__column-header,
 .pivot-table__measure-header,
@@ -2251,6 +2273,30 @@ select {
 .pivot-table__toggle:hover {
   border-color: var(--pt-accent);
   background: #f0fdfa;
+}
+
+/* A column group's toggle sits before its label in the header. Next to a
+   sort button, the button gives up its full width so the two share the cell
+   instead of the label collapsing to an ellipsis. */
+.pivot-table__toggle.is-column {
+  vertical-align: middle;
+}
+
+.pivot-table__toggle.is-column + .pivot-table__sort-button {
+  width: auto;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* The label sizes the column here rather than the other way round: a
+   collapsed year is one narrow column, and an ellipsis would hide its name. */
+.pivot-table__toggle.is-column + .pivot-table__sort-button .pivot-table__sort-label {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.pivot-table__column-header:has(> .pivot-table__toggle.is-column) {
+  white-space: nowrap;
 }
 
 .pivot-table__empty {

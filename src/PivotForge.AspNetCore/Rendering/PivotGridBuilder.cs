@@ -377,6 +377,30 @@ public sealed class PivotGridBuilder : IHtmlContent
     public PivotGridBuilder ValuesPosition(PivotValuesPosition position) =>
         SetRenderer("valuesPosition", position == PivotValuesPosition.Rows ? "rows" : "columns");
 
+    /// <summary>Draws only the columns around what the grid shows, as DevExtreme's virtual scrolling does.</summary>
+    /// <remarks>
+    /// For a pivot with many columns -- a column per day, say: only a window of them is in the
+    /// page, and a spacer on either side keeps the table its full width, so scrolling sideways
+    /// redraws the window rather than the browser holding every cell. The spacers are measured from
+    /// the columns actually drawn, so a long header does not throw them off; <paramref name="columnWidth"/>
+    /// is only the guess the first draw starts from. Excel, CSV and printing still get every column.
+    /// Independent of the row paging large-data mode does.
+    /// </remarks>
+    /// <param name="enabled">Whether columns are virtual.</param>
+    /// <param name="columnWidth">The first guess at a value column's width, in pixels; 100 when left out.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The width is below 24.</exception>
+    public PivotGridBuilder VirtualColumns(bool enabled, int? columnWidth = null)
+    {
+        if (columnWidth is < 24)
+        {
+            throw new ArgumentOutOfRangeException(nameof(columnWidth), columnWidth, "A virtual column is at least 24 pixels wide.");
+        }
+
+        SetRenderer("virtualColumns", enabled);
+        return columnWidth is { } width ? SetRenderer("virtualColumnWidth", width) : this;
+    }
+
     /// <summary>Shades the value cells on a colour scale, from the smallest value to the largest.</summary>
     /// <remarks>
     /// Each data field is its own scale; totals and subtotals are not shaded. A conditional

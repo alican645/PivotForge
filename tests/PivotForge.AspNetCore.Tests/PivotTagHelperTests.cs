@@ -899,6 +899,24 @@ public class PivotTagHelperTests
     }
 
     [Fact]
+    public async Task WritesVirtualColumnsAndItsWidthOnlyWhenDeclared()
+    {
+        var declared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", VirtualColumns = true, VirtualColumnWidth = 80 },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var undeclared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        var renderer = declared.GetProperty("rendererOptions");
+        Assert.True(renderer.GetProperty("virtualColumns").GetBoolean());
+        Assert.Equal(80, renderer.GetProperty("virtualColumnWidth").GetInt32());
+        Assert.False(undeclared.TryGetProperty("rendererOptions", out var options) &&
+            options.TryGetProperty("virtualColumns", out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotGridBuilder().VirtualColumns(true, 10));
+    }
+
+    [Fact]
     public async Task OmitsValuesPositionWhenTheAttributeIsNotWritten()
     {
         var config = ConfigOf(await RenderAsync(
@@ -1220,19 +1238,20 @@ public class PivotTagHelperTests
     [Fact]
     public void RefusesExpandedAndShowTotalsWhereTheyMeanNothing()
     {
-        // Collapsible groups are drawn on the row axis only, subtotals on both header axes.
+        // Collapsible groups and subtotals are drawn on both header axes only.
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
-            .DataField("Year").Area(PivotArea.Column).Expanded(false).Build());
+            .DataField("Category").Area(PivotArea.Filter).Expanded(false).Build());
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Amount").Area(PivotArea.Data).ShowTotals(false).Build());
         Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder()
             .DataField("Category").Area(PivotArea.Filter).ShowTotals(false).Build());
 
-        // The row area accepts both, the column area ShowTotals.
+        // The row and column areas accept both.
         new PivotFieldBuilder().DataField("Region").Area(PivotArea.Row)
             .Expanded(false).ShowTotals(false).Build();
-        new PivotFieldBuilder().DataField("Year").Area(PivotArea.Column)
-            .ShowTotals(false).Build();
+        var column = new PivotFieldBuilder().DataField("Year").Area(PivotArea.Column)
+            .Expanded(false).ShowTotals(false).Build();
+        Assert.Equal(false, column["expanded"]);
     }
 
     [Fact]

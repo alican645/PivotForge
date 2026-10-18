@@ -39,7 +39,8 @@ function createState() {
       { id: "broken", valueKey: "Amount_sum", operator: "unknown", threshold: 0, color: "purple" }
     ],
     columnWidths: [[0, 150], [2, 999]],
-    collapsedGroups: ["Marmara", "Marmara", 42]
+    collapsedGroups: ["Marmara", "Marmara", 42],
+    collapsedColumnGroups: ["2025", 7, "2025"]
   };
 }
 
@@ -62,7 +63,8 @@ test("last state is normalized and restored", () => {
       { id: "high-sales", valueKey: "Amount_sum", operator: "greaterThanOrEqual", threshold: 1000, color: "green" }
     ],
     columnWidths: [[0, 150], [2, 420]],
-    collapsedGroups: ["Marmara"]
+    collapsedGroups: ["Marmara"],
+    collapsedColumnGroups: ["2025"]
   });
 });
 

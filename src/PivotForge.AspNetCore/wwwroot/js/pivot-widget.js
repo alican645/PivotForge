@@ -793,6 +793,7 @@
         columnFieldAllowSorting: columnFields.map(field => field.allowSorting),
         columnFieldAllowFiltering: columnFields.map(field => field.allowFiltering),
         columnFieldWordWrap: columnFields.map(field => field.wordWrap),
+        columnFieldExpanded: columnFields.map(field => field.expanded),
         // Read at construction only: a column sort changes the fields, and a
         // field change builds a new renderer.
         columnFieldSorts: columnFields.map(fieldSortDirection),
@@ -1555,10 +1556,11 @@
             this.print(title ? { title } : {});
             break;
           case "expandAll":
-            this.renderer.expandAll();
+            // Both axes: the button says "all", and the column groups fold too.
+            this.renderer.expandAll({ axis: "all" });
             break;
           case "collapseAll":
-            this.renderer.collapseAll();
+            this.renderer.collapseAll({ axis: "all" });
             break;
           case "saveReport":
             PivotForge.download(this.exportReport());
@@ -1960,7 +1962,11 @@
         throw new Error("Cannot print because no pivot table has been rendered yet.");
       }
 
-      PivotForge.print(this.container, options);
+      // Virtual columns draw a window; a print is of the whole table.
+      const suspended = this.renderer?.suspendColumnWindow?.() === true;
+      PivotForge.print(this.container, suspended
+        ? { ...options, onRestore: () => this.renderer?.resumeColumnWindow?.() }
+        : options);
     }
 
     cancel() {
