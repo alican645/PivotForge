@@ -14,6 +14,14 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.8.0-preview.1] — 2026-10-18
+
+Calculations checked against DevExtreme 26.1.3 (a 275-scenario reference
+corpus), percent of the parent group, running totals in either direction,
+formulas that read other cells, sortBy and server-registered sorting methods,
+per-value showValues, server-registered selectors, the cell events and custom
+state storage.
+
 ### Breaking
 
 - Observed all-null sums now return zero, matching DevExtreme 26.1.3; an entirely
@@ -877,7 +885,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.7.0-preview.1...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.8.0-preview.1...HEAD
+[0.8.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.7.0-preview.1...v0.8.0-preview.1
 [0.7.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.6...v0.7.0-preview.1
 [0.6.0-preview.6]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.5...v0.6.0-preview.6
 [0.6.0-preview.5]: https://github.com/alican645/PivotForge/compare/v0.6.0-preview.4...v0.6.0-preview.5
