@@ -25,6 +25,11 @@ const TEXTS = {
   sortField: "Sort {0}",
   sortActive: "{0} is sorted",
   filterField: "Filter {0}",
+  // A header's menu: every group of that field's level at once. {0} is the
+  // field's caption.
+  headerActions: "Header actions",
+  expandLevel: "Expand all {0}",
+  collapseLevel: "Collapse all {0}",
   filterActive: "{0} is filtered"
 };
 
@@ -1969,6 +1974,15 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
       const isCell = target.dataset.selectionTarget === "cell";
       const isCopy = isCell && (event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("tr") === "c";
+      const isMenuKey = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+
+      if (!isCell && isMenuKey && settings.contextMenu && this.headerLevelOf(target)) {
+        event.preventDefault();
+        const rect = target.getBoundingClientRect();
+        const x = PivotForge.isRtl(target) ? rect.right - 12 : rect.left + 12;
+        this.openHeaderMenu(target, x, rect.top + 12, settings);
+        return;
+      }
 
       if (isCell && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
         event.preventDefault();
@@ -2028,7 +2042,19 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     table.addEventListener("contextmenu", event => {
       const target = event.target.closest('[data-selection-target="cell"]');
 
-      if (!settings.contextMenu || !target || !table.contains(target)) {
+      if (!settings.contextMenu) {
+        return;
+      }
+
+      // A group header has a menu of its own, for its whole level.
+      const header = target ? null : event.target.closest("th");
+      if (header && table.contains(header) && this.headerLevelOf(header)) {
+        event.preventDefault();
+        this.openHeaderMenu(header, event.clientX, event.clientY, settings);
+        return;
+      }
+
+      if (!target || !table.contains(target)) {
         return;
       }
 
@@ -2294,13 +2320,122 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       return null;
     }
 
+    return this.presentMenu(
+      cell,
+      (settings.texts ?? TEXTS).cellActions,
+      this.createContextMenuItems(selection, settings.texts ?? TEXTS, settings),
+      action => this.handleContextMenuAction(action, cell, settings),
+      clientX,
+      clientY);
+  }
+
+  // A header's own menu (DevExtreme's "Expand All" / "Collapse All" on a
+  // group header): every group of the header's level, on its axis, at once.
+  // Only headers whose level has groups below it have one.
+  openHeaderMenu(header, clientX, clientY, settings = this.lastSettings) {
+    const target = this.headerLevelOf(header);
+
+    if (!target || typeof document === "undefined") {
+      return null;
+    }
+
+    const texts = settings.texts ?? TEXTS;
+    const caption = (target.axis === "row" ? settings.rowFieldLabels : settings.columnFieldLabels)?.[target.level] ??
+      (target.axis === "row" ? settings.rowFields : settings.columnFields)?.[target.level] ?? "";
+    const keys = this.levelGroupKeys(target.axis, target.level);
+    const collapsed = target.axis === "row" ? this.collapsedRows : this.collapsedColumns;
+    const closedCount = keys.filter(key => collapsed?.has(key)).length;
+
+    return this.presentMenu(
+      header,
+      texts.headerActions,
+      [
+        { action: "expand-level", label: formatText(texts.expandLevel, caption), disabled: closedCount === 0 },
+        { action: "collapse-level", label: formatText(texts.collapseLevel, caption), disabled: closedCount === keys.length }
+      ],
+      action => {
+        this.closeContextMenu();
+        if (action === "expand-level") {
+          this.expandLevel(target.axis, target.level);
+        } else {
+          this.collapseLevel(target.axis, target.level);
+        }
+      },
+      clientX,
+      clientY);
+  }
+
+  // Which level a header names and on which axis, when that level has groups
+  // that fold: a row header above the innermost row level, or a column header
+  // carrying a fold toggle. Null for every other cell.
+  headerLevelOf(cell) {
+    if (!cell || cell.tagName !== "TH") {
+      return null;
+    }
+
+    const columnToggle = cell.querySelector?.(".pivot-table__toggle.is-column");
+    if (columnToggle && cell.closest("thead")) {
+      return { axis: "column", level: columnToggle.dataset.columnGroupKey.split("\u001f").length - 1 };
+    }
+
+    const level = Number(cell.dataset.rowLevel);
+    const depth = Math.max(1, ...(this.lastResult?.rowHeaders ?? []).map(header => header.length));
+    return cell.closest("tbody") && Number.isInteger(level) && cell.dataset.rowLevel !== undefined && level < depth - 1
+      ? { axis: "row", level }
+      : null;
+  }
+
+  // Every group key at one level of an axis.
+  levelGroupKeys(axis, level) {
+    const result = this.lastResult;
+    const settings = this.lastSettings;
+
+    if (!result || !settings) {
+      return [];
+    }
+
+    if (axis === "column") {
+      return this.columnGroupKeys(result.columnHeaders ?? [], [level]);
+    }
+
+    const rowHeaders = result.rowHeaders ?? [];
+    const depth = Math.max(1, ...rowHeaders.map(header => header.length));
+    // Keys are the same with or without totals before the rows, so the plan
+    // is read with them before: a trailing total adds no key of its own.
+    return [...new Set(this.createRowPlan(rowHeaders, depth, { ...settings, totalsPosition: "before" })
+      .filter(row => (row.type === "subtotal" || row.type === "group") && row.level === level)
+      .map(row => row.key))];
+  }
+
+  expandLevel(axis, level) {
+    const collapsed = axis === "column" ? this.collapsedColumns : this.collapsedRows;
+    this.levelGroupKeys(axis, level).forEach(key => collapsed?.delete(key));
+    this.rerenderLast();
+    this.notifyViewStateChanged();
+  }
+
+  collapseLevel(axis, level) {
+    const keys = this.levelGroupKeys(axis, level);
+    if (axis === "column") {
+      this.collapsedColumns ??= new Set();
+      keys.forEach(key => this.collapsedColumns.add(key));
+    } else {
+      this.collapsedRows ??= new Set();
+      keys.forEach(key => this.collapsedRows.add(key));
+    }
+    this.rerenderLast();
+    this.notifyViewStateChanged();
+  }
+
+  // The menu box both menus share: buttons, arrow keys, focus, placement.
+  presentMenu(cell, label, items, onPick, clientX, clientY) {
     this.closeContextMenu();
     const menu = document.createElement("div");
     menu.className = "pivot-cell-menu";
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", (settings.texts ?? TEXTS).cellActions);
+    menu.setAttribute("aria-label", label);
 
-    this.createContextMenuItems(selection, settings.texts ?? TEXTS, settings).forEach(item => {
+    items.forEach(item => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "pivot-cell-menu__item";
@@ -2308,7 +2443,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       button.textContent = item.label;
       button.disabled = item.disabled;
       button.setAttribute("role", "menuitem");
-      button.addEventListener("click", () => this.handleContextMenuAction(item.action, cell, settings));
+      button.addEventListener("click", () => onPick(item.action));
       menu.appendChild(button);
     });
 

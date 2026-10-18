@@ -43,6 +43,14 @@ change will require a new major version.
   Expand all / Collapse all buttons reach both axes. The header's
   sort arrow on a collapsed column orders the rows by that group's total.
   (AspNetCore)
+- A group header's menu, DevExtreme's Expand All / Collapse All: right-clicking
+  a row header above the innermost level or a column header that folds (or
+  the menu key / Shift+F10 on a row header) offers **Expand all {field}** /
+  **Collapse all {field}** ("Tüm {0} gruplarını aç / kapat"), which open or
+  close every group of that level on that axis at once; an entry with nothing
+  to do is disabled. `context-menu="false"` turns it off with the cell menu.
+  `expandLevel(axis, level)` / `collapseLevel(axis, level)` on the renderer.
+  (AspNetCore)
 
 ## [0.7.0-preview.1] — 2026-10-18
 
