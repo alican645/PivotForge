@@ -28,17 +28,16 @@ test("picking Down columns in the designer makes each column cumulative", async 
   await page.locator('.pivot-value-settings [data-action="running-total"]', { hasText: "Down columns" }).click();
   await expect.poll(() => page.evaluate(() => window.runWidget.request.values[0].runningTotal)).toBe("Column");
 
-  const check = await page.evaluate(() => {
+  // The request changes before the server answers: wait for the result it produced.
+  const lastRowMatchesTotals = () => page.evaluate(() => {
     const result = window.runWidget.result;
     const last = result.rowHeaders.length - 1;
-    return result.columnTotals.map(total => ({
+    const check = result.columnTotals.map(total => ({
       total: total.values.Amount_sum,
       last: result.cells.find(cell => cell.row === last && cell.column === total.index)?.values.Amount_sum
     }));
+    return check.length > 0 && check.every(({ total, last }) => Math.abs(last - total) < 1e-6);
   });
 
-  expect(check.length).toBeGreaterThan(0);
-  for (const { total, last } of check) {
-    expect(last).toBeCloseTo(total, 6);
-  }
+  await expect.poll(lastRowMatchesTotals).toBe(true);
 });
