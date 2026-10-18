@@ -11,6 +11,10 @@
 
   const DEFAULT_LABELS = {
     available: "Fields",
+    // The list's heading when it shows every field, placed or not.
+    allFields: "All fields",
+    // {0} is the field's caption; read out on its checkbox.
+    placeField: "Show {0}",
     row: "Rows",
     column: "Columns",
     data: "Values",
@@ -399,7 +403,20 @@
       // changes the panel, and what it would have sent is merged into
       // pendingUpdate until Update is pressed or the box is cleared.
       this.deferUpdates = typeof options.deferUpdates === "boolean" ? options.deferUpdates : null;
+      // A host that applies the held-back edits itself -- the field chooser's
+      // OK button -- keeps the box off the panel.
+      this.showDeferBox = options.showDeferBox !== false;
       this.pendingUpdate = null;
+      // DevExtreme's field chooser layouts: 0 puts the field list beside the
+      // rows and columns with filters and values below, 1 stacks the four
+      // zones beside the list, 2 puts the list across the top. Left out, the
+      // panel keeps its own arrangement.
+      this.layout = [0, 1, 2].includes(options.layout) ? options.layout : null;
+      [0, 1, 2].forEach(layout => this.host.classList.toggle(`is-layout-${layout}`, this.layout === layout));
+      // The field chooser's "All fields": every field listed, placed or not,
+      // each with a checkbox that places or removes it.
+      this.allFields = options.allFields === true;
+      this.host.classList.toggle("is-all-fields", this.allFields);
       this.render();
     }
 
@@ -507,6 +524,17 @@
         this.refreshTabStops();
       });
 
+      // A field's own menu, DevExtreme's onContextMenuPreparing on a field
+      // button: nothing by default, whatever the page adds.
+      chip.addEventListener("contextmenu", event => this.openFieldMenu(event, name, chip));
+
+      // In the "All fields" list a checkbox says whether the field is placed,
+      // and placing or removing it is one click.
+      if (area === "available" && this.allFields) {
+        chip.dataset.listed = "true";
+        chip.appendChild(this.createPlaceCheckbox(name, field));
+      }
+
       // Controls come first so they line up down the left edge of a zone,
       // independent of how long each caption is.
       if (area !== "available") {
@@ -599,6 +627,141 @@
       chip.appendChild(grip);
 
       return chip;
+    }
+
+    // --- All fields ---------------------------------------------------------
+
+    isMeasure(name) {
+      return this.state.field(name).role === "measure";
+    }
+
+    // The last value cannot leave: a pivot needs one.
+    isLastValue(name) {
+      return this.state.areaOf(name) === "data" && this.state.getState().values.length === 1;
+    }
+
+    createPlaceCheckbox(name, field) {
+      const box = root.document.createElement("input");
+      box.type = "checkbox";
+      box.className = "pivot-chip__place";
+      box.dataset.action = "place";
+      box.tabIndex = -1;
+      box.checked = this.state.areaOf(name) !== "available";
+      box.disabled = this.isLastValue(name);
+      box.setAttribute("aria-label", format(this.labels.placeField, field.caption));
+      // The chip under it starts a drag on a press; a click on the box is not one.
+      box.addEventListener("pointerdown", event => event.stopPropagation());
+      box.addEventListener("change", () => {
+        // The redraw replaces the box; focus comes back to the field's chip.
+        this.focusField = name;
+        this.placeFields([name], box.checked);
+      });
+      return box;
+    }
+
+    // A folder's checkbox: places its first field when none is placed, as
+    // DevExtreme does, and removes every one of them otherwise.
+    withFolderCheckbox(heading, names) {
+      const row = root.document.createElement("div");
+      row.className = "pivot-field-folder-row";
+      const placed = names.filter(name => this.state.areaOf(name) !== "available");
+      const box = root.document.createElement("input");
+      box.type = "checkbox";
+      box.className = "pivot-chip__place";
+      box.dataset.action = "place-folder";
+      box.tabIndex = -1;
+      box.checked = placed.length > 0;
+      box.indeterminate = placed.length > 0 && placed.length < names.length;
+      box.setAttribute("aria-label", format(this.labels.placeField, heading.dataset.folder));
+      // Read again at the click: the layout may have changed since the draw.
+      box.addEventListener("change", () => {
+        const placedNow = names.filter(name => this.state.areaOf(name) !== "available");
+        this.placeFields(placedNow.length > 0 ? placedNow : names.slice(0, 1), placedNow.length === 0);
+      });
+      row.appendChild(box);
+      row.appendChild(heading);
+      return row;
+    }
+
+    // A measure goes to the values, anything else to the columns, as the
+    // DevExtreme field chooser places a checked field. The last value stays.
+    placeFields(names, place) {
+      return this.apply(() => {
+        names.forEach(name => {
+          if (!place) {
+            if (!this.isLastValue(name)) {
+              this.state.remove(name);
+            }
+            return;
+          }
+
+          if (this.state.areaOf(name) === "available") {
+            this.state.move(name, this.isMeasure(name) ? "data" : "column");
+          }
+        });
+      });
+    }
+
+    // --- Field menu ---------------------------------------------------------
+
+    openFieldMenu(event, name, chip) {
+      const prepare = this.widget.prepareFieldMenu;
+      if (typeof prepare !== "function") {
+        return;
+      }
+
+      const area = this.state.areaOf(name);
+      const items = prepare.call(this.widget, { field: this.state.field(name), area, event, items: [] });
+      if (!Array.isArray(items) || items.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      this.closeFieldMenu();
+      const menu = root.document.createElement("div");
+      menu.className = "pivot-cell-menu";
+      menu.setAttribute("role", "menu");
+      menu.setAttribute("aria-label", this.state.field(name).caption);
+      items.forEach(item => {
+        const button = root.document.createElement("button");
+        button.type = "button";
+        button.className = "pivot-cell-menu__item";
+        button.setAttribute("role", "menuitem");
+        button.textContent = String(item?.label ?? item?.text ?? "");
+        button.disabled = item?.disabled === true;
+        button.addEventListener("click", () => {
+          this.closeFieldMenu();
+          item?.onClick?.({ field: this.state.field(name), area, item });
+        });
+        menu.appendChild(button);
+      });
+      menu.addEventListener("keydown", keyEvent => {
+        if (keyEvent.key === "Escape") {
+          this.closeFieldMenu();
+          chip.focus?.();
+        }
+      });
+      PivotForge.matchDirection?.(menu, chip);
+      root.document.body.appendChild(menu);
+      menu.style.left = `${Math.max(8, event.clientX ?? 0)}px`;
+      menu.style.top = `${Math.max(8, event.clientY ?? 0)}px`;
+      this.fieldMenu = menu;
+      this.fieldMenuDismiss = dismiss => {
+        if (!menu.contains(dismiss.target)) {
+          this.closeFieldMenu();
+        }
+      };
+      root.document.addEventListener("pointerdown", this.fieldMenuDismiss, true);
+      menu.querySelector?.("button:not(:disabled)")?.focus?.();
+    }
+
+    closeFieldMenu() {
+      this.fieldMenu?.remove?.();
+      this.fieldMenu = null;
+      if (this.fieldMenuDismiss) {
+        root.document.removeEventListener("pointerdown", this.fieldMenuDismiss, true);
+        this.fieldMenuDismiss = null;
+      }
     }
 
     // A press becomes a drag only after it has travelled far enough to be one,
@@ -799,6 +962,27 @@
       // Chip controls sit outside the tab sequence but a click still focuses
       // them, and their keys belong to them rather than to the chip.
       if (event.target && event.target !== chip) {
+        return;
+      }
+
+      // In the "All fields" list Enter ticks or clears the checkbox, which is
+      // kept out of the tab sequence like every other chip control.
+      if (!this.grab && event.key === "Enter" && chip.dataset.listed === "true") {
+        event.preventDefault?.();
+        if (!this.isLastValue(name)) {
+          this.focusField = name;
+          this.placeFields([name], this.state.areaOf(name) === "available");
+        }
+        return;
+      }
+
+      // The menu key opens the field's own menu, as a right click does.
+      if (!this.grab && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
+        const rect = chip.getBoundingClientRect?.() ?? { left: 0, top: 0 };
+        this.openFieldMenu(
+          { preventDefault: () => event.preventDefault?.(), clientX: rect.left + 12, clientY: rect.top + 12, key: event.key },
+          name,
+          chip);
         return;
       }
 
@@ -2455,7 +2639,7 @@
       const head = document.createElement("div");
       head.className = "pivot-section__head";
       head.id = this.zoneHeadingId("available");
-      head.textContent = this.labels.available;
+      head.textContent = this.allFields ? this.labels.allFields : this.labels.available;
       section.appendChild(head);
 
       // Removing a field was only possible through its × button: a chip could be
@@ -2510,9 +2694,21 @@
       return section;
     }
 
+    // The names the field list shows: the unplaced ones, or with allFields
+    // every field the reader can see, in catalog order.
+    listedNames() {
+      if (!this.allFields) {
+        return this.namesIn("available");
+      }
+
+      const available = new Set(this.namesIn("available"));
+      return [...this.state.catalog.keys()].filter(name =>
+        !available.has(name) || this.state.field(name).visible !== false);
+    }
+
     renderAvailableChips(body) {
       const term = foldSearch(this.searchTerm.trim());
-      const names = this.namesIn("available").filter(name => {
+      const names = this.listedNames().filter(name => {
         if (!term) {
           return true;
         }
@@ -2528,7 +2724,10 @@
 
       folders.forEach(folder => {
         const open = term !== "" || !this.collapsedFolders.has(folder);
-        nodes.push(this.createFolderHeading(body, folder, open));
+        const heading = this.createFolderHeading(body, folder, open);
+        nodes.push(this.allFields
+          ? this.withFolderCheckbox(heading, names.filter(name => folderOf(name) === folder))
+          : heading);
 
         if (open) {
           nodes.push(...names.filter(name => folderOf(name) === folder).map(name => {
@@ -2560,8 +2759,10 @@
 
         this.renderAvailableChips(body);
         this.refreshTabStops();
+        // Under allFields the heading sits in a row beside its checkbox.
         Array.from(body.children)
-          .find(child => child.dataset?.action === "folder" && child.dataset.folder === folder)
+          .map(child => child.dataset?.action === "folder" ? child : child.querySelector?.('[data-action="folder"]'))
+          .find(child => child?.dataset?.folder === folder)
           ?.focus?.();
       });
 
@@ -2634,7 +2835,7 @@
 
       ZONES.forEach(area => grid.appendChild(this.createZone(area)));
 
-      this.footer = this.deferUpdates === null ? null : this.createFooter();
+      this.footer = this.deferUpdates === null || !this.showDeferBox ? null : this.createFooter();
       this.host.replaceChildren(...[this.createAvailable(), grid, this.footer].filter(Boolean));
       this.refreshTabStops();
 
@@ -2683,6 +2884,7 @@
       }
 
       this.disposed = true;
+      this.closeFieldMenu();
       // A drag in flight holds pointer capture and three listeners on a chip
       // that is about to be thrown away.
       this.endDrag();

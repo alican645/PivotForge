@@ -767,6 +767,33 @@ The catalog is fixed at construction — it is every field the grid declared, re
 
 The designer renders a **search input** above the available-field list that filters it case-insensitively by matching the field's **caption**, not its `dataField` name. Search is a display-only filter — it never touches `PivotLayoutState` and never triggers `widget.update()`.
 
+### Field chooser
+
+DevExtreme's field chooser popup: the field designer in a dialog, on the grid's own
+layout, opened from the cell and header menus (**Show field chooser** / "Alan
+seçiciyi göster"), the `FieldChooser` toolbar button or `widget.showFieldChooser()`.
+It needs no host element on the page.
+
+```cshtml
+<pivot-grid id="pivotGrid" toolbar-items="FieldChooser"
+            field-chooser-layout="ListOnTop"
+            field-chooser-apply-changes-mode="OnDemand">
+```
+
+| Attribute | Builder / JavaScript | Default | Meaning |
+| --- | --- | --- | --- |
+| `field-chooser` | `FieldChooser(true)` / `fieldChooser: true` | off | Gives the grid one. Any of the attributes below implies it. |
+| `field-chooser-layout` | `FieldChooser(layout, ...)` / `layout: 0, 1, 2` | `ListBesideRowsAndColumns` (0) | DevExtreme's layouts: the list beside rows and columns with filters and values below (0), beside the four zones stacked (1), across the top with the zones in two rows (2). Narrow dialogs stack everything. |
+| `field-chooser-all-fields` | `allFields` | `true` | Lists every field, placed or not, each with a checkbox: ticking a measure puts it among the values, any other field on the columns; clearing removes it; a folder's box places its first field, or removes every placed one. Enter on a listed field does the same. `false` lists only the unplaced fields. |
+| `field-chooser-apply-changes-mode` | `applyChangesMode: "instantly" \| "onDemand"` | `Instantly` | `OnDemand` holds every edit until **OK**; **Cancel**, Escape or a click outside puts the layout back as the dialog found it. |
+
+The same arrangements are available to a designer the page hosts:
+`field-designer-layout` (`FieldDesignerLayout`, `fieldDesignerLayout`) and
+`field-designer-all-fields` (`FieldDesignerAllFields`, `fieldDesignerAllFields`).
+A right click (or the menu key) on a field chip raises `contextMenuPreparing` with
+`field` and `area` instead of a cell; the menu has no entries of its own and opens
+only when the page adds some.
+
 ### Top-N
 
 `pivot-top-n` limits one row header level to its highest or lowest ranking groups:

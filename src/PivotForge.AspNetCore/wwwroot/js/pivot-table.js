@@ -21,6 +21,8 @@ const TEXTS = {
   sortColumnsByValue: "Sort columns by this row",
   filterByValue: "Filter by this value",
   addConditionalFormat: "Add conditional formatting",
+  // DevExtreme's "Show Field Chooser", in every menu while the grid has one.
+  showFieldChooser: "Show field chooser",
   resizeColumn: "Resize column",
   sortField: "Sort {0}",
   sortActive: "{0} is sorted",
@@ -2396,7 +2398,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       const isCopy = isCell && (event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("tr") === "c";
       const isMenuKey = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
 
-      if (!isCell && isMenuKey && settings.contextMenu && this.headerLevelOf(target)) {
+      if (!isCell && isMenuKey && settings.contextMenu &&
+          (this.headerLevelOf(target) || typeof settings.onShowFieldChooser === "function")) {
         event.preventDefault();
         const rect = target.getBoundingClientRect();
         const x = PivotForge.isRtl(target) ? rect.right - 12 : rect.left + 12;
@@ -2470,8 +2473,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // header has one only when the page offers items for it.
       const header = target ? null : event.target.closest("th");
       if (header && table.contains(header) &&
-          (this.headerLevelOf(header) || (typeof settings.onContextMenuPreparing === "function" &&
-            this.describeCell(header, settings)))) {
+          (this.headerLevelOf(header) || typeof settings.onShowFieldChooser === "function" ||
+            (typeof settings.onContextMenuPreparing === "function" && this.describeCell(header, settings)))) {
         event.preventDefault();
         this.openHeaderMenu(header, event.clientX, event.clientY, settings, event);
         return;
@@ -2892,9 +2895,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     // A header without groups below it has no menu of its own, but a page may
     // still give it one through contextMenuPreparing.
+    const chooser = this.fieldChooserItem(settings.texts ?? TEXTS, settings);
+    const chooserItems = chooser.available ? [chooser] : [];
+    const pickChooser = action => {
+      this.closeContextMenu();
+      if (action === "field-chooser") {
+        settings.onShowFieldChooser?.();
+      }
+    };
+
     if (!target) {
-      return this.presentPreparedMenu(header, (settings.texts ?? TEXTS).headerActions, [],
-        () => this.closeContextMenu(), clientX, clientY, settings, event);
+      return this.presentPreparedMenu(header, (settings.texts ?? TEXTS).headerActions, chooserItems,
+        pickChooser, clientX, clientY, settings, event);
     }
 
     const texts = settings.texts ?? TEXTS;
@@ -2909,11 +2921,14 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       texts.headerActions,
       [
         { action: "expand-level", label: formatText(texts.expandLevel, caption), disabled: closedCount === 0 },
-        { action: "collapse-level", label: formatText(texts.collapseLevel, caption), disabled: closedCount === keys.length }
+        { action: "collapse-level", label: formatText(texts.collapseLevel, caption), disabled: closedCount === keys.length },
+        ...chooserItems
       ],
       action => {
         this.closeContextMenu();
-        if (action === "expand-level") {
+        if (action === "field-chooser") {
+          pickChooser(action);
+        } else if (action === "expand-level") {
           this.expandLevel(target.axis, target.level);
         } else {
           this.collapseLevel(target.axis, target.level);
@@ -3111,8 +3126,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         label: texts.addConditionalFormat,
         disabled: !isNumeric || !selection?.valueKey,
         available: Boolean(settings?.onConditionalFormatRequested)
-      }
+      },
+      this.fieldChooserItem(texts, settings)
     ].filter(item => item.available !== false);
+  }
+
+  fieldChooserItem(texts = TEXTS, settings = this.lastSettings) {
+    return {
+      action: "field-chooser",
+      label: texts.showFieldChooser ?? TEXTS.showFieldChooser,
+      disabled: false,
+      available: typeof settings?.onShowFieldChooser === "function"
+    };
   }
 
   handleContextMenuAction(action, cell, settings = this.lastSettings) {
@@ -3144,6 +3169,9 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         break;
       case "conditional":
         settings?.onConditionalFormatRequested?.(this.cloneSelection(selection), cell);
+        break;
+      case "field-chooser":
+        settings?.onShowFieldChooser?.();
         break;
     }
   }

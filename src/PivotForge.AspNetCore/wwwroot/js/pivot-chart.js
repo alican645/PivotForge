@@ -427,7 +427,25 @@
       return this.values?.find(value => value.key === this.state.valueKey) ?? null;
     }
 
+    // A redraw replaces the scroller. When it had focus -- a reader stepping
+    // through categories while the box resizes -- focus and the category it
+    // was on carry over to the new one rather than being lost with the old.
     draw() {
+      const active = root.document?.activeElement;
+      const hadFocus = Boolean(active?.classList?.contains("pivot-chart__scroller") && this.host.contains?.(active));
+      this.redrawing = true;
+      try {
+        this.drawContent();
+      } finally {
+        this.redrawing = false;
+      }
+
+      if (hadFocus) {
+        this.host.querySelector?.(".pivot-chart__scroller")?.focus?.({ preventScroll: true });
+      }
+    }
+
+    drawContent() {
       if (!this.result || this.disposed) {
         return;
       }
@@ -737,7 +755,11 @@
         show(inside && index >= 0 && index < categoryCount ? index : -1);
       });
       scroller.addEventListener("pointerleave", () => show(-1));
-      scroller.addEventListener("blur", () => show(-1));
+      scroller.addEventListener("blur", () => {
+        if (!this.redrawing) {
+          show(-1);
+        }
+      });
       scroller.addEventListener("keydown", event => {
         const next = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
         if (next) {

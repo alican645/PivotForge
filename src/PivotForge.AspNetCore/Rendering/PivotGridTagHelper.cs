@@ -50,6 +50,32 @@ public sealed class PivotGridTagHelper : TagHelper
     [HtmlAttributeName("defer-layout-update")]
     public bool? DeferLayoutUpdate { get; set; }
 
+    /// <summary>Gets or sets whether the grid has a field chooser popup.</summary>
+    [HtmlAttributeName("field-chooser")]
+    public bool? FieldChooser { get; set; }
+
+    /// <summary>Gets or sets how the field chooser arranges its list and zones.</summary>
+    /// <remarks>Non-nullable so Razor accepts the unqualified member name; whether it was written
+    /// is read from the element's attributes.</remarks>
+    [HtmlAttributeName("field-chooser-layout")]
+    public PivotFieldChooserLayout FieldChooserLayout { get; set; }
+
+    /// <summary>Gets or sets whether the field chooser lists every field, placed or not (the default).</summary>
+    [HtmlAttributeName("field-chooser-all-fields")]
+    public bool? FieldChooserAllFields { get; set; }
+
+    /// <summary>Gets or sets when the field chooser's edits reach the grid.</summary>
+    [HtmlAttributeName("field-chooser-apply-changes-mode")]
+    public PivotApplyChangesMode FieldChooserApplyChangesMode { get; set; }
+
+    /// <summary>Gets or sets how the page's field designer arranges its list and zones.</summary>
+    [HtmlAttributeName("field-designer-layout")]
+    public PivotFieldChooserLayout FieldDesignerLayout { get; set; }
+
+    /// <summary>Gets or sets whether the page's field designer lists every field with a checkbox.</summary>
+    [HtmlAttributeName("field-designer-all-fields")]
+    public bool? FieldDesignerAllFields { get; set; }
+
     /// <summary>Gets or sets whether the grid is laid out right to left; undeclared follows the page.</summary>
     [HtmlAttributeName("rtl-enabled")]
     public bool? RtlEnabled { get; set; }
@@ -420,6 +446,34 @@ public sealed class PivotGridTagHelper : TagHelper
         if (DeferLayoutUpdate is { } deferLayoutUpdate)
         {
             builder.DeferLayoutUpdate(deferLayoutUpdate);
+        }
+
+        var chooserDetails = written.Contains("field-chooser-layout") ||
+            written.Contains("field-chooser-all-fields") ||
+            written.Contains("field-chooser-apply-changes-mode");
+        if (FieldChooser == false && chooserDetails)
+        {
+            throw new InvalidOperationException(
+                "pivot-grid sets field-chooser=\"false\" and describes the field chooser. Drop one of them.");
+        }
+
+        if (chooserDetails)
+        {
+            builder.FieldChooser(FieldChooserLayout, FieldChooserAllFields ?? true, FieldChooserApplyChangesMode);
+        }
+        else if (FieldChooser is { } fieldChooser)
+        {
+            builder.FieldChooser(fieldChooser);
+        }
+
+        if (written.Contains("field-designer-layout"))
+        {
+            builder.FieldDesignerLayout(FieldDesignerLayout);
+        }
+
+        if (FieldDesignerAllFields is { } fieldDesignerAllFields)
+        {
+            builder.FieldDesignerAllFields(fieldDesignerAllFields);
         }
 
         if (RtlEnabled is { } rtlEnabled)

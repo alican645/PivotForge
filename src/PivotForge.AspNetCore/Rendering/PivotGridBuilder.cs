@@ -291,6 +291,45 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>The same builder.</returns>
     public PivotGridBuilder FieldDesigner(string selector) => Set("fieldDesigner", selector);
 
+    /// <summary>Arranges the page's field designer the way a field chooser layout does.</summary>
+    /// <param name="layout">The arrangement.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder FieldDesignerLayout(PivotFieldChooserLayout layout) =>
+        Set("fieldDesignerLayout", (int)layout);
+
+    /// <summary>Lists every field in the page's field designer, placed or not, each with a
+    /// checkbox that places or removes it -- the field chooser's "All fields".</summary>
+    /// <param name="allFields">True to list every field.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder FieldDesignerAllFields(bool allFields) => Set("fieldDesignerAllFields", allFields);
+
+    /// <summary>Gives the grid a field chooser popup, DevExtreme's <c>fieldChooser.enabled</c>.</summary>
+    /// <remarks>
+    /// Opened from the cell and header menus ("Show field chooser"), the
+    /// <see cref="PivotToolbarItem.FieldChooser"/> button or <c>showFieldChooser()</c>: the field
+    /// designer in a dialog, on the grid's own layout, listing every field (layout 0). Edits apply as
+    /// they are made.
+    /// </remarks>
+    /// <param name="enabled">True to give the grid one.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder FieldChooser(bool enabled) => Set("fieldChooser", enabled);
+
+    /// <summary>Gives the grid a field chooser popup arranged and applied as given.</summary>
+    /// <param name="layout">How the list and the zones are arranged.</param>
+    /// <param name="allFields">True to list every field with a checkbox; false to list the unplaced ones.</param>
+    /// <param name="applyChangesMode"><see cref="PivotApplyChangesMode.OnDemand"/> holds edits until OK.</param>
+    /// <returns>The same builder.</returns>
+    public PivotGridBuilder FieldChooser(
+        PivotFieldChooserLayout layout,
+        bool allFields = true,
+        PivotApplyChangesMode applyChangesMode = PivotApplyChangesMode.Instantly) =>
+        Set("fieldChooser", new Dictionary<string, object?>
+        {
+            ["layout"] = (int)layout,
+            ["allFields"] = allFields,
+            ["applyChangesMode"] = applyChangesMode == PivotApplyChangesMode.OnDemand ? "onDemand" : "instantly"
+        });
+
     /// <summary>Persists the layout, captions, filters, and sort the user arrives at.</summary>
     /// <param name="storage">Where to persist. <see cref="PivotStateStorage.None"/> writes nothing.</param>
     /// <returns>The same builder.</returns>

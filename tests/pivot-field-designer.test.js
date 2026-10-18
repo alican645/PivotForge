@@ -2649,3 +2649,125 @@ test("a mouse drag of the Σ chip onto the rows zone moves it there", async () =
 
   assert.equal(designer.state.valuesPosition, "rows");
 });
+
+// --- Field chooser: layouts, "All fields", the field menu -------------------
+
+const chooserCatalog = [
+  { dataField: "Region", caption: "Bölge", area: "row" },
+  { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" },
+  { dataField: "Quantity", caption: "Miktar", area: "available", role: "measure", displayFolder: "Ölçüler" },
+  { dataField: "Discount", caption: "İskonto", area: "available", role: "measure", displayFolder: "Ölçüler" },
+  { dataField: "City", caption: "Şehir", area: "available", role: "dimension" }
+];
+
+function buildChooser(options = {}) {
+  const updates = [];
+  const menus = [];
+  const widget = {
+    update: async payload => { updates.push(payload); },
+    prepareFieldMenu: payload => {
+      menus.push(payload);
+      return options.menuItems ?? payload.items;
+    }
+  };
+  const state = new PivotForge.PivotLayoutState(chooserCatalog);
+  const host = createElement("div");
+  const designer = new PivotForge.PivotFieldDesigner(host, { state, widget, allFields: true, ...options });
+  return { designer, state, host, updates, menus };
+}
+
+const listChips = host => chips(zone(host, "available"));
+const placeBox = (host, name) => findByAction(listChips(host).find(chip => chip.dataset.field === name), "place");
+
+test("a layout names itself on the host, and none leaves the panel as it was", () => {
+  const { host } = buildChooser({ layout: 2 });
+  assert.equal(host.classList.contains("is-layout-2"), true);
+  assert.equal(host.classList.contains("is-layout-0"), false);
+
+  const plain = build();
+  assert.equal([0, 1, 2].some(layout => plain.host.classList.contains(`is-layout-${layout}`)), false);
+});
+
+test("All fields lists the placed fields too, each ticked as it is", () => {
+  const { host } = buildChooser();
+
+  assert.deepEqual(listChips(host).map(chip => chip.dataset.field).sort(),
+    ["Amount", "City", "Discount", "Quantity", "Region"]);
+  assert.equal(placeBox(host, "Region").checked, true);
+  assert.equal(placeBox(host, "City").checked, false);
+  // The last value cannot leave, so its box cannot be cleared.
+  assert.equal(placeBox(host, "Amount").disabled, true);
+});
+
+test("ticking places a measure among the values and a dimension on the columns; clearing removes", async () => {
+  const { host, state, updates } = buildChooser();
+
+  placeBox(host, "Quantity").checked = true;
+  placeBox(host, "Quantity").dispatch("change", {});
+  placeBox(host, "City").checked = true;
+  placeBox(host, "City").dispatch("change", {});
+  await Promise.resolve();
+
+  assert.equal(state.areaOf("Quantity"), "data");
+  assert.equal(state.areaOf("City"), "column");
+
+  placeBox(host, "Region").checked = false;
+  placeBox(host, "Region").dispatch("change", {});
+  await Promise.resolve();
+  assert.equal(state.areaOf("Region"), "available");
+  assert.ok(updates.length >= 3);
+});
+
+test("a folder's box places its first field, then removes every placed one", async () => {
+  const { host, state } = buildChooser();
+  const folderBox = () => findByAction(zone(host, "available"), "place-folder");
+
+  folderBox().dispatch("change", {});
+  await Promise.resolve();
+  assert.equal(state.areaOf("Quantity"), "data");
+  assert.equal(state.areaOf("Discount"), "available");
+
+  state.move("Discount", "data");
+  folderBox().dispatch("change", {});
+  await Promise.resolve();
+  assert.equal(state.areaOf("Quantity"), "available");
+  assert.equal(state.areaOf("Discount"), "available");
+});
+
+test("Enter on a listed field ticks or clears it", async () => {
+  const { host, state } = buildChooser();
+  const city = listChips(host).find(chip => chip.dataset.field === "City");
+
+  city.dispatch("keydown", { key: "Enter", target: city, preventDefault() {} });
+  await Promise.resolve();
+  assert.equal(state.areaOf("City"), "column");
+});
+
+test("a field's menu asks the widget and opens only when the page adds items", () => {
+  const picked = [];
+  const { host, menus } = buildChooser({
+    menuItems: [{ label: "Hakkında", onClick: event => picked.push(event.field.dataField) }]
+  });
+  const region = chips(zone(host, "row")).find(chip => chip.dataset.field === "Region");
+
+  region.dispatch("contextmenu", { clientX: 10, clientY: 10, preventDefault() {} });
+
+  assert.equal(menus[0].area, "row");
+  assert.equal(menus[0].field.dataField, "Region");
+  const menu = documentBody._children.at(-1);
+  assert.equal(menu.className, "pivot-cell-menu");
+  menu.children[0].dispatch("click", {});
+  assert.deepEqual(picked, ["Region"]);
+});
+
+test("a field menu the page leaves empty does not open", () => {
+  const { host } = buildChooser({ menuItems: [] });
+  const before = documentBody._children.length;
+  let prevented = false;
+  const region = chips(zone(host, "row")).find(chip => chip.dataset.field === "Region");
+
+  region.dispatch("contextmenu", { preventDefault() { prevented = true; } });
+
+  assert.equal(documentBody._children.length, before);
+  assert.equal(prevented, false);
+});

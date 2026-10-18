@@ -14,6 +14,26 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- DevExtreme's field chooser popup: `field-chooser` / `FieldChooser(...)` /
+  `fieldChooser: true | { layout, allFields, applyChangesMode, title }`, opened
+  from the cell and header menus ("Show field chooser"), the `FieldChooser`
+  toolbar button or `showFieldChooser()`. It is the field designer in a dialog
+  on the grid's own layout, in DevExtreme's three layouts
+  (`PivotFieldChooserLayout`), listing every field with a checkbox that places
+  a measure among the values and any other field on the columns.
+  `applyChangesMode: "onDemand"` (`PivotApplyChangesMode.OnDemand`) holds edits
+  until OK; Cancel and Escape put the layout back. A page-hosted designer takes
+  the same `field-designer-layout` / `field-designer-all-fields`, and a field
+  chip's right click raises `contextMenuPreparing` with the field. (AspNetCore)
+
+### Fixed
+
+- A chart redrawn while a reader stepped through its categories with the
+  arrow keys -- its box resizing, for instance -- lost keyboard focus and the
+  category on show; both now carry over to the redrawn chart. (AspNetCore)
+
 ## [0.8.0-preview.1] — 2026-10-18
 
 Calculations checked against DevExtreme 26.1.3 (a 275-scenario reference

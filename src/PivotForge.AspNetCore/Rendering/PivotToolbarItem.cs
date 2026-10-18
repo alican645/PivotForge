@@ -34,5 +34,11 @@ public enum PivotToolbarItem
     /// Shows or hides the grid's chart, keeping the choice with the view. Shown only when the grid
     /// has a chart; see <see cref="PivotGridBuilder.Chart"/>.
     /// </summary>
-    Chart
+    Chart,
+
+    /// <summary>
+    /// Opens the field chooser. Shown only when the grid has one; see
+    /// <see cref="PivotGridBuilder.FieldChooser(bool)"/>.
+    /// </summary>
+    FieldChooser
 }
