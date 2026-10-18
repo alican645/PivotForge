@@ -3189,6 +3189,41 @@ select {
 
 /* Says the value is computed rather than read from the source, which the
    caption alone cannot. */
+/* A hierarchy in the field list: one entry for all its levels. */
+.pivot-chip__hierarchy {
+  flex: 0 0 auto;
+  color: var(--pt-accent);
+  font-weight: 700;
+}
+
+/* A group's levels in a zone, tied by a line down their left edge (DevExtreme's
+   group connector) so they read as one thing that moves together. */
+.pivot-chip.is-grouped {
+  position: relative;
+  margin-left: 0.625rem;
+}
+
+.pivot-chip.is-grouped::before {
+  content: "";
+  position: absolute;
+  left: -0.5rem;
+  top: -0.25rem;
+  bottom: -0.25rem;
+  border-left: 2px solid var(--pt-accent);
+}
+
+.pivot-chip.is-grouped.is-group-first::before {
+  top: 50%;
+}
+
+.pivot-chip.is-grouped.is-group-last::before {
+  bottom: 50%;
+}
+
+.pivot-chip.is-grouped.is-group-first.is-group-last::before {
+  display: none;
+}
+
 .pivot-chip__badge {
   flex: 0 0 auto;
   color: var(--pt-accent);

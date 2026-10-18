@@ -103,6 +103,10 @@ app.MapPivotForgeEndpoints()
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-chart.js"></script>
 
+<!-- Optional: a grid loading from a DevExtreme.AspNet.Data backend (RemoteStore). -->
+<script src="/_content/PivotForge.AspNetCore/js/pivot-result-assembler.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-remote-store.js"></script>
+
 <!-- Optional: the language every component shows. English needs nothing. -->
 <script src="/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>
 ```
@@ -163,7 +167,7 @@ Every field belongs to exactly one of five areas:
 | --- | --- |
 | `row` | Placed on the row axis. |
 | `column` | Placed on the column axis. |
-| `data` | Aggregated as a pivot value. At least one `data` field is required. |
+| `data` | Aggregated as a pivot value. At least one `data` field is required, except on a grid that [discovers its fields](#discovering-fields). |
 | `filter` | Exposed for filtering without appearing in the row/column layout. |
 | `available` | Declared for the [field designer](#field-designer)'s catalog without being placed in the layout. Not used outside a designer. |
 
@@ -173,7 +177,7 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | --- | --- | --- |
 | `dataField` | — | Required, non-empty. |
 | `area` | `"data"` | One of `row`, `column`, `data`, `filter`, `available`. |
-| `caption` | the `dataField` value | Display label. |
+| `caption` | the `dataField` in title case | Display label. Undeclared, it is made as DevExtreme makes it: the data field split at camelCase boundaries and at `_ - .`, each word capitalised, with the interval for a grouped level and the summary type for a measure that declares one — `netAmount` summed reads `Net Amount (Sum)`, `OrderDate` by year `Order Date Year`. An acronym stays as written (`orderID` → `Order ID`). `PivotForge.PivotRequestBuilder.titleize(text)` is the same rule. |
 | `role` | inferred from `area` | One of `dimension`, `measure`. **Required** when `area` is `available`, because there is no placement to infer it from. Elsewhere it is inferred (`data` → `measure`, everything else → `dimension`); an explicit `role` that contradicts its `area` — e.g., `measure` outside `data` — is a validation error. See [role rules](#field-designer). |
 | `aggregation` | `"sum"` (only on `data` fields) | One of `sum`, `count`, `average`, `min`, `max`, `countDistinct`, `median`, `variance`, `standardDeviation`, `variancePopulation`, `standardDeviationPopulation`, `first`, `last`. Setting `aggregation` on a non-`data` field is a validation error. |
 | `showAs` | `"normal"` (only on `data` fields) | One of `normal`, `percentOfRowTotal`, `percentOfColumnTotal`, `percentOfGrandTotal`, `differenceFromPrevious`, `percentDifferenceFromPrevious`, `runningTotal`, `percentOfParentRowTotal`, `percentOfParentColumnTotal` (a value's share of its parent group on that axis — a city's share of its region). A percent mode on a field with no declared `format` is drawn as a percentage (`18.25%`) and exported as `0.00%`, as DevExtreme gives a percent display mode a percent format. Setting `showAs` on a non-`data` field is a validation error. |
@@ -182,6 +186,8 @@ Field properties and their defaults (JavaScript field object shape; `PivotFieldB
 | `customizeText` | `null` | Only on `data` fields (and `available` measures). A function, or the name of one on the page (`"app.pivot.amountText"`, resolved when a cell is drawn like an event handler, so it may be defined further down the page), that has the last word on each value's text. It is called with `{ value, valueText, valueKey }`, after the format; what it returns is shown, and `null` or `undefined` keeps `valueText`. From C#: `CustomizeText(string)`; from markup: `customize-text`. The Excel export keeps the number and its format, not this text; the CSV export writes what the grid shows. |
 | `allowCrossGroupCalculation` | `true` | Only on `data` fields. Whether `showAs: "runningTotal"` and the two "previous" comparisons walk the whole row (the default, as before) or start afresh at each outer column group: with Year and Quarter on the columns, `false` starts the running total again every year and gives each year's first quarter nothing to compare with. The group is the last column level's parent, so with Year, Quarter and Month it starts again every quarter. A single column level is one group either way. This follows DevExtreme's option of the same name, whose default is the opposite. From C#: `AllowCrossGroupCalculation(bool)`; from markup: `allow-cross-group-calculation`; in the engine: `PivotValueDefinition.AllowCrossGroupCalculation`. |
 | `displayFolder` | `null` | Valid in every area. The folder the field is listed under in the designer's field list, such as `"Sales"`: fields without one come first, then a heading per folder, in the order the catalog first names it, that opens and closes. A search opens every folder so a match is never hidden. One level only; the name is not split. From C#: `DisplayFolder(string)`; from markup: `display-folder`. |
+| `groupName` | `null` | Makes the field part of a hierarchy, DevExtreme's `groupName`. A field with `groupName` and neither `groupIndex` nor `groupInterval` is the group itself; one with `groupIndex` is a level of it. See [Field groups](#field-groups). From C#: `GroupName(string)`; from markup: `group-name`. |
+| `groupIndex` | the next free level | A level's place in its group, a whole number from 0. A level with `groupName` and `groupInterval` but no index takes the next one. From C#: `GroupIndex(int)`; from markup: `group-index`. |
 | `visible` | `true` | `false` configures a field without including it in the rendered request. |
 | `expanded` | `true` | Only on `row` fields. `false` collapses this level's groups at the grid's **first** render; after that the state belongs to the user, and a restored `state-storing` view wins. Declaring it on the deepest row field does nothing — that level's rows are the detail rows and have no groups. |
 | `showTotals` | `true` | Only on `row` and `column` fields. On a row field, `false` leaves the group header in place without its sums, which is the same shape the grid uses when `subtotals` is off entirely — so a deep hierarchy can total the levels worth totalling and nowhere else. On a column field, `false` drops the total column after each of its groups. The grid-wide `subtotals="false"` / `column-subtotals="false"` still win. |
@@ -627,6 +633,7 @@ emit identical markup.
 | `chart` | `null` | A chart of the pivot beside the grid; needs `pivot-chart.js`. `true`, a type name, or `{ type, position, height, valueKey }`. See [Pivot chart](#pivot-chart). |
 | `stateStoring` | `null` | `"local"`, `"session"`, `"custom"` (with `customLoad` / `customSave`), or `null`. See [State persistence](#state-persistence). Any other value throws. |
 | `stateKey` | `null` | Names the storage entry. Falls back to the container's `id`; with neither, nothing is persisted. |
+| `store` | `null` | `{ type: "remote", loadUrl \| load, headers, onBeforeSend, limit }` loads from a DevExtreme.AspNet.Data backend instead of the PivotForge endpoints. See [Remote data (RemoteStore)](#remote-data-remotestore). |
 
 `create` returns a `PivotWidget` instance and, unless `autoLoad` is `false`, immediately calls `refresh()`.
 
@@ -787,12 +794,131 @@ It needs no host element on the page.
 | `field-chooser-all-fields` | `allFields` | `true` | Lists every field, placed or not, each with a checkbox: ticking a measure puts it among the values, any other field on the columns; clearing removes it; a folder's box places its first field, or removes every placed one. Enter on a listed field does the same. `false` lists only the unplaced fields. |
 | `field-chooser-apply-changes-mode` | `applyChangesMode: "instantly" \| "onDemand"` | `Instantly` | `OnDemand` holds every edit until **OK**; **Cancel**, Escape or a click outside puts the layout back as the dialog found it. |
 
+#### Field groups
+
+A hierarchy is declared as DevExtreme declares one: a group field naming the group, then its
+levels naming the group and their place in it.
+
+```html
+<pivot-field group-name="Date" field="OrderDate" area="Column" caption="Order date" />
+<pivot-field group-name="Date" group-index="0" group-interval="Year" />
+<pivot-field group-name="Date" group-index="1" group-interval="Quarter" />
+<pivot-field group-name="Date" group-index="2" group-interval="Month" />
+```
+
+- The group field is not a field of its own. Each level takes from it what it does not declare:
+  `area`, `areaIndex`, `expanded`, `dataField`, `dataType`, the sort settings, `visible` and
+  `showTotals`. A group with no area is offered unplaced.
+- The levels stay together in `groupIndex` order wherever the group stands. The field list
+  shows the group once, under its caption (the group field's, or `groupName` titled) with a ⋮
+  mark; on a zone its levels are drawn joined.
+- Dragging, moving with the keyboard or removing any level does the same to the whole group,
+  in the designer and the field chooser alike. A stored view that seats only part of a group, or
+  splits it, comes back with the group whole where its first level stood.
+- A level is a dimension: a group in the data area, or a level declared as a measure, is a
+  validation error, as is a `groupIndex` used twice in one group.
+
+Limitation: DevExtreme's tree header filter for a group, whose values are paths such as
+`["2024", "1"]`, is not offered; each level filters on its own values.
+
+#### Discovering fields
+
+`retrieve-fields="true"` (`RetrieveFields()`, `retrieveFields: true`) is DevExtreme's
+`retrieveFields`: before its first load the grid asks `POST {prefix}/fields` what the record
+type holds and lists every field the page did not declare in the field chooser and designer,
+unplaced. A grid that declares no fields at all discovers them unless `retrieve-fields="false"`;
+it starts with nothing summed and says so until the reader places a measure.
+
+- The fields come from the record type's public properties and fields, in declaration order, so
+  no records are loaded. A nested object or a collection is left out, as is a name starting with
+  `__`, and so is any field off `AllowedFields`.
+- A number is offered as a measure, anything else as a dimension. A date comes as a
+  [group](#field-groups) named after it, of its year, quarter and month.
+- A declared field (the same data field and interval) stays as declared and takes the
+  discovered data type if it names none.
+- `fieldsPrepared` (`on-fields-prepared`) fires with `e.fields`, the merged list, before the first
+  load; replacing or editing it changes what the grid offers.
+- A stored view that seats a discovered field waits for the fields, then comes back.
+- A failed discovery raises `error` and leaves the declared fields.
+
+Outside ASP.NET Core, `PivotFieldDiscovery.Discover<T>()`, `Discover(DataTable)` and
+`Discover(dictionaries)` in `PivotForge.Core` list the same fields.
+
 The same arrangements are available to a designer the page hosts:
 `field-designer-layout` (`FieldDesignerLayout`, `fieldDesignerLayout`) and
 `field-designer-all-fields` (`FieldDesignerAllFields`, `fieldDesignerAllFields`).
 A right click (or the menu key) on a field chip raises `contextMenuPreparing` with
 `field` and `area` instead of a cell; the menu has no entries of its own and opens
 only when the page adds some.
+
+### Remote data (RemoteStore)
+
+`remote-load-url="/api/sales/load"` (`RemoteStore("/api/sales/load")`,
+`store: { type: "remote", loadUrl: "/api/sales/load" }`) is DevExtreme's `RemoteStore`: the grid
+never calls the PivotForge endpoints. It sends `DataSourceLoader.Load` requests to any backend
+that answers them -- DevExtreme.AspNet.Data on ASP.NET Core, or anything speaking the same
+protocol -- and builds the pivot in the browser from the groups that come back. Load
+`pivot-result-assembler.js` and `pivot-remote-store.js` before the grid is created.
+
+```csharp
+// The backend: any IQueryable or IEnumerable, filtered and grouped by the library.
+app.MapGet("/api/sales/load", (HttpRequest request) =>
+{
+    var options = new SalesLoadOptions();
+    DataSourceLoadOptionsParser.Parse(options, key => request.Query[key]);
+    return Results.Json(DataSourceLoader.Load(db.Sales, options));
+});
+
+internal sealed class SalesLoadOptions : DataSourceLoadOptionsBase;
+```
+
+```html
+<pivot-grid id="sales" remote-load-url="/api/sales/load">
+    <pivot-field data-field="Region" area="Row" data-type="String" />
+    <pivot-field data-field="OrderDate" group-interval="Quarter" area="Column" />
+    <pivot-field data-field="Amount" area="Data" aggregation="Sum" />
+</pivot-grid>
+```
+
+- **The protocol.** `loadUrl` is fetched with GET, each load option JSON-encoded in the query
+  string (`group`, `groupSummary`, `totalSummary`, `filter`, `skip`, `take`, `requireTotalCount`),
+  as the DevExtreme.AspNet.Data client sends them. `headers` are added to every request, and
+  an `onBeforeSend(operation, settings)` function may change
+  `settings.url` and `settings.headers` before it goes. `remote-load="app.sales.load"`
+  (`RemoteStoreLoad`, `store: { type: "remote", load }`) hands the load options to a page
+  function instead, which returns `{ data, summary, totalCount }` or a promise of it.
+- **One request per depth.** Each row depth is one request grouped by the row levels down to it
+  and every column level, so totals, subtotals and averages are the backend's own, and they go
+  out together. A date level is grouped by its part (`year`, `quarter`, `month`, `day`,
+  `dayOfWeek`), a numeric range by its size.
+- **In the browser,** exactly as the engine does it: headers and their order, display modes
+  (`showAs`, `allowCrossGroupCalculation`), `runningTotal`, `hideEmptySummaryCells`, ordering by
+  label or by a summary (`sortByValueKey`, `sortBySummaryPath`, `rowSort`). Month and weekday
+  names follow `rendererOptions.culture`, then the locale pack's, then the browser's.
+- **Filters** go to the backend as a `filter` expression: a year, month, day or weekday by its
+  part, a quarter as a month range, a numeric range as `>=` / `<`, `Contains`, `StartsWith` and
+  `EndsWith` on text as the server's own. A filter it cannot express directly loads the field's
+  values first and is sent as the values it keeps.
+- **The filter picker** asks for one level grouped; **drill-down** sends the cell's filter with
+  `take` (the store's `limit`, 1000 by default) and `requireTotalCount`; **`retrieveFields`**
+  reads the first 20 records and offers what they hold, a date as its year, quarter and month.
+
+Refused when the grid starts or the field changes, with a message naming what is refused,
+because the protocol has no way to carry it: aggregations other than `sum`, `count`, `average`,
+`min` and `max`; calculated fields (`expression`) and relative formulas; `selector`; a
+`sortingMethod`; top N; value filters; `largeData`. The designer does not offer them.
+
+#### Limitations
+
+- **Count** is the number of records in a group, as DataSourceLoader counts, where the engine
+  counts the values that are not null.
+- **Text comparisons** follow the backend: DataSourceLoader compares strings ignoring case.
+- **Order the grid does not set:** a column level with no `sortOrder` and `sortBy: "none"` keeps
+  the order the backend returns, and rows tied under a `rowSort` keep the order they arrived in.
+- **Labels of computed keys** -- a decimal's scale, a negative range's bounds -- are formatted
+  from the number the backend returns, which may differ in its last digits from the engine's.
+- **The whole result** is loaded at once; branches are not loaded as they are expanded.
+- **Excel export** still asks `{prefix}/excel`; without the PivotForge endpoints, use CSV.
 
 ### Top-N
 
@@ -1603,6 +1729,7 @@ picker.
 | `POST /pivotforge/drill-down` | Return source records matching row and column paths |
 | `POST /pivotforge/field-values` | Return the distinct values a filter on one field can accept; optional `filters` narrow them to the records those filters keep |
 | `POST /pivotforge/excel` | Convert a renderer export model into an `.xlsx` response |
+| `POST /pivotforge/fields` | List the record type's fields, as far as `AllowedFields` reaches, for `retrieveFields` |
 
 A missing or expired large-data session returns HTTP `410 Gone`. Invalid pivot, paging, drill-down, field-values, and Excel requests return HTTP `400 Bad Request`. Request cancellation propagates through the provider and Core calculation.
 

@@ -64,7 +64,9 @@
   const VALUES_POSITIONS = ["columns", "rows"];
 
   class PivotLayoutState {
-    constructor(catalog, layout = null) {
+    // options.startEmpty: a catalog with no measure -- fields discovered, none
+    // placed yet -- may start with no value, for the reader to place one.
+    constructor(catalog, layout = null, { startEmpty = false } = {}) {
       const normalized = PivotForge.PivotRequestBuilder.normalizeFields(catalog ?? []);
 
       // Keyed by level rather than by column: one date column grouped by year and
@@ -108,8 +110,12 @@
       } else {
         this.layout = this.layoutFromCatalog(normalized);
       }
+      this.drawUpGroups();
 
-      if (this.layout.values.length === 0) {
+      // Once a value is placed the last one stays, as it always does; a
+      // stored layout may not drop them either.
+      const startsEmpty = startEmpty && !layout && !normalized.some(field => field.visible && field.area === "data");
+      if (this.layout.values.length === 0 && !startsEmpty) {
         throw new Error("A pivot layout requires at least one field in the data area.");
       }
     }
@@ -671,6 +677,59 @@
       return this.canPlaceByRole(name, area);
     }
 
+    // The levels moving with a field: every visible level of its group, in level
+    // order, or the field alone.
+    groupMembers(name) {
+      const groupName = this.catalog.get(name)?.groupName ?? null;
+      if (groupName === null) {
+        return [name];
+      }
+
+      return [...this.catalog.values()]
+        .filter(field => field.groupName === groupName && field.visible !== false)
+        .sort((left, right) => left.groupIndex - right.groupIndex)
+        .map(field => field.key);
+    }
+
+    // A group is placed whole, its levels side by side in level order, where
+    // the first of them stands -- however the layout came: declared, stored
+    // before groups existed, or naming only one level. Pieces of it anywhere
+    // else are taken away.
+    drawUpGroups() {
+      const seen = new Set();
+      const keyOf = entry => (typeof entry === "string" ? entry : entry.field);
+      for (const key of ["rows", "columns", "filters"]) {
+        const drawn = [];
+        for (const entry of this.layout[key]) {
+          const name = keyOf(entry);
+          const groupName = this.catalog.get(name)?.groupName ?? null;
+          if (groupName === null) {
+            drawn.push(entry);
+            continue;
+          }
+
+          // A filter entry of a level seated on an axis is that level's filter,
+          // not a placement: it stays where it is.
+          if (key === "filters" && this.areaOf(name) !== "filter") {
+            drawn.push(entry);
+            continue;
+          }
+
+          if (seen.has(groupName)) {
+            continue;
+          }
+
+          seen.add(groupName);
+          for (const member of this.groupMembers(name)) {
+            const existing = this.layout[key].find(candidate => keyOf(candidate) === member);
+            drawn.push(existing ?? (key === "filters" ? { field: member, values: [], mode: "Include" } : member));
+          }
+        }
+
+        this.layout[key] = drawn;
+      }
+    }
+
     detach(name) {
       this.layout.rows = this.layout.rows.filter(entry => entry !== name);
       this.layout.columns = this.layout.columns.filter(entry => entry !== name);
@@ -688,6 +747,12 @@
     move(name, area, index) {
       if (!this.canDrop(name, area)) {
         throw new Error(`Field "${name}" cannot be placed in area "${area}".`);
+      }
+
+      const members = this.groupMembers(name);
+      if (members.length > 1) {
+        this.moveGroup(members, area, index);
+        return;
       }
 
       const key = AREA_TO_KEY[area];
@@ -734,9 +799,40 @@
       this.emitChange();
     }
 
+    // A whole group into `area` at `index` (counted against the area as it is
+    // now): each level keeps its own entry and the filter it carries, as one
+    // field moved on its own does.
+    moveGroup(members, area, index) {
+      const key = AREA_TO_KEY[area];
+      const keyOf = entry => (typeof entry === "string" ? entry : entry.field);
+      const before = this.layout[key];
+      const existing = new Map(before.filter(entry => members.includes(keyOf(entry)))
+        .map(entry => [keyOf(entry), entry]));
+      const carried = area === "filter"
+        ? []
+        : this.layout.filters.filter(filter => members.includes(filter.field) && this.areaOf(filter.field) !== "filter");
+      const insertBefore = index === undefined || index === null
+        ? before.length
+        : before.slice(0, index).filter(entry => !members.includes(keyOf(entry))).length;
+
+      members.forEach(member => this.detach(member));
+      const entries = members.map(member => existing.get(member) ??
+        (area === "filter" ? { field: member, values: [], mode: "Include" } : member));
+      this.layout[key].splice(Math.min(insertBefore, this.layout[key].length), 0, ...entries);
+      this.layout.filters.push(...carried);
+      this.emitChange();
+    }
+
     remove(name) {
       const area = this.areaOf(name);
       if (area === "available") {
+        return;
+      }
+
+      const members = this.groupMembers(name);
+      if (members.length > 1) {
+        members.forEach(member => this.detach(member));
+        this.emitChange();
         return;
       }
 
@@ -767,6 +863,15 @@
 
       if (!Number.isInteger(toIndex) || toIndex < 0 || toIndex >= target.length) {
         throw new Error(`Cannot reorder area "${area}" to index ${toIndex}: out of bounds.`);
+      }
+
+      const moved = target[fromIndex];
+      const members = this.groupMembers(typeof moved === "string" ? moved : moved.field);
+      if (members.length > 1) {
+        // The block lands where the one entry would have: before the entry now
+        // at toIndex, or after it when moving down.
+        this.moveGroup(members, area, toIndex > fromIndex ? toIndex + 1 : toIndex);
+        return;
       }
 
       const [entry] = target.splice(fromIndex, 1);
@@ -1058,7 +1163,11 @@
         ...(field?.allowFiltering === false ? { allowFiltering: false } : {}),
         ...(field?.width ? { width: field.width } : {}),
         ...(typeof field?.wordWrap === "boolean" ? { wordWrap: field.wordWrap } : {}),
-        ...(field?.displayFolder ? { displayFolder: field.displayFolder } : {})
+        ...(field?.displayFolder ? { displayFolder: field.displayFolder } : {}),
+        // Carried so a level stays in its hierarchy through every round trip.
+        ...(field?.groupName
+          ? { groupName: field.groupName, groupIndex: field.groupIndex, groupCaption: field.groupCaption }
+          : {})
       };
     }
 

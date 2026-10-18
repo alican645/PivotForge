@@ -120,12 +120,33 @@ test("value key matches the server key format", () => {
   assert.equal(PivotRequestBuilder.valueKey(field), "tutar_average");
 });
 
-test("normalize defaults caption to the data field name", () => {
-  const [field] = PivotRequestBuilder.normalizeFields([
-    { dataField: "tutar", area: "data" }
-  ]);
+test("an undeclared caption is the data field titled, as DevExtreme makes it", () => {
+  const captions = PivotRequestBuilder.normalizeFields([
+    { dataField: "tutar", area: "data" },
+    { dataField: "netAmount", area: "data", aggregation: "sum" },
+    { dataField: "OrderDate", area: "column", groupInterval: "year" },
+    { dataField: "order_date", area: "row", groupInterval: "dayOfWeek" },
+    { dataField: "customer.city", area: "row" },
+    { dataField: "orderID", area: "row" },
+    { dataField: "kdvTutarı", area: "data", aggregation: "countDistinct" },
+    { dataField: "marj", area: "data", expression: "[a] - [b]" },
+    { dataField: "Amount", caption: "Tutar", area: "data", aggregation: "sum" }
+  ]).map(field => field.caption);
 
-  assert.equal(field.caption, "tutar");
+  assert.deepEqual(captions, [
+    // No summary type declared, so none is named.
+    "Tutar",
+    "Net Amount (Sum)",
+    "Order Date Year",
+    "Order Date Day Of Week",
+    "Customer City",
+    "Order ID",
+    "Kdv Tutarı (CountDistinct)",
+    // A formula is no summary type.
+    "Marj",
+    "Tutar"
+  ]);
+  assert.equal(PivotRequestBuilder.titleize("XMLHttpRequest"), "XML Http Request");
 });
 
 test("rejects a configuration without a data field", () => {
@@ -960,4 +981,62 @@ test("a selector works the value out itself, so it takes no formula and no data 
   assert.throws(
     () => PivotRequestBuilder.buildRequest([{ dataField: "x", area: "row", selector: "" }, salesFields[2]]),
     /must be the name of a selector registered on the server/);
+});
+
+// DevExtreme's groupName/groupIndex: the group field lends its settings to its
+// levels and is no field of its own.
+const dateGroup = [
+  { dataField: "tutar", area: "data", aggregation: "sum" },
+  { groupInterval: "month", groupName: "Date", groupIndex: 2 },
+  { groupName: "Date", dataField: "tarih", dataType: "date", area: "column", expanded: false, caption: "Tarih" },
+  { dataField: "urun", area: "row" },
+  { groupName: "Date", groupIndex: 0, groupInterval: "year" },
+  { groupName: "Date", groupInterval: "quarter", groupIndex: 1, area: "row" }
+];
+
+test("a group's levels take its settings and stand together in groupIndex order", () => {
+  const fields = PivotRequestBuilder.normalizeFields(dateGroup);
+  const levels = fields.filter(field => field.groupName === "Date");
+
+  assert.equal(fields.length, 5);
+  assert.deepEqual(levels.map(field => field.groupInterval), ["year", "quarter", "month"]);
+  // The levels sit together where the first of them was declared.
+  assert.deepEqual(fields.map(field => field.groupInterval ?? field.dataField), ["tutar", "year", "quarter", "month", "urun"]);
+  assert.deepEqual(levels.map(field => field.dataField), ["tarih", "tarih", "tarih"]);
+  assert.deepEqual(levels.map(field => field.groupCaption), ["Tarih", "Tarih", "Tarih"]);
+  assert.equal(levels[0].area, "column");
+  assert.equal(levels[0].expanded, false);
+  // A level's own declaration wins over the group's.
+  assert.equal(levels[1].area, "row");
+});
+
+test("a level without an index takes the next one, and a group without an area is offered unplaced", () => {
+  const fields = PivotRequestBuilder.normalizeFields([
+    dateGroup[0],
+    { groupName: "When", dataField: "tarih" },
+    { groupName: "When", groupInterval: "year" },
+    { groupName: "When", groupInterval: "month" }
+  ]);
+  const levels = fields.filter(field => field.groupName === "When");
+
+  assert.deepEqual(levels.map(field => field.groupIndex), [0, 1]);
+  assert.deepEqual(levels.map(field => field.area), ["available", "available"]);
+  assert.deepEqual(levels.map(field => field.role), ["dimension", "dimension"]);
+  assert.equal(levels[0].groupCaption, "When");
+});
+
+test("a group is made of dimensions, with each level's index used once", () => {
+  const level = { groupName: "D", dataField: "tarih", groupIndex: 0, groupInterval: "year" };
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([{ ...level, area: "data" }]),
+    /a group's levels are dimensions/);
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([level, { ...level, groupInterval: "month" }, dateGroup[0]]),
+    /two levels with groupIndex 0/);
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([{ ...level, groupIndex: -1 }, dateGroup[0]]),
+    /whole number of 0 or more/);
+  assert.throws(
+    () => PivotRequestBuilder.normalizeFields([{ groupName: "D", dataField: "tarih" }, dateGroup[0]]),
+    /Group "D" has no levels/);
 });

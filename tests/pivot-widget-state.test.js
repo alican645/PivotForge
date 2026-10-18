@@ -1019,3 +1019,139 @@ test("a field's menu goes out as contextMenuPreparing with the field", () => {
   assert.equal(items.length, 1);
   widget.dispose();
 });
+
+// --- retrieveFields ------------------------------------------------------------
+
+const DISCOVERED = {
+  fields: [
+    { dataField: "Region", dataType: "string", groupInterval: null, groupName: null, groupIndex: null },
+    { dataField: "Channel", dataType: "string", groupInterval: null, groupName: null, groupIndex: null },
+    { dataField: "Amount", dataType: "number", groupInterval: null, groupName: null, groupIndex: null },
+    { dataField: "Discount", dataType: "number", groupInterval: null, groupName: null, groupIndex: null },
+    { dataField: "OrderDate", dataType: "date", groupInterval: "year", groupName: "OrderDate", groupIndex: 0 },
+    { dataField: "OrderDate", dataType: "date", groupInterval: "month", groupName: "OrderDate", groupIndex: 2 }
+  ]
+};
+
+function discovering(options = {}, { seed, failFields = false } = {}) {
+  const calls = [];
+  const empty = { rowHeaders: [], columnHeaders: [], cells: [] };
+  const built = build({
+    designer: true,
+    seed,
+    options: {
+      fetchImpl: async (url, init) => {
+        calls.push({ url, body: JSON.parse(init.body) });
+        if (url.endsWith("/fields")) {
+          return failFields
+            ? { ok: false, status: 500, json: async () => ({ message: "down" }) }
+            : { ok: true, status: 200, json: async () => DISCOVERED };
+        }
+        return { ok: true, status: 200, json: async () => empty };
+      },
+      ...options
+    }
+  });
+  return { calls, ...built };
+}
+
+test("retrieveFields offers every undeclared field unplaced, before the first load", async () => {
+  const { widget, calls } = discovering({ retrieveFields: true });
+
+  await widget.refresh();
+
+  assert.deepEqual(calls.map(call => call.url), ["/pivotforge/fields", "/pivotforge/pivot"]);
+  const added = widget.fields.filter(field => field.area === "available" && field.dataField !== "Quarter");
+  assert.deepEqual(added.map(field => [field.key, field.role, field.caption, field.groupName, field.groupCaption]), [
+    ["Channel", "dimension", "Channel", null, null],
+    ["Discount", "measure", "Discount", null, null],
+    // A date's levels are one hierarchy, listed as "Order Date".
+    ["OrderDate:year", "dimension", "Order Date Year", "OrderDate", "Order Date"],
+    ["OrderDate:month", "dimension", "Order Date Month", "OrderDate", "Order Date"]
+  ]);
+  // A declared field is the declared one, and takes the discovered data type.
+  const region = widget.fields.find(field => field.key === "Region");
+  assert.equal(region.caption, "Bölge");
+  assert.equal(region.dataType, "string");
+  assert.deepEqual(calls[1].body.rows, ["Region"]);
+  // The designer lists them too.
+  assert.ok(widget.layoutState.getState().available.includes("OrderDate:year"));
+
+  await widget.refresh();
+  assert.equal(calls.filter(call => call.url.endsWith("/fields")).length, 1);
+  widget.dispose();
+});
+
+test("without retrieveFields a grid that declares fields asks for none", async () => {
+  const { widget, calls } = discovering();
+
+  await widget.refresh();
+
+  assert.deepEqual(calls.map(call => call.url), ["/pivotforge/pivot"]);
+  widget.dispose();
+});
+
+test("a grid declaring no fields discovers them unless told not to", async () => {
+  const on = discovering({ fields: [], fieldDesigner: undefined });
+  await on.widget.refresh();
+  // Every field waits in the list, none is summed yet, so no pivot is asked for.
+  assert.deepEqual(on.calls.map(call => call.url), ["/pivotforge/fields"]);
+  assert.equal(on.widget.fields.length, DISCOVERED.fields.length);
+  assert.deepEqual(on.widget.result.rowHeaders, []);
+  on.widget.dispose();
+
+  // Told not to, it is the configuration error it always was.
+  assert.throws(() => discovering({ fields: [], fieldDesigner: undefined, retrieveFields: false }),
+    /requires at least one field with area "data"/);
+
+  assert.throws(() => discovering({ retrieveFields: "yes" }), /retrieveFields must be true, false or null/);
+});
+
+test("a stored view seating a discovered field comes back once the fields are in", async () => {
+  const { widget, calls } = discovering({ retrieveFields: true }, {
+    seed: seedWith({
+      layout: {
+        rows: ["Channel"],
+        columns: ["Year"],
+        values: [{ field: "Amount", aggregation: "sum", showAs: "normal" }],
+        filters: []
+      }
+    })
+  });
+
+  await widget.refresh();
+
+  assert.deepEqual(calls.at(-1).body.rows, ["Channel"]);
+  assert.deepEqual(widget.layoutState.getState().rows, ["Channel"]);
+  widget.dispose();
+});
+
+test("fieldsPrepared sees the merged list and may change it; a failed discovery keeps the declared fields", async () => {
+  const prepared = discovering({ retrieveFields: true });
+  prepared.widget.on("fieldsPrepared", e => {
+    e.fields = e.fields.filter(field => field.dataField !== "Discount");
+  });
+  await prepared.widget.refresh();
+  assert.ok(prepared.widget.fields.some(field => field.dataField === "Channel"));
+  assert.ok(!prepared.widget.fields.some(field => field.dataField === "Discount"));
+  prepared.widget.dispose();
+
+  const failed = discovering({ retrieveFields: true }, { failFields: true });
+  const errors = [];
+  failed.widget.on("error", error => errors.push(error.message));
+  await failed.widget.refresh();
+  assert.deepEqual(errors, ["down"]);
+  assert.deepEqual(failed.widget.fields.map(field => field.key), fields.map(field => field.dataField));
+  assert.equal(failed.calls.at(-1).url, "/pivotforge/pivot");
+  failed.widget.dispose();
+});
+
+test("mergeDiscoveredFields keeps a declared interval level and adds the rest", () => {
+  const merged = PivotForge.mergeDiscoveredFields(
+    [{ dataField: "orderdate", groupInterval: "year", area: "column" }],
+    DISCOVERED.fields);
+
+  assert.deepEqual(merged[0], { dataField: "orderdate", groupInterval: "year", area: "column", dataType: "date" });
+  assert.ok(!merged.slice(1).some(field => field.groupInterval === "year"));
+  assert.ok(merged.some(field => field.groupInterval === "month"));
+});

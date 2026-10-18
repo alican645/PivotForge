@@ -614,6 +614,60 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     public PivotGridBuilder ShowRelevantValues(bool show) => Set("showRelevantValues", show);
 
+    /// <summary>Offers every field of the record type, DevExtreme's <c>retrieveFields</c>.</summary>
+    /// <remarks>
+    /// Before its first load the grid asks the <c>fields</c> endpoint what the record type holds
+    /// and adds each field the page did not declare to the field list, unplaced; a date comes as
+    /// its year, quarter and month in a folder of its own. A declared field without a data type
+    /// takes the discovered one. On by default only for a grid that declares no fields.
+    /// </remarks>
+    /// <param name="retrieve">Whether the record type's fields are discovered.</param>
+    /// <returns>This builder.</returns>
+    public PivotGridBuilder RetrieveFields(bool retrieve = true) => Set("retrieveFields", retrieve);
+
+    /// <summary>Loads the grid from a DevExtreme.AspNet.Data backend instead of the PivotForge endpoints, DevExtreme's <c>RemoteStore</c>.</summary>
+    /// <remarks>
+    /// The browser sends the backend <c>DataSourceLoader.Load</c> requests -- <c>group</c>,
+    /// <c>groupSummary</c>, <c>totalSummary</c>, <c>filter</c> -- as a GET with JSON-encoded
+    /// parameters and builds the result from the groups that come back, so display modes, running
+    /// totals and ordering by a summary run in the browser. Reference
+    /// <c>js/pivot-result-assembler.js</c> and <c>js/pivot-remote-store.js</c> on the page. What the
+    /// protocol cannot express is refused when the grid starts: aggregations other than sum, count,
+    /// average, min and max, calculated fields, top N, value filters and <c>largeData</c>.
+    /// </remarks>
+    /// <param name="loadUrl">The URL answering <c>DataSourceLoader.Load</c> requests.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The URL is null or blank.</exception>
+    public PivotGridBuilder RemoteStore(string loadUrl)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(loadUrl);
+        return Set("store", new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["type"] = "remote",
+            ["loadUrl"] = loadUrl
+        });
+    }
+
+    /// <summary>Loads the grid through a page function speaking the <c>DataSourceLoader.Load</c> protocol.</summary>
+    /// <remarks>
+    /// The function receives the load options -- <c>group</c>, <c>groupSummary</c>,
+    /// <c>totalSummary</c>, <c>filter</c>, <c>skip</c>, <c>take</c> -- and returns the
+    /// <c>{data, summary, totalCount}</c> answer or a promise of it. The same limits as
+    /// <see cref="RemoteStore"/> apply.
+    /// </remarks>
+    /// <param name="load">The function's name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The name is null or blank.</exception>
+    public PivotGridBuilder RemoteStoreLoad(string load)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(load);
+        return Set("store", new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["type"] = "remote",
+            ["load"] = load
+        });
+    }
+
     /// <summary>Sets the locale pack supplying the on-screen text.</summary>
     /// <remarks>
     /// Every string the grid, the field designer, the value picker and the detail modal put
@@ -746,6 +800,14 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
     public PivotGridBuilder OnCellClick(string handler) => SetEvent("cellClick", handler);
+
+    /// <summary>Names a page function called once the discovered fields are merged, DevExtreme's <c>onFieldsPrepared</c>.</summary>
+    /// <remarks>Raised by <see cref="RetrieveFields"/> before the first load, with <c>fields</c>, the
+    /// merged list; what the handler leaves in it is what the grid offers.</remarks>
+    /// <param name="handler">The function name, optionally a dotted path.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The handler name is null or blank.</exception>
+    public PivotGridBuilder OnFieldsPrepared(string handler) => SetEvent("fieldsPrepared", handler);
 
     /// <summary>Names a page function called before a cell's or header's menu opens, DevExtreme's <c>onContextMenuPreparing</c>.</summary>
     /// <remarks>Its argument's <c>items</c> may be changed in place: an item the page adds is

@@ -64,11 +64,32 @@ public class PivotFieldBuilderTests
     }
 
     [Fact]
-    public void CaptionDefaultsToTheDataFieldName()
+    public void AGroupLevelLeavesItsAreaAndDataFieldToTheGroup_AndIsNoMeasure()
     {
-        var field = new PivotFieldBuilder().DataField("tutar").Build();
+        var level = new PivotFieldBuilder().GroupName("Date").GroupIndex(2)
+            .GroupInterval(PivotGroupInterval.Month).Expanded(false).Build();
+        Assert.Equal("Date", level["groupName"]);
+        Assert.Equal(2, level["groupIndex"]);
+        Assert.False(level.ContainsKey("area"));
+        Assert.False(level.ContainsKey("dataField"));
 
-        Assert.Equal("tutar", field["caption"]);
+        var placed = new PivotFieldBuilder().GroupName("Date").GroupIndex(0).Area(PivotArea.Row).Build();
+        Assert.Equal("row", placed["area"]);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new PivotFieldBuilder().DataField("Amount").GroupName("M").GroupIndex(0).Area(PivotArea.Data).Build());
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PivotFieldBuilder().GroupIndex(-1));
+        Assert.Throws<InvalidOperationException>(() => new PivotFieldBuilder().Build());
+    }
+
+    [Fact]
+    public void AnUndeclaredCaptionIsLeftToTheBrowser()
+    {
+        // The browser titles it after the data field, as DevExtreme does.
+        var field = new PivotFieldBuilder().DataField("tutar").Build();
+        Assert.False(field.ContainsKey("caption"));
+
+        Assert.Equal("Tutar", new PivotFieldBuilder().DataField("tutar").Caption("Tutar").Build()["caption"]);
     }
 
     [Theory]

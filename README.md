@@ -100,6 +100,10 @@ Reference the Razor Class Library assets. Load them in `<head>`, not at the end 
 <script src="/_content/PivotForge.AspNetCore/js/pivot-virtual-data-source.js"></script>
 <script src="/_content/PivotForge.AspNetCore/js/pivot-chart.js"></script>
 
+<!-- Optional: a grid loading from a DevExtreme.AspNet.Data backend (RemoteStore). -->
+<script src="/_content/PivotForge.AspNetCore/js/pivot-result-assembler.js"></script>
+<script src="/_content/PivotForge.AspNetCore/js/pivot-remote-store.js"></script>
+
 <!-- Optional: the language every component shows. English needs nothing. -->
 <script src="/_content/PivotForge.AspNetCore/js/pivot-locale-tr.js"></script>
 ```

@@ -350,4 +350,25 @@ public class PivotGridBuilderTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => SalesGrid().Chart(PivotChartType.Column, height: 80));
     }
+
+    [Fact]
+    public void ARemoteStoreIsWrittenWithWhereItLoadsFrom()
+    {
+        var byUrl = ConfigOf(SalesGrid().RemoteStore("/api/sales/load")).GetProperty("store");
+        var byFunction = ConfigOf(SalesGrid().RemoteStoreLoad("app.sales.load")).GetProperty("store");
+
+        Assert.Equal("remote", byUrl.GetProperty("type").GetString());
+        Assert.Equal("/api/sales/load", byUrl.GetProperty("loadUrl").GetString());
+        Assert.Equal("remote", byFunction.GetProperty("type").GetString());
+        Assert.Equal("app.sales.load", byFunction.GetProperty("load").GetString());
+        Assert.False(byFunction.TryGetProperty("loadUrl", out _));
+        Assert.False(ConfigOf(SalesGrid()).TryGetProperty("store", out _));
+    }
+
+    [Fact]
+    public void ARemoteStoreWithNowhereToLoadFromIsRefused()
+    {
+        Assert.Throws<ArgumentException>(() => SalesGrid().RemoteStore(" "));
+        Assert.Throws<ArgumentException>(() => SalesGrid().RemoteStoreLoad(""));
+    }
 }

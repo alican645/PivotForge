@@ -14,7 +14,8 @@ public sealed class PivotFieldTagHelper : TagHelper
     [HtmlAttributeName("field")]
     public string? Field { get; set; }
 
-    /// <summary>Gets or sets the display caption. Defaults to the source field name.</summary>
+    /// <summary>Gets or sets the display caption. Defaults to the source field name in title case,
+    /// with the summary type for a measure that declares one: "Net Amount (Sum)".</summary>
     [HtmlAttributeName("caption")]
     public string? Caption { get; set; }
 
@@ -95,6 +96,15 @@ public sealed class PivotFieldTagHelper : TagHelper
     /// <summary>Gets or sets the folder this field is listed under in the field designer.</summary>
     [HtmlAttributeName("display-folder")]
     public string? DisplayFolder { get; set; }
+
+    /// <summary>Gets or sets the hierarchy this field belongs to. Without <c>group-index</c> or
+    /// <c>group-interval</c> the field is the group field, whose area and defaults its levels take.</summary>
+    [HtmlAttributeName("group-name")]
+    public string? GroupName { get; set; }
+
+    /// <summary>Gets or sets the level's place in its hierarchy, 0 for the outermost.</summary>
+    [HtmlAttributeName("group-index")]
+    public int? GroupIndex { get; set; }
 
     /// <summary>Gets or sets whether the field participates in the rendered layout.</summary>
     [HtmlAttributeName("visible")]
@@ -267,7 +277,21 @@ public sealed class PivotFieldTagHelper : TagHelper
             builder.Caption(Caption);
         }
 
-        builder.Area(Area);
+        // A level of a group takes the group's area unless it names one.
+        if (GroupName is null || _writtenAttributes.Contains("area"))
+        {
+            builder.Area(Area);
+        }
+
+        if (GroupName is not null)
+        {
+            builder.GroupName(GroupName);
+        }
+
+        if (GroupIndex is { } groupIndex)
+        {
+            builder.GroupIndex(groupIndex);
+        }
 
         // Enum members are non-nullable so Razor accepts the unqualified form, so
         // "was it written?" comes from the element's attributes rather than from null.

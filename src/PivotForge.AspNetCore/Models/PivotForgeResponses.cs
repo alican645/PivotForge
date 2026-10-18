@@ -39,6 +39,23 @@ public sealed record PivotForgeFieldValuesResponse(
     bool Truncated,
     int Limit);
 
+/// <summary>Returns the fields the record type offers, DevExtreme's <c>retrieveFields</c>.</summary>
+/// <param name="Fields">The discovered fields, in declaration order.</param>
+public sealed record PivotForgeFieldsResponse(IReadOnlyList<PivotForgeDiscoveredField> Fields);
+
+/// <summary>One discovered field, named the way the browser widget declares fields.</summary>
+/// <param name="DataField">The source field name.</param>
+/// <param name="DataType">"string", "number" or "date".</param>
+/// <param name="GroupInterval">For a date part, "year", "quarter" or "month"; otherwise null.</param>
+/// <param name="GroupName">For a date part, the date field it belongs to; otherwise null.</param>
+/// <param name="GroupIndex">For a date part, its level within the date; otherwise null.</param>
+public sealed record PivotForgeDiscoveredField(
+    string DataField,
+    string DataType,
+    string? GroupInterval,
+    string? GroupName,
+    int? GroupIndex);
+
 /// <summary>Returns a client-safe endpoint error.</summary>
 /// <param name="Message">The error message.</param>
 public sealed record PivotForgeErrorResponse(string Message);

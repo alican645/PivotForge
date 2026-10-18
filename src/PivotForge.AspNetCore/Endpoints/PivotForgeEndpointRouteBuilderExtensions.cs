@@ -14,7 +14,7 @@ namespace PivotForge.AspNetCore.Endpoints;
 /// <summary>Maps PivotForge HTTP endpoints into an ASP.NET Core application.</summary>
 public static class PivotForgeEndpointRouteBuilderExtensions
 {
-    /// <summary>Maps pivot, paging, drill-down, and Excel export endpoints.</summary>
+    /// <summary>Maps pivot, paging, drill-down, field discovery, and Excel export endpoints.</summary>
     /// <param name="endpoints">The endpoint route builder.</param>
     /// <param name="pattern">The route-group prefix, with or without a leading slash.</param>
     /// <returns>The mapped route group.</returns>
@@ -35,6 +35,7 @@ public static class PivotForgeEndpointRouteBuilderExtensions
         group.MapPost("/drill-down", HandleDrillDownAsync).WithName("PivotForge.DrillDown");
         group.MapPost("/field-values", HandleFieldValuesAsync).WithName("PivotForge.FieldValues");
         group.MapPost("/excel", HandleExcel).WithName("PivotForge.Excel");
+        group.MapPost("/fields", HandleFields).WithName("PivotForge.Fields");
 
         return group;
     }
@@ -290,6 +291,28 @@ public static class PivotForgeEndpointRouteBuilderExtensions
             return BadRequest("Excel export request is not valid.");
         }
     }
+
+    // The record type's fields, as far as the allow-list lets a header reach them: a field the
+    // other endpoints would refuse is not offered either.
+    private static IResult HandleFields(
+        IPivotForgeDataExecutor executor,
+        IOptions<PivotForgeOptions> optionsAccessor)
+    {
+        var options = optionsAccessor.Value;
+        var fields = executor.DiscoverFields()
+            .Where(field => options.Allows([field.DataField]))
+            .Select(field => new PivotForgeDiscoveredField(
+                field.DataField,
+                CamelCase(field.DataType.ToString()),
+                field.GroupInterval == PivotGroupInterval.None ? null : CamelCase(field.GroupInterval.ToString()),
+                field.GroupName,
+                field.GroupIndex))
+            .ToArray();
+
+        return Results.Ok(new PivotForgeFieldsResponse(fields));
+    }
+
+    private static string CamelCase(string name) => char.ToLowerInvariant(name[0]) + name[1..];
 
     // Named rather than described: telling a caller which field it was would turn the
     // endpoint into a way of asking what the record type holds.

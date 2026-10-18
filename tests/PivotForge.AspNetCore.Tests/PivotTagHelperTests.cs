@@ -46,7 +46,9 @@ public class PivotTagHelperTests
         PivotRunningTotal? RunningTotal = null,
         PivotSortBy? SortBy = null,
         string? SortingMethod = null,
-        string? Selector = null);
+        string? Selector = null,
+        string? GroupName = null,
+        int? GroupIndex = null);
 
     /// <summary>Builds the tag helper and the attribute list Razor would hand it.</summary>
     private static (PivotFieldTagHelper Helper, TagHelperAttributeList Attributes) Build(FieldSpec spec)
@@ -244,6 +246,18 @@ public class PivotTagHelperTests
         {
             helper.GroupSize = groupSize;
             attributes.Add(new TagHelperAttribute("group-size", groupSize));
+        }
+
+        if (spec.GroupName is not null)
+        {
+            helper.GroupName = spec.GroupName;
+            attributes.Add(new TagHelperAttribute("group-name", spec.GroupName));
+        }
+
+        if (spec.GroupIndex is { } groupIndex)
+        {
+            helper.GroupIndex = groupIndex;
+            attributes.Add(new TagHelperAttribute("group-index", groupIndex));
         }
 
         return (helper, attributes);
@@ -1584,7 +1598,8 @@ public class PivotTagHelperTests
                 OnCellPrepared = "app.markNegatives",
                 OnCellClick = "app.onClick",
                 OnContextMenuPreparing = "app.menu",
-                OnExpandValueChanging = "app.onExpand"
+                OnExpandValueChanging = "app.onExpand",
+                OnFieldsPrepared = "app.onFields"
             },
             new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum))).GetProperty("events");
 
@@ -1592,6 +1607,7 @@ public class PivotTagHelperTests
         Assert.Equal("app.onClick", events.GetProperty("cellClick").GetString());
         Assert.Equal("app.menu", events.GetProperty("contextMenuPreparing").GetString());
         Assert.Equal("app.onExpand", events.GetProperty("expandValueChanging").GetString());
+        Assert.Equal("app.onFields", events.GetProperty("fieldsPrepared").GetString());
         Assert.Throws<ArgumentException>(() => new PivotGridBuilder().OnCellClick(""));
     }
 
@@ -1845,6 +1861,71 @@ public class PivotTagHelperTests
 
         Assert.True(declared.GetProperty("showRelevantValues").GetBoolean());
         Assert.False(undeclared.TryGetProperty("showRelevantValues", out _));
+    }
+
+    [Fact]
+    public async Task WritesAGroupFieldAndItsLevels_LeavingTheLevelsAreaToTheGroup()
+    {
+        var fields = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum),
+            new FieldSpec("OrderDate", PivotArea.Column, "Tarih", GroupName: "Date"),
+            new FieldSpec(null, GroupInterval: PivotGroupInterval.Year, GroupName: "Date", GroupIndex: 0),
+            new FieldSpec(null, GroupInterval: PivotGroupInterval.Month, GroupName: "Date", GroupIndex: 1)))
+            .GetProperty("fields").EnumerateArray().ToArray();
+
+        Assert.Equal("Date", fields[1].GetProperty("groupName").GetString());
+        Assert.Equal("column", fields[1].GetProperty("area").GetString());
+        Assert.False(fields[1].TryGetProperty("groupIndex", out _));
+        Assert.Equal(1, fields[3].GetProperty("groupIndex").GetInt32());
+        Assert.Equal("month", fields[3].GetProperty("groupInterval").GetString());
+        // The level names neither a data field nor an area: both are the group's.
+        Assert.False(fields[3].TryGetProperty("dataField", out _));
+        Assert.False(fields[3].TryGetProperty("area", out _));
+    }
+
+    [Fact]
+    public async Task WritesRetrieveFieldsOnlyWhenDeclared()
+    {
+        var on = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RetrieveFields = true },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var off = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RetrieveFields = false },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var undeclared = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.True(on.GetProperty("retrieveFields").GetBoolean());
+        // Written when false too: it keeps a grid without fields from discovering them.
+        Assert.False(off.GetProperty("retrieveFields").GetBoolean());
+        Assert.False(undeclared.TryGetProperty("retrieveFields", out _));
+    }
+
+    [Fact]
+    public async Task WritesARemoteStoreFromEitherAttribute()
+    {
+        var byUrl = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RemoteLoadUrl = "/api/sales/load" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+        var byFunction = ConfigOf(await RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RemoteLoad = "app.sales.load" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Equal("/api/sales/load", byUrl.GetProperty("store").GetProperty("loadUrl").GetString());
+        Assert.Equal("app.sales.load", byFunction.GetProperty("store").GetProperty("load").GetString());
+        Assert.Equal("remote", byFunction.GetProperty("store").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task RefusesBothRemoteAttributesAtOnce()
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => RenderAsync(
+            new PivotGridTagHelper { Id = "pivotGrid", RemoteLoadUrl = "/api/sales/load", RemoteLoad = "app.sales.load" },
+            new FieldSpec("Amount", PivotArea.Data, "Tutar", PivotAggregation.Sum)));
+
+        Assert.Contains("declare one of them", error.Message);
     }
 
     [Fact]

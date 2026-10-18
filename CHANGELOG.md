@@ -14,6 +14,44 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Breaking
+
+- A field without a caption is now titled as DevExtreme titles it, rather than
+  shown by its data field: `netAmount` summed reads "Net Amount (Sum)",
+  `OrderDate` by year "Order Date Year". `PivotFieldBuilder` no longer writes
+  the data field as the caption. Declare `caption` to keep a name as it was.
+  (AspNetCore)
+
+### Added
+
+- DevExtreme's `retrieveFields`: `retrieve-fields` / `RetrieveFields()` /
+  `retrieveFields: true` asks the new `POST {prefix}/fields` endpoint for the
+  record type's fields before the first load and lists every undeclared one in
+  the field chooser and designer, unplaced (a date as one group of its year,
+  quarter and month; nothing off `AllowedFields`). A grid declaring no
+  fields discovers them by default and starts empty until a measure is placed.
+  `fieldsPrepared` sees and may change the merged list. (AspNetCore)
+- DevExtreme's field groups: `groupName` / `groupIndex` (`group-name`,
+  `group-index`, `GroupName()`, `GroupIndex()`) declare a hierarchy whose
+  levels take the group field's area, order, sort and totals settings. The
+  field list shows the group once; dragging, moving or removing any level
+  moves the whole group, and a stored view comes back with the group whole.
+  The tree header filter for a group is not offered. (AspNetCore)
+- `PivotFieldDiscovery.Discover<T>()` / `Discover(DataTable)` /
+  `Discover(dictionaries)`: the fields a source offers, with their data types.
+  (Core)
+- DevExtreme's `RemoteStore`: `remote-load-url` / `RemoteStore(loadUrl)` /
+  `store: { type: "remote", loadUrl }` (or `remote-load` / `RemoteStoreLoad` /
+  `load` for a page function) loads the grid from any DevExtreme.AspNet.Data
+  `DataSourceLoader.Load` backend instead of the PivotForge endpoints. The
+  browser sends `group` / `groupSummary` / `totalSummary` / `filter` requests
+  and builds the result itself, display modes, running totals, empty-cell
+  hiding and ordering by a summary included; the filter picker, drill-down and
+  `retrieveFields` use the same backend. Aggregations beyond sum, count,
+  average, min and max, calculated fields, `selector`, `sortingMethod`, top N,
+  value filters and `largeData` are refused with a clear error. Needs the new
+  `pivot-result-assembler.js` and `pivot-remote-store.js`. (AspNetCore)
+
 ## [0.9.0-preview.1] — 2026-10-18
 
 The field chooser popup in DevExtreme's three layouts, field header rows and

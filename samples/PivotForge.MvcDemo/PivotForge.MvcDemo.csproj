@@ -4,6 +4,10 @@
     <ProjectReference Include="..\..\src\PivotForge.AspNetCore\PivotForge.AspNetCore.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="DevExtreme.AspNet.Data" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
