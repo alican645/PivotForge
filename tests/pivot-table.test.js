@@ -1501,5 +1501,6 @@ test("opening a level with unloaded groups asks for it rather than showing nothi
   renderer.expandLevel("row", 0);
   renderer.expandAll({ axis: "all" });
   assert.deepEqual(asked, [["level", { area: "row", level: 0 }], ["all", { axis: "all" }]]);
-  assert.equal(renderer.collapsedRows.size, 2);
+  // Open already, so they are drawn open once the groups arrive.
+  assert.equal(renderer.collapsedRows.size, 0);
 });

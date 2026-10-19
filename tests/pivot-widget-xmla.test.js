@@ -158,3 +158,73 @@ test("a remote store still refuses largeData, and a page needs a loaded grid fir
   await assert.rejects(widget.loadPage(0), /no active large-data session/);
   widget.dispose();
 });
+
+const QUARTERS_OF_2024 = dataset({
+  columns: [[M.q1of2024, M.amount], [M.q2of2024, M.amount]],
+  rows: [[M.all], [M.ege], [M.marmara]],
+  cells: { 0: 210, 1: 40, 2: 60, 3: 40, 4: 150 }
+});
+const BY_QUARTER = dataset({
+  columns: [[M.calendarAll, M.amount], [M.y2024, M.amount], [M.y2025, M.amount],
+    [M.q1of2024, M.amount], [M.q2of2024, M.amount], [M.q1of2025, M.amount]],
+  rows: [[M.all], [M.ege], [M.marmara]],
+  cells: { 0: 600, 1: 250, 2: 350, 3: 210, 4: 40, 5: 350, 6: 300, 7: 100, 8: 200, 9: 60, 10: 40, 11: 200 }
+});
+
+function createBranchWidget(answers) {
+  const provider = createProvider({ answers });
+  const rendered = [];
+  const widget = PivotForge.create(createContainer(), {
+    fields: [
+      fields[0],
+      { caption: "Yıl", dataField: "[Date].[Calendar].[Year]", area: "column", expanded: false },
+      { caption: "Çeyrek", dataField: "[Date].[Calendar].[Quarter]", area: "column" },
+      fields[2]
+    ],
+    autoLoad: false,
+    store: { type: "xmla", url: "/olap", catalog: "Demo", cube: "Sales" },
+    rendererOptions: { culture: "tr-TR" },
+    renderImpl: result => rendered.push(result),
+    fetchImpl: provider.fetch
+  });
+  const pivots = () => provider.statements.filter(statement => statement.startsWith("SELECT NON EMPTY"));
+  return { widget, provider, rendered, pivots };
+}
+
+test("an XMLA grid reads a closed level's groups only when one is opened", async () => {
+  const { widget, rendered, pivots } = createBranchWidget([
+    { match: /^SELECT NON EMPTY CrossJoin\(Union\(\{\[Date\]\.\[Calendar\]\.\[All\]\}, \[Date\]\.\[Calendar\]\.\[Year\]\.Members\), /, response: BY_YEAR },
+    { match: /^SELECT NON EMPTY CrossJoin\(Descendants/, response: QUARTERS_OF_2024 },
+    { match: /Quarter\]\.Members\), \{/, response: BY_QUARTER }
+  ]);
+
+  await widget.refresh();
+  assert.deepEqual(rendered.at(-1).columnHeaders, [["2024"], ["2025"]]);
+
+  await widget.expandBranch({ area: "column", path: ["2024"] });
+  assert.equal(pivots().length, 2);
+  assert.match(pivots()[1], /^SELECT NON EMPTY CrossJoin\(Descendants/);
+  assert.deepEqual(rendered.at(-1).columnHeaders, [["2024", "Q1"], ["2024", "Q2"], ["2025"]]);
+
+  // Expand all opens the level, which the cube reads whole.
+  await widget.expandLevels(widget.fields.filter(field => field.area === "column"));
+  assert.equal(pivots().length, 3);
+  // Whole, the columns are every year crossed with every quarter, as before.
+  assert.deepEqual(rendered.at(-1).columnHeaders, [["2024", "Q1"], ["2024", "Q2"], ["2025", "Q1"], ["2025", "Q2"]]);
+  assert.equal(rendered.at(-1).metadata.columnDepth, undefined);
+  widget.dispose();
+});
+
+test("a branch the cube fails to read stays closed", async () => {
+  const { widget, rendered } = createBranchWidget([
+    { match: /^SELECT NON EMPTY CrossJoin\(Union/, response: BY_YEAR }
+  ]);
+
+  await widget.refresh();
+  await widget.expandBranch({ area: "column", path: ["2024"] });
+
+  assert.ok(widget.error);
+  assert.deepEqual(widget.branchState.columns, []);
+  assert.deepEqual(rendered.at(-1).columnHeaders, [["2024"], ["2025"]]);
+  widget.dispose();
+});

@@ -190,6 +190,102 @@ for (const scenario of PAGED_SCENARIOS) {
   });
 }
 
+// A closed level is read only when one of its groups is opened. The grid that
+// loads branches has to draw what a grid holding every level draws with the
+// same groups closed, after each group opened; each opening is one query, and
+// closing a group asks for nothing.
+const closed = field => ({ ...field, expanded: false });
+const BRANCH_SCENARIOS = [
+  ["a closed row level", [closed(cube.region), cube.category, cube.year, cube.amount]],
+  ["a closed column level of one hierarchy", [cube.region, closed(cube.year), cube.quarter, cube.amount]],
+  ["closed levels on both axes, empty cells dropped", [closed(cube.region), cube.category, closed(cube.year), cube.quarter, cube.amount],
+    { hideEmptySummaryCells: true }],
+  ["a closed level ordered by a summary",
+    [{ ...closed(cube.region), sortByValueKey: "[Measures].[Amount]_sum", sortOrder: "Descending" }, cube.category, cube.year, cube.amount]],
+  ["shown as a share of the parent row",
+    [closed(cube.region), cube.category, cube.year, { ...cube.amount, showAs: "percentOfParentRowTotal" }]]
+];
+
+for (const [name, fields, options = {}] of BRANCH_SCENARIOS) {
+  test(`an XMLA grid loading branches draws what the whole grid draws: ${name}`, async ({ page }) => {
+    const steps = await page.evaluate(async ({ fields, options, store }) => {
+      let queries = 0;
+      const counting = (url, init) => {
+        if (String(init?.body ?? "").includes("SELECT NON EMPTY")) {
+          queries++;
+        }
+
+        return fetch(url, init);
+      };
+      const create = (declared, fetchImpl) => {
+        const host = document.createElement("div");
+        document.body.appendChild(host);
+        const widget = PivotForge.create(host, {
+          fields: declared, ...options, store, autoLoad: false, rendererOptions: { culture: "tr-TR" },
+          ...(fetchImpl ? { fetchImpl } : {})
+        });
+        return { host, widget };
+      };
+      const keyOf = button => button.dataset.subtotalKey ?? `column:${button.dataset.columnGroupKey}`;
+      const text = grid => grid.host.querySelector("table").innerText;
+      const toggle = (grid, key) => [...grid.host.querySelectorAll(".pivot-table__toggle")].find(button => keyOf(button) === key);
+      const settle = async grid => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        while (grid.widget.loading) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      };
+
+      const branches = create(fields, counting);
+      const whole = create(fields.map(field => (field.expanded === false ? { ...field, expanded: true } : field)));
+      await branches.widget.refresh();
+      await whole.widget.refresh();
+      // The whole grid closes the same levels itself, with every group read.
+      fields.forEach(field => {
+        if (field.expanded === false) {
+          const level = fields.filter(entry => entry.area === field.area).indexOf(field);
+          whole.widget.renderer.collapseLevel(field.area, level);
+        }
+      });
+
+      const steps = [{ queries, branches: text(branches), whole: text(whole) }];
+      const unread = [...branches.host.querySelectorAll(".pivot-table__toggle")]
+        .filter(button => button.getAttribute("aria-expanded") === "false")
+        .map(keyOf);
+      const keys = [...unread.filter(key => !key.startsWith("column:")).slice(0, 2),
+        ...unread.filter(key => key.startsWith("column:")).slice(0, 1)];
+      for (const key of keys) {
+        toggle(branches, key).click();
+        await settle(branches);
+        toggle(whole, key).click();
+        steps.push({ key, queries, branches: text(branches), whole: text(whole) });
+      }
+
+      // Closed and opened again: drawn from what was read.
+      const again = keys[0];
+      for (const label of ["closed", "opened"]) {
+        toggle(branches, again).click();
+        await settle(branches);
+        toggle(whole, again).click();
+        steps.push({ key: `${again} ${label}`, queries, branches: text(branches), whole: text(whole) });
+      }
+
+      branches.widget.dispose();
+      whole.widget.dispose();
+      branches.host.remove();
+      whole.host.remove();
+      return { steps, opened: keys.length };
+    }, { fields, options, store: STORE });
+
+    expect(steps.opened).toBeGreaterThan(0);
+    steps.steps.forEach((step, index) => {
+      expect(step.branches, step.key ?? "closed").toEqual(step.whole);
+      // One query to start, one per group opened, none to close or reopen one.
+      expect(step.queries, step.key ?? "closed").toBe(1 + Math.min(index, steps.opened));
+    });
+  });
+}
+
 test("an XMLA grid never calls the PivotForge endpoints, and its picker and drill-down agree with its cells", async ({ page }) => {
   const pivotCalls = [];
   page.on("request", request => {

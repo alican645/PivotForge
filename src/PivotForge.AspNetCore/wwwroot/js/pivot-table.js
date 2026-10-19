@@ -1017,7 +1017,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     const unloaded = (axis !== "column" && this.unloadedRows?.size > 0) ||
       (axis !== "row" && this.unloadedColumns?.size > 0);
     if (unloaded && typeof this.lastSettings?.onExpandAll === "function") {
+      // Opened now, drawn once the groups arrive.
+      if (axis !== "column") {
+        this.collapsedRows?.clear();
+      }
+
+      if (axis !== "row") {
+        this.collapsedColumns?.clear();
+      }
+
       this.lastSettings.onExpandAll({ axis });
+      this.notifyViewStateChanged();
       return;
     }
 
@@ -3180,14 +3190,17 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
   expandLevel(axis, level) {
     const unloaded = axis === "column" ? this.unloadedColumns : this.unloadedRows;
-    if (typeof this.lastSettings?.onExpandLevel === "function" &&
-      this.levelGroupKeys(axis, level).some(key => unloaded?.has(key))) {
+    const collapsed = axis === "column" ? this.collapsedColumns : this.collapsedRows;
+    const keys = this.levelGroupKeys(axis, level);
+    if (typeof this.lastSettings?.onExpandLevel === "function" && keys.some(key => unloaded?.has(key))) {
+      // Opened now, drawn once the groups arrive.
+      keys.forEach(key => collapsed?.delete(key));
       this.lastSettings.onExpandLevel({ area: axis, level });
+      this.notifyViewStateChanged();
       return;
     }
 
-    const collapsed = axis === "column" ? this.collapsedColumns : this.collapsedRows;
-    this.levelGroupKeys(axis, level).forEach(key => collapsed?.delete(key));
+    keys.forEach(key => collapsed?.delete(key));
     this.rerenderLast();
     this.notifyViewStateChanged();
   }

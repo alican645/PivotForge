@@ -234,8 +234,10 @@
 
   // The members of an axis down to each depth: a hierarchy whose levels are
   // not reached yet stands at its All member, so every shallower total is a
-  // tuple of its own.
-  function axisSet(levels) {
+  // tuple of its own. from / to bound the depths; fixed (hierarchy name, lower
+  // case -> member unique names) keeps a hierarchy below those members, which
+  // is how a branch is read under the path it opens.
+  function axisSet(levels, { from = 0, to = levels.length, fixed = null } = {}) {
     const sameHierarchy = (left, right) => left.name.toLowerCase() === right.name.toLowerCase();
     const hierarchies = [];
     for (const level of levels) {
@@ -245,16 +247,67 @@
     }
 
     const depths = [];
-    for (let depth = 0; depth <= levels.length; depth++) {
+    for (let depth = from; depth <= to; depth++) {
       depths.push(crossJoin(hierarchies.map(hierarchy => {
         const reached = levels.slice(0, depth).filter(level => sameHierarchy(level.hierarchy, hierarchy));
-        return reached.length > 0
-          ? `${reached[reached.length - 1].name}.Members`
-          : setOf([hierarchy.allMember ?? `${hierarchy.name}.DefaultMember`]);
+        if (reached.length === 0) {
+          return setOf([hierarchy.allMember ?? `${hierarchy.name}.DefaultMember`]);
+        }
+
+        const level = reached[reached.length - 1].name;
+        const under = fixed?.get(hierarchy.name.toLowerCase());
+        return under ? `Descendants(${setOf(under)}, ${level})` : `${level}.Members`;
       })));
     }
 
     return union(depths);
+  }
+
+  // ---- Branches: what an axis loads when some of its groups stay closed ----
+
+  const VARIATIONS = new Set(["differenceFromPrevious", "percentDifferenceFromPrevious"]);
+
+  // Which axes load only their open branches, or null when both load whole:
+  // an axis loads branches when a level above its last is closed (expanded:
+  // false). A running total or a change from the previous item reads siblings
+  // a closed group would hide, and an order by a summary at a path reads the
+  // other axis there, so those keep an axis whole.
+  function branchPlanOf(request, branches) {
+    if (!branches || request.values.some(value =>
+      (value.runningTotal ?? "None") !== "None" || VARIATIONS.has(value.showAs))) {
+      return null;
+    }
+
+    const pathSorted = levels => levels.some(level => (levelSortOf(request, level)?.summaryPath?.length ?? 0) > 0);
+    const rowsWhole = pathSorted(request.columns);
+    const columnsWhole = pathSorted(request.rows) || (request.rowSort?.columnPath?.length ?? 0) > 0;
+    const axis = (levels, declared, whole) => {
+      const expanded = declared?.expanded ?? [];
+      const closed = levels.flatMap((_, level) => (level < levels.length - 1 && expanded[level] === false ? [level] : []));
+      return whole || closed.length === 0
+        ? null
+        : { closed, paths: (declared.paths ?? []).filter(path => Array.isArray(path) && path.length > 0) };
+    };
+
+    const rows = axis(request.rows, branches.rows, rowsWhole);
+    const columns = axis(request.columns, branches.columns, columnsWhole);
+    return rows || columns ? { rows, columns } : null;
+  }
+
+  // The open paths an axis can load: a path whose own closed ancestor is not
+  // open has no parent on screen to open it from.
+  function openPaths(plan) {
+    const keys = new Set(plan.paths.map(path => JSON.stringify(path.map(String))));
+    return plan.paths.filter(path => plan.closed.includes(path.length - 1) && plan.closed
+      .filter(level => level < path.length - 1)
+      .every(level => keys.has(JSON.stringify(path.slice(0, level + 1).map(String)))));
+  }
+
+  // Where a branch under a path of the given length stops: at the next closed
+  // level, or at the axis' last.
+  function branchEnd(plan, levels, length) {
+    const next = plan.closed.find(level => level >= length);
+    return (next ?? levels.length - 1) + 1;
   }
 
   function fromClause(cube, slices) {
@@ -263,12 +316,13 @@
 
   const PROPERTIES = "DIMENSION PROPERTIES PARENT_UNIQUE_NAME, HIERARCHY_UNIQUE_NAME";
 
-  function pivotStatement({ cube, rows, columns, measures, slices }) {
+  // rowSet / columnSet: an axis' members when not every depth of it is read.
+  function pivotStatement({ cube, rows, columns, measures, slices, rowSet = null, columnSet: columnMembers = null }) {
     const measureSet = setOf(measures);
-    const columnSet = columns.length > 0 ? crossJoin([axisSet(columns), measureSet]) : measureSet;
+    const columnSet = columns.length > 0 ? crossJoin([columnMembers ?? axisSet(columns), measureSet]) : measureSet;
     const axes = [`NON EMPTY ${columnSet} ${PROPERTIES} ON COLUMNS`];
     if (rows.length > 0) {
-      axes.push(`NON EMPTY ${axisSet(rows)} ${PROPERTIES} ON ROWS`);
+      axes.push(`NON EMPTY ${rowSet ?? axisSet(rows)} ${PROPERTIES} ON ROWS`);
     }
 
     return `SELECT ${axes.join(", ")} FROM ${fromClause(cube, slices)} CELL PROPERTIES VALUE`;
@@ -626,7 +680,17 @@
       return measures;
     }
 
-    async function pivot(request, { culture = null, signal = null } = {}) {
+    // branches: { rows, columns }, each { expanded: per level, as the fields
+    // declare it, paths: the groups opened below a closed level } -- the grid
+    // then reads only what is open, and a call that opens one more path than
+    // the last reads that branch alone.
+    async function pivot(request, { culture = null, signal = null, branches = null } = {}) {
+      const plan = branchPlanOf(request, branches);
+      if (plan) {
+        return branchPivot(request, plan, { culture, signal });
+      }
+
+      session = null;
       validateRequest(request);
       const ctx = context(culture, signal);
       const schema = await schemaOf(signal);
@@ -658,6 +722,140 @@
       scan.rowRanks = rowLabelers.map(ranksOf);
       scan.columnRanks = columnLabelers.map(ranksOf);
       return assembler().assemble(scan, request, { culture });
+    }
+
+    // ---- Branches (load on expand) ----
+
+    // The last grid read by branches: a later read of the same grid with one
+    // more path open adds that branch to what it holds.
+    let session = null;
+
+    // An axis' loaded members: the levels down to the first closed one, and
+    // under each open path its levels down to the next.
+    async function loadedSet(levels, plan, ctx) {
+      if (!plan) {
+        return { set: axisSet(levels), paths: [] };
+      }
+
+      const branches = [];
+      const paths = [];
+      for (const path of openPaths(plan)) {
+        const set = await branchSet(levels, plan, path, ctx);
+        if (set !== null) {
+          branches.push(set);
+          paths.push(path);
+        }
+      }
+
+      return { set: union([axisSet(levels, { to: plan.closed[0] + 1 }), ...branches]), paths };
+    }
+
+    // What opening a path loads, or null when it names no member.
+    async function branchSet(levels, plan, path, ctx) {
+      const chosen = await pathMembersOf(levels, path.map(String), ctx);
+      if ([...chosen.values()].some(members => members.length === 0)) {
+        return null;
+      }
+
+      const fixed = new Map([...chosen].map(([hierarchy, members]) =>
+        [hierarchy.name.toLowerCase(), members.map(member => member.uniqueName)]));
+      return axisSet(levels, { from: path.length + 1, to: branchEnd(plan, levels, path.length), fixed });
+    }
+
+    const pathKey = path => JSON.stringify(path.map(String));
+    const samePaths = (left, right) => left.length === right.length &&
+      left.every((path, index) => pathKey(path) === pathKey(right[index]));
+
+    // The one path this read opens beyond the session's, or null.
+    function addedPath(previous, plan) {
+      const wanted = plan ? openPaths(plan) : [];
+      const had = new Set(previous.map(pathKey));
+      const added = wanted.filter(path => !had.has(pathKey(path)));
+      return added.length === 1 && wanted.length === previous.length + 1 ? added[0] : null;
+    }
+
+    async function branchPivot(request, plan, { culture, signal }) {
+      validateRequest(request);
+      const ctx = context(culture, signal);
+      const schema = await schemaOf(signal);
+      const rows = request.rows.map(level => levelOf(schema, levelName(level)));
+      const columns = request.columns.map(level => levelOf(schema, levelName(level)));
+      const shared = rows.find(level => columns.some(column => column.hierarchy === level.hierarchy));
+      if (shared) {
+        throw new Error(
+          `${shared.hierarchy.name} has levels on both the rows and the columns; an MDX query places a hierarchy on one axis.`);
+      }
+
+      const keys = request.values.map(value => assembler().valueKey(value));
+      const slices = await slicesOf(schema, request.filters, ctx);
+      if (slices === NOTHING) {
+        session = null;
+        return assembler().assemble(assembler().emptyScan(keys), request, { culture, branches: true });
+      }
+
+      const measures = measuresOf(request.values);
+      const key = JSON.stringify({
+        request, culture, rows: plan.rows?.closed ?? null, columns: plan.columns?.closed ?? null
+      });
+      const [members, rowLabelers, columnLabelers] = await Promise.all([
+        memberIndex(levelsToLoad([...rows, ...columns]), ctx.locale, signal),
+        axisLabelers(rows, ctx.locale, signal),
+        axisLabelers(columns, ctx.locale, signal)
+      ]);
+      const read = { rows, columns, measures, keys, values: request.values, members, rowLabelers, columnLabelers };
+
+      // One more path on one axis, the other's as they were: only that branch.
+      const previous = session?.key === key ? session : null;
+      const unchanged = (axisPlan, had) => samePaths(axisPlan ? openPaths(axisPlan) : [], had);
+      const addedRow = previous && plan.rows && unchanged(plan.columns, previous.columnPaths)
+        ? addedPath(previous.rowPaths, plan.rows)
+        : null;
+      const addedColumn = previous && !addedRow && plan.columns && unchanged(plan.rows, previous.rowPaths)
+        ? addedPath(previous.columnPaths, plan.columns)
+        : null;
+
+      let current;
+      if (addedRow || addedColumn) {
+        // Only the branch: under its path, across what the other axis holds.
+        const axisLevels = addedRow ? rows : columns;
+        const axisPlan = addedRow ? plan.rows : plan.columns;
+        const set = await branchSet(axisLevels, axisPlan, addedRow ?? addedColumn, ctx);
+        if (set !== null) {
+          const document = await execute(pivotStatement({
+            cube, rows, columns, measures, slices,
+            rowSet: addedRow ? set : previous.rowSet,
+            columnSet: addedRow ? previous.columnSet : set
+          }), { locale: ctx.locale, signal });
+          scanOf(document, { ...read, observeRows: true, observeColumns: true, into: previous.builder });
+        }
+
+        current = {
+          ...previous,
+          rowSet: addedRow && set !== null ? union([previous.rowSet, set]) : previous.rowSet,
+          columnSet: addedColumn && set !== null ? union([previous.columnSet, set]) : previous.columnSet,
+          rowPaths: addedRow && set !== null ? [...previous.rowPaths, addedRow] : previous.rowPaths,
+          columnPaths: addedColumn && set !== null ? [...previous.columnPaths, addedColumn] : previous.columnPaths
+        };
+      } else {
+        const [rowLoad, columnLoad] = await Promise.all([
+          loadedSet(rows, plan.rows, ctx),
+          loadedSet(columns, plan.columns, ctx)
+        ]);
+        const document = await execute(pivotStatement({
+          cube, rows, columns, measures, slices, rowSet: rowLoad.set, columnSet: columnLoad.set
+        }), { locale: ctx.locale, signal });
+        const builder = assembler().createScan(rows.length, columns.length, keys);
+        scanOf(document, { ...read, observeRows: true, observeColumns: true, into: builder });
+        current = {
+          key, builder, rowSet: rowLoad.set, columnSet: columnLoad.set, rowPaths: rowLoad.paths, columnPaths: columnLoad.paths
+        };
+      }
+
+      session = current;
+      const scan = current.builder.finish();
+      scan.rowRanks = rowLabelers.map(ranksOf);
+      scan.columnRanks = columnLabelers.map(ranksOf);
+      return assembler().assemble(scan, request, { culture, branches: true });
     }
 
     // ---- A page of rows (largeData) ----
@@ -962,8 +1160,15 @@
 
     // observeColumns: every column the axis carries is one of the result's,
     // though the rows read hold no value in it (a page of rows).
-    function scanOf(document, { rows, columns, measures, keys, values, members, rowLabelers, columnLabelers, observeColumns = false }) {
-      const builder = assembler().createScan(rows.length, columns.length, keys);
+    // observeRows: the same for the rows, when every column may be a group
+    // whose children were not loaded. into: a scan to add to, which this
+    // read's buckets extend but never replace.
+    function scanOf(document, {
+      rows, columns, measures, keys, values, members, rowLabelers, columnLabelers,
+      observeColumns = false, observeRows = false, into = null
+    }) {
+      const builder = into ?? assembler().createScan(rows.length, columns.length, keys);
+      const before = into ? builder.scan.sourceRowCount : 0;
       const columnTuples = tuplesOf(document, "Axis0") ?? [];
       const rowTuples = rows.length > 0 ? (tuplesOf(document, "Axis1") ?? []) : [[]];
       const cells = cellsOf(document);
@@ -995,6 +1200,10 @@
       const crossings = [];
       rowTuples.forEach((tuple, row) => {
         const rowPath = pathOf(tuple, rows, members, rowLabelers);
+        if (observeRows) {
+          builder.observeRow(rowPath);
+        }
+
         for (const group of columnGroups) {
           crossings.push({ row, rowPath, group, full: rowPath.length === rows.length && group.path.length === columns.length });
         }
@@ -1018,7 +1227,7 @@
 
       // A cube has no record count; what reaches the grid is how many of its
       // crossings hold a value.
-      builder.scan.sourceRowCount = found;
+      builder.scan.sourceRowCount = before + found;
       if (builder.scan.grandTotals === null) {
         builder.place([], [], Object.fromEntries(keys.map(key => [key, null])));
       }
@@ -1073,6 +1282,12 @@
     // hierarchy: one where the path names its ancestors, several where it
     // leaves them open (a Q1 under no year is every year's Q1).
     async function pathMembers(levels, labels, ctx) {
+      return [...(await pathMembersOf(levels, labels, ctx)).values()];
+    }
+
+    // The members a path of labels names, by hierarchy: a label may name
+    // several (every year's "Q1" where no year is on the axis).
+    async function pathMembersOf(levels, labels, ctx) {
       const used = levels.slice(0, labels.length);
       const [index, labelersOfPath] = await Promise.all([
         memberIndex(levelsToLoad(used), ctx.locale, ctx.signal),
@@ -1091,7 +1306,7 @@
         chosen.set(level.hierarchy, candidates);
       }
 
-      return [...chosen.values()];
+      return chosen;
     }
 
     async function drillDown({ request, rowPath = [], columnPath = [], valueKey = null } = {},

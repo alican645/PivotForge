@@ -8,8 +8,9 @@ namespace PivotForge.MvcDemo.Xmla;
 // demo's SalesCube: sets in braces, tuples, Level.Members, CrossJoin, Union,
 // NON EMPTY, nested subselects, a WHERE tuple, DRILLTHROUGH MAXROWS, and for a
 // page of rows WITH MEMBER, Subset, NonEmpty, Order, Count, Rank, IIF/IsEmpty,
-// Ancestor, CurrentMember and Member_Caption. Anything else is an error, as it
-// would be on a server that does not know it.
+// Ancestor, CurrentMember and Member_Caption, and for a branch opened below a
+// closed level Descendants. Anything else is an error, as it would be on a
+// server that does not know it.
 
 internal sealed class MdxException(string message) : Exception(message);
 
@@ -26,6 +27,7 @@ internal sealed record MdxTupleSet(IReadOnlyList<string> Members) : MdxSet;
 internal sealed record MdxSubset(MdxSet Set, int Start, int Count) : MdxSet;
 internal sealed record MdxNonEmpty(MdxSet Set, MdxSet Against) : MdxSet;
 internal sealed record MdxOrder(MdxSet Set, MdxExpression Key, bool Descending) : MdxSet;
+internal sealed record MdxDescendants(MdxSet Set, string Level) : MdxSet;
 
 // A member found from where an expression is evaluated.
 internal abstract record MdxMemberExpression;
@@ -364,6 +366,16 @@ internal static class MdxParser
                 var count = int.Parse(Next().Text, CultureInfo.InvariantCulture);
                 ExpectSymbol(")");
                 return new MdxSubset(inner, start, count);
+            }
+
+            if (IsWord("Descendants") && IsSymbol("(", 1))
+            {
+                _position += 2;
+                var inner = Set();
+                ExpectSymbol(",");
+                var level = Name(out _);
+                ExpectSymbol(")");
+                return new MdxDescendants(inner, level);
             }
 
             if (IsWord("NonEmpty") && IsSymbol("(", 1))
@@ -749,6 +761,19 @@ internal sealed class MdxEvaluator(SalesCube cube)
             ?? throw new MdxException($"The member '{uniqueName}' was not found in the cube.");
     }
 
+    private static bool IsUnder(CubeMember member, CubeMember root)
+    {
+        for (var current = member; current is not null; current = current.Parent)
+        {
+            if (current == root)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private List<IReadOnlyList<CubeMember>> Evaluate(MdxSet set, Context context)
     {
         switch (set)
@@ -775,6 +800,16 @@ internal sealed class MdxEvaluator(SalesCube cube)
                 var against = Evaluate(nonEmpty.Against, context);
                 return Evaluate(nonEmpty.Set, context)
                     .Where(tuple => against.Any(other => Cell(context, [.. tuple, .. other]) is not null))
+                    .ToList();
+            case MdxDescendants descendants:
+                // The members at the level below each member of the set, or the
+                // member itself when it is at that level (the SELF flag).
+                var target = cube.FindLevel(descendants.Level)
+                    ?? throw new MdxException($"The level '{descendants.Level}' was not found in the cube.");
+                var roots = Evaluate(descendants.Set, context).Select(tuple => tuple.Single()).ToList();
+                return target.Members
+                    .Where(member => roots.Any(root => IsUnder(member, root)))
+                    .Select(member => (IReadOnlyList<CubeMember>)[member])
                     .ToList();
             case MdxOrder order:
                 // LINQ's ordering is stable, as Analysis Services' is.
