@@ -14,6 +14,18 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- An XMLA grid loads branches as they are opened, DevExtreme's load on expand: a row or column
+  field with `expanded: false` is read down to itself, its groups come closed with their totals,
+  and opening one reads only what lies below it (`Descendants`), added to what the grid holds.
+  Closing and reopening asks for nothing; expand all (or one level from the header menu) opens
+  the fields and reads them whole. Running totals, changes from the previous item, an order by a
+  summary at a path and `largeData` keep the axis read whole. (AspNetCore)
+- A result may carry groups whose children were not loaded: a header shorter than its axis, with
+  `metadata.rowDepth` / `columnDepth` giving the axis' depth; the renderer draws such a group
+  closed and asks for it through `onBranchExpand`. (AspNetCore)
+
 ## [0.12.0-preview.1] — 2026-10-19
 
 Server-side paging for XMLA grids: with largeData the cube counts, orders

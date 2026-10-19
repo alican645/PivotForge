@@ -658,7 +658,8 @@ public sealed class PivotGridBuilder : IHtmlContent
     /// Reference <c>js/pivot-result-assembler.js</c> and <c>js/pivot-xmla-store.js</c> on the page.
     /// Refused when the grid starts: calculated fields, a <c>groupInterval</c>, <c>selector</c>,
     /// <c>sortingMethod</c>, top N and value filters. With <see cref="LargeData"/> the cube pages the
-    /// rows itself, ordered with MDX <c>Order</c> and sliced with <c>Subset</c>.
+    /// rows itself, ordered with MDX <c>Order</c> and sliced with <c>Subset</c>. A field declared
+    /// <c>Expanded(false)</c> is read down to itself, and a group's children only once it is opened.
     /// </remarks>
     /// <param name="url">The XMLA endpoint.</param>
     /// <param name="catalog">The database (catalog) the cube is in.</param>
