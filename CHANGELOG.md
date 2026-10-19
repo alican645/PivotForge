@@ -14,6 +14,11 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.13.0-preview.1] — 2026-10-19
+
+Branch loading for XMLA grids: a closed level's groups are read from the cube
+only when they are opened, DevExtreme's load on expand.
+
 ### Added
 
 - An XMLA grid loads branches as they are opened, DevExtreme's load on expand: a row or column
@@ -1021,7 +1026,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.12.0-preview.1...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.13.0-preview.1...HEAD
+[0.13.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.12.0-preview.1...v0.13.0-preview.1
 [0.12.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.11.0-preview.1...v0.12.0-preview.1
 [0.11.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.10.0-preview.1...v0.11.0-preview.1
 [0.10.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.9.0-preview.1...v0.10.0-preview.1
