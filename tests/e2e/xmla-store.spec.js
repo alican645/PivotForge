@@ -75,8 +75,10 @@ test.afterEach(async ({ page }) => {
 
 // Each result with its values read in the order of its measures, since the
 // two grids key them differently, and figures to twelve significant digits.
-async function loadBoth(page, scenario) {
-  return page.evaluate(async ({ scenario, store }) => {
+// paging: both grids with largeData, over a thousand sales (the least the
+// engine pages), compared page by page at the start, the second page and the end.
+async function loadBoth(page, scenario, paging = false) {
+  return page.evaluate(async ({ scenario, store, paging }) => {
     const [, engineFields, cubeFields, engineOptions = {}, cubeOptions = {}] = scenario;
     const canonical = (result, keys) => {
       const byKey = (list, key) => [...list].sort((a, b) => (JSON.stringify(key(a)) < JSON.stringify(key(b)) ? -1 : 1));
@@ -97,16 +99,36 @@ async function loadBoth(page, scenario) {
       };
     };
 
+    const PAGE_SIZE = 10;
     const load = async (fields, options, withStore) => {
       const host = document.createElement("div");
       document.body.appendChild(host);
+      const paged = paging
+        ? { largeData: true, pageSize: PAGE_SIZE, ...(withStore ? {} : { sourceRowCount: 1000 }) }
+        : {};
       const widget = PivotForge.create(host, {
-        fields, ...options, ...(withStore ? { store } : {}), autoLoad: false, rendererOptions: { culture: "tr-TR" }
+        fields, ...options, ...paged, ...(withStore ? { store: paging ? { ...store, url: `${store.url}?count=1000` } : store } : {}),
+        autoLoad: false, rendererOptions: { culture: "tr-TR" }
       });
       try {
         await widget.refresh();
+        if (widget.error) {
+          throw widget.error;
+        }
+
         const keys = widget.request.values.map(value => `${value.field}_${value.aggregation}`);
-        return canonical(widget.result, keys);
+        if (!paging) {
+          return canonical(widget.result, keys);
+        }
+
+        const total = widget.totalRowCount;
+        const pages = [];
+        for (const offset of [...new Set([0, PAGE_SIZE, Math.max(0, total - 3)])]) {
+          const loaded = offset === 0 ? widget.currentPage : await widget.loadPage(offset);
+          pages.push({ offset, total: loaded.totalRowCount, hasMore: loaded.hasMore, result: canonical(loaded.result, keys) });
+        }
+
+        return pages;
       } finally {
         widget.dispose();
         host.remove();
@@ -114,7 +136,7 @@ async function loadBoth(page, scenario) {
     };
 
     return { server: await load(engineFields, engineOptions, false), cube: await load(cubeFields, cubeOptions, true) };
-  }, { scenario, store: STORE });
+  }, { scenario, store: STORE, paging });
 }
 
 for (const scenario of SCENARIOS) {
@@ -122,6 +144,48 @@ for (const scenario of SCENARIOS) {
     const { server, cube: fromCube } = await loadBoth(page, scenario);
 
     expect(server.cells.length).toBeGreaterThan(0);
+    expect(fromCube).toEqual(server);
+  });
+}
+
+// With largeData the cube orders and slices the rows itself; each page has to
+// be the engine's page. A cube has no record order, so a tie is broken by the
+// cube's member order, not by which record came first: an order by one
+// level's labels alone (rowSort RowLabel) is left out here.
+const salesPerson = { engine: { dataField: "SalesPerson", area: "row", dataType: "string" },
+  cube: { dataField: "[Sales Person].[Sales Person].[Sales Person]", area: "row" } };
+const PAGED_SCENARIOS = [
+  ["three row levels by year and quarter",
+    [engine.region, engine.category, salesPerson.engine, engine.year, engine.quarter, engine.amount],
+    [cube.region, cube.category, salesPerson.cube, cube.year, cube.quarter, cube.amount]],
+  ["an outer level descending, an inner one by its labels",
+    [{ ...engine.region, sortOrder: "Descending" }, engine.category, { ...salesPerson.engine, sortBy: "displayText", sortOrder: "Descending" }, engine.year, engine.amount],
+    [{ ...cube.region, sortOrder: "Descending" }, cube.category, { ...salesPerson.cube, sortBy: "displayText", sortOrder: "Descending" }, cube.year, cube.amount]],
+  ["a level by a summary in one column",
+    [engine.region, { ...engine.category, sortByValueKey: "Amount_sum", sortBySummaryPath: ["2024"], sortOrder: "Descending" }, salesPerson.engine, engine.year, engine.amount],
+    [cube.region, { ...cube.category, sortByValueKey: "[Measures].[Amount]_sum", sortBySummaryPath: ["2024"], sortOrder: "Descending" }, salesPerson.cube, cube.year, cube.amount]],
+  ["rows by their totals",
+    [engine.region, engine.category, salesPerson.engine, engine.year, engine.amount],
+    [cube.region, cube.category, salesPerson.cube, cube.year, cube.amount],
+    { rowSort: { mode: "RowTotalValue", valueKey: "Amount_sum", direction: "Descending" } },
+    { rowSort: { mode: "RowTotalValue", valueKey: "[Measures].[Amount]_sum", direction: "Descending" } }],
+  ["filtered to two months by name", [engine.region, engine.category, salesPerson.engine, engine.month, engine.amount],
+    [cube.region, cube.category, salesPerson.cube, cube.monthOfYear, cube.amount],
+    { filters: [{ field: "OrderDate:month", values: ["Ocak", "Mart"] }] },
+    { filters: [{ field: "[Order Date].[Month of Year]", values: ["Ocak", "Mart"] }] }],
+  ["shown as a share of the parent row",
+    [engine.region, engine.category, salesPerson.engine, engine.year, { ...engine.amount, showAs: "percentOfParentRowTotal" }],
+    [cube.region, cube.category, salesPerson.cube, cube.year, { ...cube.amount, showAs: "percentOfParentRowTotal" }]],
+  ["empty columns dropped", [engine.region, engine.category, salesPerson.engine, engine.year, engine.quarter, engine.amount],
+    [cube.region, cube.category, salesPerson.cube, cube.year, cube.quarter, cube.amount],
+    { hideEmptySummaryCells: true }, { hideEmptySummaryCells: true }]
+];
+
+for (const scenario of PAGED_SCENARIOS) {
+  test(`a paged XMLA grid reads the engine's pages: ${scenario[0]}`, async ({ page }) => {
+    const { server, cube: fromCube } = await loadBoth(page, scenario, true);
+
+    expect(server[0].total).toBeGreaterThan(10);
     expect(fromCube).toEqual(server);
   });
 }

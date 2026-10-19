@@ -665,7 +665,8 @@
     // that a value is needed rather than refusing the layout.
     validateFields(fields) {
       if (this.store) {
-        this.storeModule.validateFields(PivotForge.PivotRequestBuilder.normalizeFields(fields));
+        this.storeModule.validateFields(PivotForge.PivotRequestBuilder.normalizeFields(fields),
+          { paged: Boolean(this.options.largeData) });
       }
 
       if (this.retrievesFields && !hasMeasure(fields)) {
@@ -700,7 +701,8 @@
         throw new Error(`${kind.name[0].toUpperCase()}${kind.name.slice(1)} requires pivot-result-assembler.js and ${kind.script} to be loaded.`);
       }
 
-      if (this.options.largeData) {
+      // A cube pages its own rows; a remote store builds the whole result.
+      if (this.options.largeData && store.type !== "xmla") {
         throw new Error(`largeData pages a result the PivotForge endpoints keep; ${kind.name} builds the whole result in the browser.`);
       }
 
@@ -2482,6 +2484,16 @@
     }
 
     async startLargeSession(signal) {
+      if (this.store) {
+        const page = await this.store.page(this.request, {
+          offset: 0, pageSize: this.options.pageSize, culture: this.remoteCulture(), signal, recount: true
+        });
+        this.sessionId = null;
+        this.totalRowCount = page.totalRowCount;
+        this.currentPage = page;
+        return page.result;
+      }
+
       const response = await this.post("/large/start", {
         ...this.request,
         pageSize: this.options.pageSize,
@@ -2499,6 +2511,22 @@
 
       if (!this.options.largeData) {
         throw new Error("Cannot load a page because largeData is disabled.");
+      }
+
+      // A cube is read again for every page; there is no session to keep.
+      if (this.store) {
+        if (!this.currentPage) {
+          throw new Error("Cannot load a page because there is no active large-data session.");
+        }
+
+        const page = await this.store.page(this.request, {
+          offset, pageSize: this.options.pageSize, culture: this.remoteCulture()
+        });
+        this.currentPage = page;
+        this.totalRowCount = page.totalRowCount;
+        this.result = page.result;
+        this.render(page.result);
+        return page;
       }
 
       if (!this.sessionId) {

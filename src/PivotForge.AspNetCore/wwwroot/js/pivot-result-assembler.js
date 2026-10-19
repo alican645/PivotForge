@@ -937,11 +937,13 @@
       .sort((left, right) => left.index - right.index);
   }
 
-  function dropEmpty(rowHeaders, columnHeaders, values) {
+  // live: the rows and columns to keep when the caller knows them better than
+  // these cells do -- a page holds only some of the rows a column has values in.
+  function dropEmpty(rowHeaders, columnHeaders, values, live = null) {
     const holds = cellValues => Object.values(cellValues).some(value => value !== null && value !== undefined);
-    const liveRows = new Set();
-    const liveColumns = new Set();
-    for (const cell of values.cells) {
+    const liveRows = live?.rows ?? new Set();
+    const liveColumns = live?.columns ?? new Set();
+    for (const cell of live ? [] : values.cells) {
       if (holds(cell.values)) {
         liveRows.add(cell.row);
         liveColumns.add(cell.column);
@@ -1184,6 +1186,17 @@
 
     const index = rowLevels.findIndex(level => namesLevel(field, level));
     return index < 0 ? 0 : index;
+  }
+
+  // The rows as they came, in the shape sortRows leaves: a total for each.
+  function keepRows(rowHeaders, values) {
+    const rowTotals = new Map(values.rowTotals.map(total => [total.index, total.values]));
+    return {
+      headers: rowHeaders,
+      cells: values.cells,
+      rowTotals: rowHeaders.map((_, index) => ({ index, values: rowTotals.get(index) ?? {} })),
+      columnSubtotals: values.columnSubtotals
+    };
   }
 
   function sortRows(rowHeaders, cells, rowTotals, columnSubtotals, lookup, request, order) {
@@ -1604,6 +1617,21 @@
       }
     }
 
+    // A column known to hold values somewhere, though maybe not in the rows
+    // placed: a page's columns are the whole result's.
+    function observeColumn(columnPath) {
+      if (columnPath.length !== columnCount) {
+        return;
+      }
+
+      indexOf(columnIndex, scan.columnHeaders, columnPath);
+      columnPath.forEach((label, level) => {
+        if (!scan.columnLevelValues[level].includes(label)) {
+          scan.columnLevelValues[level].push(label);
+        }
+      });
+    }
+
     function finish() {
       // Nothing matched: no headers at all, as when no record reaches a bucket.
       // An axis without fields needs nothing more: its one empty path is
@@ -1625,7 +1653,7 @@
       return scan;
     }
 
-    return { scan, place, finish };
+    return { scan, place, observeColumn, finish };
   }
 
   // ---- The engine's filter rule (PivotFilterPredicates), for labels in hand ----
@@ -1680,7 +1708,10 @@
   //   grandTotals, sourceRowCount,
   //   rowRanks / columnRanks (optional): per level, a Map label -> rank giving
   //     the source's own member order.
-  function assemble(scan, request, { culture = null } = {}) {
+  // paged: the scan holds one page of rows, already in order, and only rows
+  // with values: the source ordered them and knew the whole result, so the
+  // rows stay as they came and an empty column is one no row anywhere had.
+  function assemble(scan, request, { culture = null, paged = false } = {}) {
     const labels = createLabels(culture);
     const definitions = request.values;
     const dataTypes = request.dataTypes ?? {};
@@ -1730,14 +1761,23 @@
     };
 
     const transformed = transformValues(scan.rowHeaders, columnHeaders, definitions, raw);
+    const observed = () => {
+      const seen = new Set(scan.columnHeaders.map(keyOf));
+      return {
+        rows: new Set(scan.rowHeaders.map((_, index) => index)),
+        columns: new Set(columnHeaders.flatMap((header, index) => (seen.has(keyOf(header)) ? [index] : [])))
+      };
+    };
     let populated = request.hideEmptySummaryCells
-      ? dropEmpty(scan.rowHeaders, columnHeaders, transformed)
+      ? dropEmpty(scan.rowHeaders, columnHeaders, transformed, paged ? observed() : null)
       : { rowHeaders: scan.rowHeaders, columnHeaders, values: transformed };
 
     populated = sortColumns(populated, request, columnOrder, scan.columnHeaders);
     let lookupValue = null;
     const lookup = () => (lookupValue ??= summaryLookup(populated.rowHeaders, populated.columnHeaders, populated.values));
-    const sorted = sortRows(populated.rowHeaders, populated.values.cells, populated.values.rowTotals,
+    const sorted = paged
+      ? keepRows(populated.rowHeaders, populated.values)
+      : sortRows(populated.rowHeaders, populated.values.cells, populated.values.rowTotals,
       populated.values.columnSubtotals, lookup, request, rowOrder);
 
     return applyRunningTotals({

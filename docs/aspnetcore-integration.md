@@ -661,7 +661,7 @@ emit identical markup.
 | `exportToCsv(options)` | Returns `{ blob, fileName }` for the visible grid. **Synchronous**, unlike `exportToExcel`: the file is built from the table already on screen, so no request is made — and for the same reason there is no `allowCsvExport`, since there is no endpoint to gate and nothing in the file the reader cannot already see. Options: `delimiter` (default `","`), `values` (`"text"`, the default, keeps the grid's formatting; `"raw"` writes the invariant numbers behind it), `fileName`, plus anything `getExcelExportModel` accepts. Throws for the same two reasons `exportToExcel` does. |
 | `print(options)` | Prints this grid and nothing else on the page: every sibling of the grid and of its ancestors is hidden for the length of the print and put back on `afterprint`. The stylesheet's `@media print` prints the whole table rather than its scroll window, repeats the column headers on every sheet, drops the controls and the selection, and keeps heatmap and conditional colours. The browser's "Save as PDF" turns the same into a PDF. Options: `title` and `subtitle`, printed above the table. In large-data mode it prints the loaded page of rows. Throws when nothing has been rendered yet. `PivotForge.print(element, options)` does the same for any element. A plain Ctrl+P gets the same table layout, alongside the rest of the page. |
 | `exportToExcel(options)` | Returns `{ blob, fileName }`, not a bare blob. `fileName` comes from the server's `Content-Disposition` header and is `null` when the header is absent or unparseable. Posts the *renderer's* current export model (`getExcelExportModel`), so it throws with a clear message if the widget has no renderer (`renderImpl` was used) or if nothing has been rendered yet. Throws if `allowExcelExport` is `false`. |
-| `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. |
+| `loadPage(offset)` | Loads a page from an active large-data session (see the limitation below). Throws if `largeData` is disabled or no session is active. Retries once, transparently, after an expired (`410`) session is restarted. On an XMLA grid it reads the page from the cube ([Paging](#paging-largedata)). |
 | `showChart(visible)` | Shows or hides the chart, as the toolbar's chart button does, and persists the choice; with no argument it toggles. A shown chart is drawn from the latest result. Throws when the grid has no chart. |
 | `setChart({ type, valueKey })` | Switches the chart's type or charted value, as the reader's own buttons do, and persists the choice. Throws when the grid has no chart or the type is unknown. |
 | `getState()` | Returns a snapshot: `{ fields, request, result, error, loading, filters, rowSort, conditionalRules, sessionId, totalRowCount }`. |
@@ -974,12 +974,36 @@ or any XMLA provider -- instead of the PivotForge endpoints. Load `pivot-result-
 
 Refused when the grid starts, with a message naming what is refused: calculated fields
 (`expression` -- declare a calculated member of the cube instead), a `groupInterval` (a cube's
-dates come as hierarchy levels), `selector`, a `sortingMethod`, top N, value filters, `largeData`.
+dates come as hierarchy levels), `selector`, a `sortingMethod`, top N, value filters.
+
+#### Paging (`largeData`)
+
+With `large-data="true"` (`LargeData(true)`, `largeData: true`) the cube pages its own rows,
+DevExtreme's `paginate`: no PivotForge session is kept, and each `loadPage(offset)` reads the
+cube again. A page is what the engine's large-data page is -- every column, the column totals
+and the grand total, and `pageSize` rows with their totals and the subtotals of the groups they
+are in -- with `totalRowCount` from the cube.
+
+- **Three queries a page.** The leaves holding a value are counted once (`WITH MEMBER … AS
+  Count(NonEmpty(…))`, asked again on `refresh`); the page's leaves are read with `Subset`; then
+  their cells, with every ancestor and the All member as rows so totals and columns are the
+  whole cube's.
+- **Order** runs in the cube, with stable `Order(…, BASC|BDESC)` calls: a level's member order
+  (`Rank`), its captions (`sortBy: "displayText"`), a summary at a column path
+  (`sortByValueKey` / `sortBySummaryPath`) and `rowSort` by label or by total.
+- **Refused** when the grid starts or the rows are ordered: `runningTotal: "column"` (a page does
+  not know the rows before it), and ordering rows by a value shown through `showAs` (the cube
+  orders by the values it holds).
 
 #### Limitations
 
-- **The whole result** is read at once: DevExtreme's `paginate` and loading a branch as it is
-  expanded are not supported yet.
+- **Loading a branch** as it is expanded is not supported yet; the filter picker lists a level's
+  values whole, not a page at a time.
+- **With `largeData`,** `hideEmptySummaryCells` drops a column no row of the whole cube has a value
+  in, judged by the values the cube holds rather than the ones shown; `sortBy: "displayText"`
+  orders by the member's caption, not the ancestor-qualified label; and where an order by one
+  level's labels (`rowSort` by label) ties, the cube's member order decides, as it does without
+  `largeData` -- the engine keeps the order the records came in.
 - **`metadata.sourceRowCount`** is the number of crossings holding a value; a cube has no record
   count.
 - **Excel export** still asks `{prefix}/excel`; without the PivotForge endpoints, use CSV.

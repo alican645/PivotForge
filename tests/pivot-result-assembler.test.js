@@ -82,3 +82,37 @@ test("a descending level runs backwards inside its parent", async () => {
   assert.deepEqual(result.rowHeaders, [["Marmara"], ["Ege"]]);
   assert.deepEqual(cellsOf(result), [[0, 0, 20], [1, 0, 10], [1, 1, 30]]);
 });
+
+test("a page keeps its rows as they came and the columns the whole result has", () => {
+  const Assembler = globalThis.PivotForge.ResultAssembler;
+  const request = PivotRequestBuilder.buildRequest([
+    { ...region, sortOrder: "Ascending" },
+    { dataField: "Quarter", area: "column" },
+    { dataField: "Amount", area: "data" }
+  ], { hideEmptySummaryCells: true });
+  const builder = Assembler.createScan(1, 1, ["Amount_sum"]);
+  // Q3 holds values only in rows on other pages; Q2 holds none anywhere.
+  builder.observeColumn(["Q1"]);
+  builder.observeColumn(["Q3"]);
+  builder.place(["Marmara"], ["Q1"], { Amount_sum: 20 });
+  builder.place(["Ege"], ["Q1"], { Amount_sum: 10 });
+  builder.place(["Marmara"], [], { Amount_sum: 20 });
+  builder.place(["Ege"], [], { Amount_sum: 10 });
+  builder.place([], ["Q1"], { Amount_sum: 30 });
+  builder.place([], ["Q3"], { Amount_sum: 5 });
+  builder.place([], [], { Amount_sum: 35 });
+  builder.scan.sourceRowCount = 2;
+  const scan = builder.finish();
+
+  const page = Assembler.assemble(scan, request, { culture: "tr-TR", paged: true });
+
+  assert.deepEqual(page.rowHeaders, [["Marmara"], ["Ege"]]);
+  assert.deepEqual(page.columnHeaders, [["Q1"], ["Q3"]]);
+  assert.deepEqual(page.rowTotals.map(total => total.values.Amount_sum), [20, 10]);
+  assert.deepEqual(page.columnTotals.map(total => total.values.Amount_sum), [30, 5]);
+
+  // Unpaged, the same buckets are ordered, and Q3 empties out on these rows.
+  const whole = Assembler.assemble(scan, request, { culture: "tr-TR" });
+  assert.deepEqual(whole.rowHeaders, [["Ege"], ["Marmara"]]);
+  assert.deepEqual(whole.columnHeaders, [["Q1"]]);
+});
