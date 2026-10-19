@@ -14,6 +14,16 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- `largeData` on an XMLA grid pages the rows in the cube, DevExtreme's
+  `paginate`: the leaves are counted once, each page is read with `Subset`
+  and ordered with stable MDX `Order` calls (member order, captions, a summary
+  at a column path, `rowSort`), and its cells come with every ancestor and the
+  All member, so columns and totals are the whole cube's. `loadPage(offset)`
+  reads the next page; `runningTotal: "column"` and ordering rows by a value
+  shown through `showAs` are refused with paging. (AspNetCore)
+
 ## [0.11.0-preview.1] — 2026-10-19
 
 A client XmlaStore that reads an OLAP cube (Analysis Services) over XMLA:
