@@ -14,6 +14,11 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.12.0-preview.1] — 2026-10-19
+
+Server-side paging for XMLA grids: with largeData the cube counts, orders
+and slices the rows itself, DevExtreme's paginate.
+
 ### Added
 
 - `largeData` on an XMLA grid pages the rows in the cube, DevExtreme's
@@ -1004,7 +1009,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.11.0-preview.1...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.12.0-preview.1...HEAD
+[0.12.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.11.0-preview.1...v0.12.0-preview.1
 [0.11.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.10.0-preview.1...v0.11.0-preview.1
 [0.10.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.9.0-preview.1...v0.10.0-preview.1
 [0.9.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.8.0-preview.1...v0.9.0-preview.1
