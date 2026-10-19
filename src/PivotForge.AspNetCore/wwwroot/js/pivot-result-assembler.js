@@ -470,8 +470,10 @@
 
   // ---- Column headers (CreateColumnHeaders, OrderColumnLevels) ----
 
-  function createColumnHeaders(observedHeaders, levelValues, levels, order, neutral, labels) {
-    if (observedHeaders.length === 0) {
+  // stubs: the keys of column groups whose children were not loaded; each is
+  // a header of its own, shorter than the axis, and nothing is crossed below it.
+  function createColumnHeaders(observedHeaders, levelValues, levels, order, neutral, labels, stubs = new Set()) {
+    if (observedHeaders.length === 0 && stubs.size === 0) {
       return observedHeaders;
     }
 
@@ -507,7 +509,11 @@
 
       for (const value of ordered[level]) {
         current.push(value);
-        append(current, level + 1);
+        if (level + 1 < ordered.length && stubs.has(keyOf(current))) {
+          headers.push([...current]);
+        } else {
+          append(current, level + 1);
+        }
         current.pop();
       }
     };
@@ -993,8 +999,11 @@
   // ---- Sorting by value (SummaryLookup, SortColumns, SortRows) ----
 
   function summaryLookup(rowHeaders, columnHeaders, values) {
-    const rowDepth = rowHeaders.length > 0 ? rowHeaders[0].length : 0;
-    const columnDepth = columnHeaders.length > 0 ? columnHeaders[0].length : 0;
+    // The deepest header, not the first: a group whose children were not
+    // loaded is a shorter one.
+    const depthOf = headers => headers.reduce((depth, header) => Math.max(depth, header.length), 0);
+    const rowDepth = depthOf(rowHeaders);
+    const columnDepth = depthOf(columnHeaders);
     const index = headers => {
       const map = new Map();
       headers.forEach((header, position) => {
@@ -1617,6 +1626,14 @@
       }
     }
 
+    // A row known to hold values, though maybe in no full column: every column
+    // may be a group whose children were not loaded.
+    function observeRow(rowPath) {
+      if (rowPath.length === rowCount) {
+        indexOf(rowIndex, scan.rowHeaders, rowPath);
+      }
+    }
+
     // A column known to hold values somewhere, though maybe not in the rows
     // placed: a page's columns are the whole result's.
     function observeColumn(columnPath) {
@@ -1653,7 +1670,7 @@
       return scan;
     }
 
-    return { scan, place, observeColumn, finish };
+    return { scan, place, observeRow, observeColumn, finish };
   }
 
   // ---- The engine's filter rule (PivotFilterPredicates), for labels in hand ----
@@ -1694,6 +1711,40 @@
     };
   }
 
+  // ---- Branches not loaded ----
+
+  // The groups nothing arrived below -- no leaf, no deeper group -- in the
+  // order they arrived.
+  function stubsOf(groups, leaves) {
+    const below = new Set();
+    for (const path of [...leaves, ...groups]) {
+      for (let depth = 1; depth < path.length; depth++) {
+        below.add(keyOf(path.slice(0, depth)));
+      }
+    }
+
+    return groups.filter(path => !below.has(keyOf(path)));
+  }
+
+  // Each column level's labels with those only a stub carries, so a stub's
+  // label is ordered among its siblings'.
+  function withStubLabels(levelValues, stubs) {
+    if (stubs.length === 0) {
+      return levelValues;
+    }
+
+    const values = levelValues.map(level => [...level]);
+    for (const stub of stubs) {
+      stub.forEach((label, level) => {
+        if (!values[level].includes(label)) {
+          values[level].push(label);
+        }
+      });
+    }
+
+    return values;
+  }
+
   // ---- The whole pass (ExecuteCore after Scan) ----
 
   // scan: what the summaries came to before anything was ordered --
@@ -1711,16 +1762,30 @@
   // paged: the scan holds one page of rows, already in order, and only rows
   // with values: the source ordered them and knew the whole result, so the
   // rows stay as they came and an empty column is one no row anywhere had.
-  function assemble(scan, request, { culture = null, paged = false } = {}) {
+  // branches: the scan holds only the branches loaded, and only crossings with
+  // values; a group nothing arrived below is a stub -- a header shorter than
+  // its axis, its values its group's totals -- and the result says how deep
+  // each axis is, since no header need reach it.
+  function assemble(scan, request, { culture = null, paged = false, branches = false } = {}) {
+    if (paged && branches) {
+      throw new Error("A page of rows is read at the full depth; it cannot also load branches.");
+    }
+
     const labels = createLabels(culture);
     const definitions = request.values;
     const dataTypes = request.dataTypes ?? {};
+    const rowStubs = branches ? stubsOf([...scan.subtotals.values()].map(subtotal => subtotal.rowHeader), scan.rowHeaders) : [];
+    const columnStubs = branches
+      ? stubsOf([...scan.columnSubtotals.values()].map(subtotal => subtotal.columnHeader), scan.columnHeaders)
+      : [];
+    const rowHeaders = rowStubs.length > 0 ? [...scan.rowHeaders, ...rowStubs] : scan.rowHeaders;
+    const columnLevelValues = withStubLabels(scan.columnLevelValues, columnStubs);
     const rowOrder = rowAxisOrder(request.rows, resolveLevelSorts(request.rows, request.fieldSorts),
-      scan.rowKinds, dataTypes, labels, scan.rowHeaders, scan.rowRanks ?? []);
+      scan.rowKinds, dataTypes, labels, rowHeaders, scan.rowRanks ?? []);
     const columnOrder = columnAxisOrder(request.columns, resolveLevelSorts(request.columns, request.fieldSorts),
-      scan.columnKinds, dataTypes, labels, scan.columnLevelValues, scan.columnRanks ?? []);
-    const columnHeaders = createColumnHeaders(scan.columnHeaders, scan.columnLevelValues, request.columns,
-      columnOrder, definitions.some(isVariation), labels);
+      scan.columnKinds, dataTypes, labels, columnLevelValues, scan.columnRanks ?? []);
+    const columnHeaders = createColumnHeaders(scan.columnHeaders, columnLevelValues, request.columns,
+      columnOrder, definitions.some(isVariation), labels, new Set(columnStubs.map(keyOf)));
     const columnLookup = new Map(columnHeaders.map((header, index) => [keyOf(header), index]));
     const remapColumn = observed => columnLookup.get(keyOf(scan.columnHeaders[observed]));
 
@@ -1731,9 +1796,11 @@
           return { row, column: remapColumn(observed), values };
         })
         .sort((left, right) => left.row - right.row || left.column - right.column),
-      rowTotals: [...scan.rowTotals]
-        .sort(([left], [right]) => left - right)
-        .map(([index, values]) => ({ index, values })),
+      rowTotals: [
+        ...[...scan.rowTotals].sort(([left], [right]) => left - right),
+        // A stub's total is its group's.
+        ...rowStubs.map((header, offset) => [scan.rowHeaders.length + offset, scan.subtotals.get(keyOf(header)).totals])
+      ].map(([index, values]) => ({ index, values })),
       columnTotals: [...scan.columnTotals]
         .map(([observed, values]) => ({ index: remapColumn(observed), values }))
         .sort((left, right) => left.index - right.index),
@@ -1760,17 +1827,17 @@
       })), columnHeaders)
     };
 
-    const transformed = transformValues(scan.rowHeaders, columnHeaders, definitions, raw);
+    const transformed = transformValues(rowHeaders, columnHeaders, definitions, raw);
     const observed = () => {
-      const seen = new Set(scan.columnHeaders.map(keyOf));
+      const seen = new Set([...scan.columnHeaders, ...columnStubs].map(keyOf));
       return {
-        rows: new Set(scan.rowHeaders.map((_, index) => index)),
+        rows: new Set(rowHeaders.map((_, index) => index)),
         columns: new Set(columnHeaders.flatMap((header, index) => (seen.has(keyOf(header)) ? [index] : [])))
       };
     };
     let populated = request.hideEmptySummaryCells
-      ? dropEmpty(scan.rowHeaders, columnHeaders, transformed, paged ? observed() : null)
-      : { rowHeaders: scan.rowHeaders, columnHeaders, values: transformed };
+      ? dropEmpty(rowHeaders, columnHeaders, transformed, paged || branches ? observed() : null)
+      : { rowHeaders, columnHeaders, values: transformed };
 
     populated = sortColumns(populated, request, columnOrder, scan.columnHeaders);
     let lookupValue = null;
@@ -1793,7 +1860,8 @@
         sourceRowCount: scan.sourceRowCount,
         rowHeaderCount: sorted.headers.length,
         columnHeaderCount: populated.columnHeaders.length,
-        cellCount: sorted.cells.length
+        cellCount: sorted.cells.length,
+        ...(branches ? { rowDepth: request.rows.length, columnDepth: request.columns.length } : {})
       },
       valueRanges: []
     }, definitions);
