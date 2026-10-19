@@ -4,6 +4,7 @@ const test = require("node:test");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-request-builder.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-result-assembler.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-xmla-store.js");
+require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-remote-store.js");
 require("../src/PivotForge.AspNetCore/wwwroot/js/pivot-widget.js");
 const { createProvider, dataset, M } = require("./helpers/xmla-fixtures.js");
 
@@ -97,7 +98,8 @@ test("a field the cube cannot carry is refused when the grid is declared", () =>
     /hierarchy levels/);
   assert.throws(() => createWidget({ fields: [fields[0], { dataField: "Margin", area: "data", expression: "[Amount] * 2" }] }),
     /calculated member of the cube/);
-  assert.throws(() => createWidget({ largeData: true }), /an XMLA store builds the whole result/);
+  assert.throws(() => createWidget({ largeData: true, fields: [fields[0], { ...fields[2], runningTotal: "column" }] }),
+    /cannot know the rows before it/);
   assert.throws(() => createWidget({ topN: [{ field: "[Region].[Region].[Region]", count: 1 }] }), /topN/);
 });
 
@@ -111,5 +113,48 @@ test("a failed query is shown as the grid's error", async () => {
 
   assert.equal(errors.length, 1);
   assert.match(errors[0], /No answer registered for SELECT NON EMPTY/);
+  widget.dispose();
+});
+
+test("with largeData the grid reads the cube a page of rows at a time", async () => {
+  const COUNT = { h: "[Measures]", u: "[Measures].[PivotForge Row Count]", c: "PivotForge Row Count", l: 0 };
+  const page = (member, total) => dataset({
+    columns: [[M.calendarAll, M.amount], [M.y2024, M.amount], [M.y2025, M.amount]],
+    rows: [[member], [M.all]],
+    cells: { 0: total, 1: 100, 2: 200, 3: 600, 4: 250, 5: 350 }
+  });
+  const provider = createProvider({
+    answers: [
+      { match: /^WITH MEMBER/, response: dataset({ columns: [[COUNT]], cells: { 0: 2 } }) },
+      { match: /^SELECT \{\} ON 0, Subset\(.*, 0, 1\)/, response: dataset({ columns: [], rows: [[M.ege]] }) },
+      { match: /^SELECT \{\} ON 0, Subset\(.*, 1, 1\)/, response: dataset({ columns: [], rows: [[M.marmara]] }) },
+      { match: /Marmara\], \[Region\]\.\[Region\]\.\[All\]\} DIMENSION/, response: page(M.marmara, 300) },
+      { match: /^SELECT NON EMPTY/, response: page(M.ege, 300) }
+    ]
+  });
+  const { widget, rendered } = createWidget({ largeData: true, pageSize: 1, fetchImpl: provider.fetch });
+
+  await widget.refresh();
+  assert.deepEqual(rendered.at(-1).rowHeaders, [["Ege"]]);
+  assert.equal(widget.totalRowCount, 2);
+  assert.equal(widget.currentPage.hasMore, true);
+
+  const next = await widget.loadPage(1);
+  assert.deepEqual(next.result.rowHeaders, [["Marmara"]]);
+  assert.deepEqual(rendered.at(-1).rowHeaders, [["Marmara"]]);
+  assert.equal(next.hasMore, false);
+  widget.dispose();
+});
+
+test("a remote store still refuses largeData, and a page needs a loaded grid first", async () => {
+  assert.throws(() => PivotForge.create(createContainer(), {
+    fields: [{ dataField: "Region", area: "row" }, { dataField: "Amount", area: "data" }],
+    autoLoad: false,
+    largeData: true,
+    store: { type: "remote", load: async () => ({ data: [] }) }
+  }), /largeData pages a result the PivotForge endpoints keep/);
+
+  const { widget } = createWidget({ largeData: true });
+  await assert.rejects(widget.loadPage(0), /no active large-data session/);
   widget.dispose();
 });

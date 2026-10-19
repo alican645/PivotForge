@@ -264,3 +264,123 @@ test("the XML reader decodes entities, CDATA and prefixes, and refuses what is n
   assert.equal(document.children[2].text, "<raw>");
   assert.throws(() => XmlaStore.parseXml("<a><b></a>"), /not well-formed/);
 });
+
+// ---- A page of rows (largeData) ----
+
+const COUNT = { h: "[Measures]", u: "[Measures].[PivotForge Row Count]", c: "PivotForge Row Count", l: 0 };
+const countOf = rows => dataset({ columns: [[COUNT]], cells: { 0: rows } });
+const leavesOf = tuples => dataset({ columns: [], rows: tuples });
+
+function pagedStore(leaves, pivotResponse, rows = 2) {
+  return createStore([
+    { match: /^WITH MEMBER/, response: countOf(rows) },
+    { match: /^SELECT \{\} ON 0, Subset/, response: leavesOf(leaves) },
+    { match: /^SELECT NON EMPTY/, response: pivotResponse }
+  ]);
+}
+
+// Marmara's page: its row, and the grand total row that keeps every column.
+const MARMARA_PAGE = dataset({
+  columns: [[M.calendarAll, M.amount], [M.y2024, M.amount], [M.y2025, M.amount]],
+  rows: [[M.marmara], [M.all]],
+  cells: { 0: 300, 1: 150, 2: 150, 3: 600, 4: 250, 5: 350 }
+});
+
+test("a page counts the leaves once, reads its slice of them, then their cells with the totals", async () => {
+  const { store, provider } = pagedStore([[M.marmara]], MARMARA_PAGE);
+
+  const page = await store.page(request([region, year, amount]), { offset: 1, pageSize: 1, culture: "tr-TR" });
+
+  assert.deepEqual(pivotStatements(provider).filter(statement => !statement.startsWith("SELECT NON EMPTY")), [
+    "WITH MEMBER [Measures].[PivotForge Row Count] AS Count(NonEmpty([Region].[Region].[Region].Members, {[Measures].[Amount]})) " +
+    "SELECT {[Measures].[PivotForge Row Count]} ON 0 FROM [Sales]"
+  ]);
+  assert.ok(provider.statements.includes(
+    "SELECT {} ON 0, Subset(NonEmpty([Region].[Region].[Region].Members, {[Measures].[Amount]}), 1, 1) " +
+    "DIMENSION PROPERTIES PARENT_UNIQUE_NAME, HIERARCHY_UNIQUE_NAME ON 1 FROM [Sales]"));
+  assert.ok(provider.statements.some(statement =>
+    statement.includes("{[Region].[Region].&[Marmara], [Region].[Region].[All]} DIMENSION PROPERTIES")));
+
+  const key = `${AMOUNT}_sum`;
+  assert.deepEqual(
+    { offset: page.offset, totalRowCount: page.totalRowCount, hasPrevious: page.hasPrevious, hasMore: page.hasMore },
+    { offset: 1, totalRowCount: 2, hasPrevious: true, hasMore: false });
+  assert.deepEqual(page.result.rowHeaders, [["Marmara"]]);
+  assert.deepEqual(page.result.columnHeaders, [["2024"], ["2025"]]);
+  assert.deepEqual(page.result.rowTotals.map(total => total.values[key]), [300]);
+  assert.deepEqual(page.result.columnTotals.map(total => total.values[key]), [250, 350]);
+  assert.deepEqual(page.result.grandTotals, { [key]: 600 });
+  assert.equal(page.result.metadata.rowHeaderCount, 2);
+});
+
+test("the count is asked once until a refresh asks again", async () => {
+  const { store, provider } = pagedStore([[M.marmara]], MARMARA_PAGE);
+  const counted = () => provider.statements.filter(statement => statement.startsWith("WITH MEMBER")).length;
+
+  await store.page(request([region, year, amount]), { offset: 0, pageSize: 1, culture: "tr-TR" });
+  await store.page(request([region, year, amount]), { offset: 1, pageSize: 1, culture: "tr-TR" });
+  assert.equal(counted(), 1);
+
+  await store.page(request([region, year, amount]), { offset: 0, pageSize: 1, culture: "tr-TR", recount: true });
+  assert.equal(counted(), 2);
+});
+
+test("the cube orders a page's rows: a summary first, then the labels, an empty summary as the smallest", async () => {
+  const { store, provider } = pagedStore([[M.marmara]], MARMARA_PAGE);
+
+  await store.page(request([{ ...region, sortByValueKey: `${AMOUNT}_sum`, sortOrder: "Descending" }, year, amount]),
+    { pageSize: 1, culture: "tr-TR" });
+
+  const value = "([Region].[Region].CurrentMember, [Measures].[Amount])";
+  assert.ok(provider.statements.includes(
+    "SELECT {} ON 0, Subset(Order(Order(Order(NonEmpty([Region].[Region].[Region].Members, {[Measures].[Amount]}), " +
+    "Rank([Region].[Region].CurrentMember, [Region].[Region].[Region].Members), BDESC), " +
+    `${value}, BDESC), IIF(IsEmpty(${value}), 0, 1), BDESC), 0, 1) ` +
+    "DIMENSION PROPERTIES PARENT_UNIQUE_NAME, HIERARCHY_UNIQUE_NAME ON 1 FROM [Sales]"));
+});
+
+test("levels of one hierarchy page by its deepest one, ordered and totalled through their ancestors", async () => {
+  const quarterPage = dataset({
+    columns: [[M.amount]],
+    rows: [[M.q1of2025], [M.y2025], [M.calendarAll]],
+    cells: { 0: 30, 1: 30, 2: 60 }
+  });
+  const { store, provider } = pagedStore([[M.q1of2025]], quarterPage, 3);
+  const rows = [{ dataField: YEAR, area: "row", sortOrder: "Descending" }, { dataField: QUARTER, area: "row" }];
+
+  const page = await store.page(request([...rows, amount]), { pageSize: 1, culture: "tr-TR" });
+
+  assert.ok(provider.statements.includes(
+    "SELECT {} ON 0, Subset(Order(NonEmpty([Date].[Calendar].[Quarter].Members, {[Measures].[Amount]}), " +
+    "Rank(Ancestor([Date].[Calendar].CurrentMember, [Date].[Calendar].[Year]), [Date].[Calendar].[Year].Members), BDESC), 0, 1) " +
+    "DIMENSION PROPERTIES PARENT_UNIQUE_NAME, HIERARCHY_UNIQUE_NAME ON 1 FROM [Sales]"));
+  assert.ok(provider.statements.some(statement => statement.includes(
+    "{[Date].[Calendar].[Quarter].&[2025]&[1], [Date].[Calendar].[Year].&[2025], [Date].[Calendar].[All]}")));
+  assert.deepEqual(page.result.rowHeaders, [["2025", "Q1"]]);
+  assert.deepEqual(page.result.subtotals.map(subtotal => [subtotal.rowHeader, subtotal.totals[`${AMOUNT}_sum`]]), [[["2025"], 30]]);
+  assert.deepEqual(page.result.grandTotals, { [`${AMOUNT}_sum`]: 60 });
+});
+
+test("a page whose filter keeps nothing asks nothing", async () => {
+  const { store, provider } = pagedStore([], MARMARA_PAGE);
+
+  const page = await store.page(request([region, year, amount], { filters: [{ field: REGION, values: ["Yok"] }] }),
+    { culture: "tr-TR" });
+
+  assert.equal(page.totalRowCount, 0);
+  assert.deepEqual(page.result.rowHeaders, []);
+  assert.ok(!provider.statements.some(statement => statement.startsWith("WITH MEMBER")));
+});
+
+test("paging refuses a running total down a column and an order by a shown value", async () => {
+  assert.throws(() => XmlaStore.validateFields(PivotRequestBuilder.normalizeFields([region, { ...amount, runningTotal: "column" }]),
+    { paged: true }), /cannot know the rows before it/);
+  assert.throws(() => XmlaStore.validateFields(PivotRequestBuilder.normalizeFields([
+    { ...region, sortByValueKey: `${AMOUNT}_sum` }, { ...amount, showAs: "percentOfGrandTotal" }]), { paged: true }),
+  /shown as percentOfGrandTotal/);
+  assert.doesNotThrow(() => XmlaStore.validateFields(PivotRequestBuilder.normalizeFields([region, { ...amount, runningTotal: "column" }])));
+
+  const { store } = pagedStore([[M.marmara]], MARMARA_PAGE);
+  await assert.rejects(store.page(request([region, year, { ...amount, showAs: "percentOfRowTotal" }],
+    { rowSort: { mode: "RowTotalValue", valueKey: `${AMOUNT}_sum`, direction: "Descending" } })), /shown as percentOfRowTotal/);
+});

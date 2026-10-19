@@ -29,7 +29,12 @@
 
   // ---- What an XMLA grid can declare ----
 
-  function validateFields(fields) {
+  // paged: the grid reads the cube a page of rows at a time (largeData).
+  function validateFields(fields, { paged = false } = {}) {
+    if (paged) {
+      validatePagedFields(fields);
+    }
+
     for (const field of fields) {
       const name = field.caption ?? field.dataField;
       if (field.expression !== null && field.expression !== undefined) {
@@ -50,6 +55,58 @@
         throw new Error(`Field "${name}" names a sorting method, which only the PivotForge endpoints can run.`);
       }
     }
+  }
+
+  // A page is read without the rows before it, and its rows are ordered by the
+  // cube, which knows the values it holds but not what a display mode makes of
+  // them.
+  function validatePagedFields(fields) {
+    const data = fields.filter(field => field.area === "data");
+    const running = data.find(field => field.runningTotal === "column");
+    if (running) {
+      throw new Error(
+        `Field "${running.caption ?? running.dataField}" runs a total down its column; a page of rows cannot know the rows before it, so largeData cannot carry it.`);
+    }
+
+    for (const field of fields) {
+      if (field.area === "row" && field.sortByValueKey) {
+        refuseShownValueSort(data.map(entry => ({ key: `${entry.dataField}_${String(entry.aggregation).toLowerCase()}`, showAs: entry.showAs })),
+          field.sortByValueKey);
+      }
+    }
+  }
+
+  function refuseShownValueSort(values, key) {
+    const value = values.find(entry => entry.key === key);
+    if (value && (value.showAs ?? "normal") !== "normal") {
+      throw new Error(
+        `Rows are ordered by "${key}", which is shown as ${value.showAs}; with largeData the cube orders the rows, and only by the values it holds.`);
+    }
+  }
+
+  function validatePage(request) {
+    const running = request.values.find(value => value.runningTotal === "Column");
+    if (running) {
+      throw new Error(
+        `"${running.field}" runs a total down its column; a page of rows cannot know the rows before it, so largeData cannot carry it.`);
+    }
+
+    const values = request.values.map(value => ({ key: assembler().valueKey(value), showAs: value.showAs }));
+    for (const level of request.rows) {
+      const sort = levelSortOf(request, level);
+      if (sort?.valueKey) {
+        refuseShownValueSort(values, sort.valueKey);
+      }
+    }
+
+    if (request.rowSort?.mode === "RowTotalValue" && request.rowSort.valueKey) {
+      refuseShownValueSort(values, request.rowSort.valueKey);
+    }
+  }
+
+  function levelSortOf(request, level) {
+    const names = [assembler().levelKey(level), assembler().levelField(level)];
+    return (request.fieldSorts ?? []).find(sort => names.includes(sort.field)) ?? null;
   }
 
   function validateRequest(request) {
@@ -603,6 +660,251 @@
       return assembler().assemble(scan, request, { culture });
     }
 
+    // ---- A page of rows (largeData) ----
+
+    const COUNT_MEMBER = "[Measures].[PivotForge Row Count]";
+    const counts = new Map();
+
+    // Where the member of axis position k is, from a leaf tuple of the axis:
+    // the tuple's own member when k is its hierarchy's deepest level there,
+    // or that member's ancestor.
+    function memberAt(rows, k) {
+      const level = rows[k];
+      const deepest = deepestOf(rows, level.hierarchy);
+      return deepest === level
+        ? `${level.hierarchy.name}.CurrentMember`
+        : `Ancestor(${level.hierarchy.name}.CurrentMember, ${level.name})`;
+    }
+
+    function deepestOf(levels, hierarchy) {
+      return levels.filter(level => level.hierarchy === hierarchy)
+        .reduce((deepest, level) => (deepest === null || level.number > deepest.number ? level : deepest), null);
+    }
+
+    function hierarchiesOf(levels) {
+      const found = [];
+      for (const level of levels) {
+        if (!found.includes(level.hierarchy)) {
+          found.push(level.hierarchy);
+        }
+      }
+
+      return found;
+    }
+
+    const allOf = hierarchy => hierarchy.allMember ?? `${hierarchy.name}.DefaultMember`;
+
+    // Every row leaf that holds a value, in the cube's order.
+    function leafSet(rows, measures) {
+      const members = crossJoin(hierarchiesOf(rows).map(hierarchy => `${deepestOf(rows, hierarchy).name}.Members`));
+      return `NonEmpty(${members}, ${setOf(measures)})`;
+    }
+
+    // The leaves ordered as the assembler would order the whole result: one
+    // stable Order per criterion, the least significant first, so the last
+    // one applied decides and each earlier one breaks its ties.
+    async function orderedLeafSet(request, rows, columns, measures, ctx) {
+      const steps = [];
+      const order = (expression, descending) => steps.push(`${expression}, ${descending ? "BDESC" : "BASC"}`);
+      const labelKey = (k, sort) => (sort?.sortBy === "DisplayText"
+        ? `${memberAt(rows, k)}.Member_Caption`
+        : `Rank(${memberAt(rows, k)}, ${rows[k].name}.Members)`);
+      const sorts = request.rows.map(level => levelSortOf(request, level));
+
+      async function valueAt(k, sort) {
+        const definition = request.values.find(value => assembler().valueKey(value) === sort.valueKey);
+        if (!definition) {
+          return null;
+        }
+
+        const reached = rows.slice(0, k + 1);
+        const members = hierarchiesOf(rows).map(hierarchy => {
+          const deepest = deepestOf(reached, hierarchy);
+          if (!deepest) {
+            return allOf(hierarchy);
+          }
+
+          return deepestOf(rows, hierarchy) === deepest
+            ? `${hierarchy.name}.CurrentMember`
+            : `Ancestor(${hierarchy.name}.CurrentMember, ${deepest.name})`;
+        });
+        const path = sort.summaryPath ?? [];
+        if (path.length > 0) {
+          const columnMembers = await pathMembers(columns, path, ctx);
+          // A path the columns do not have holds no value: the order falls to the labels.
+          if (columnMembers.some(candidates => candidates.length !== 1)) {
+            return null;
+          }
+
+          members.push(...columnMembers.map(candidates => candidates[0].uniqueName));
+        }
+
+        return `(${[...members, definition.field].join(", ")})`;
+      }
+
+      async function byLevel(k, sort) {
+        const descending = sort?.direction === "Descending";
+        order(labelKey(k, sort), descending);
+        const value = sort?.valueKey ? await valueAt(k, sort) : null;
+        if (value) {
+          order(value, descending);
+          // An empty summary comes first, as the smallest, whatever the values.
+          order(`IIF(IsEmpty(${value}), 0, 1)`, descending);
+        }
+      }
+
+      const rowSort = request.rowSort ?? null;
+      if (!rowSort) {
+        const deepest = sorts.reduce((found, sort, k) => (sort ? k : found), -1);
+        for (let k = deepest; k >= 0; k--) {
+          await byLevel(k, sorts[k]);
+        }
+      } else if (rowSort.mode === "RowLabel") {
+        const named = request.rows.findIndex(level =>
+          [assembler().levelKey(level), assembler().levelField(level)].includes(rowSort.field));
+        const k = named < 0 ? 0 : named;
+        const descending = rowSort.direction === "Descending";
+        // Descending reverses the ascending order, ties and all: the cube's
+        // order backwards first.
+        if (descending) {
+          for (let level = rows.length - 1; level >= 0; level--) {
+            order(labelKey(level, null), true);
+          }
+        }
+
+        order(labelKey(k, sorts[k]), descending);
+      } else if (rowSort.mode === "RowTotalValue" && rowSort.valueKey && String(rowSort.valueKey).trim()) {
+        for (let k = rows.length - 1; k >= 0; k--) {
+          await byLevel(k, {
+            direction: rowSort.direction, valueKey: rowSort.valueKey, summaryPath: rowSort.columnPath ?? null,
+            sortBy: sorts[k]?.sortBy
+          });
+        }
+      }
+
+      return steps.reduce((set, step) => `Order(${set}, ${step})`, leafSet(rows, measures));
+    }
+
+    async function rowCount(statement, locale, recount, signal) {
+      const key = `${locale ?? ""}\u001f${statement}`;
+      if (recount || !counts.has(key)) {
+        const promise = execute(statement, { locale, signal }).then(document => {
+          const value = cellsOf(document).get(0);
+          return Number.isFinite(value) ? value : 0;
+        });
+        promise.catch(() => counts.delete(key));
+        counts.set(key, promise);
+      }
+
+      return counts.get(key);
+    }
+
+    // The leaf tuples of a page, then each depth's subtotals of them and the
+    // grand total, as tuples naming every row hierarchy.
+    function pageRowSet(rows, leaves, members) {
+      const hierarchies = hierarchiesOf(rows);
+      const tuples = [];
+      const seen = new Set();
+      const add = tuple => {
+        const key = tuple.join("\u001f");
+        if (!seen.has(key)) {
+          seen.add(key);
+          tuples.push(tuple);
+        }
+      };
+
+      leaves.forEach(leaf => add(hierarchies.map(hierarchy =>
+        leaf.find(member => String(member.hierarchy).toLowerCase() === hierarchy.name.toLowerCase())?.uniqueName ?? allOf(hierarchy))));
+      for (let depth = rows.length - 1; depth >= 0; depth--) {
+        const reached = rows.slice(0, depth);
+        for (const leaf of leaves) {
+          add(hierarchies.map(hierarchy => {
+            const deepest = deepestOf(reached, hierarchy);
+            const member = leaf.find(entry => String(entry.hierarchy).toLowerCase() === hierarchy.name.toLowerCase());
+            if (!deepest || !member) {
+              return allOf(hierarchy);
+            }
+
+            return ancestorIn(members, member, deepest.number)?.uniqueName ?? allOf(hierarchy);
+          }));
+        }
+      }
+
+      const tuple = entries => (entries.length === 1 ? entries[0] : `(${entries.join(", ")})`);
+      return setOf(tuples.map(tuple));
+    }
+
+    async function page(request, { offset = 0, pageSize = 40, culture = null, signal = null, recount = false } = {}) {
+      validateRequest(request);
+      validatePage(request);
+      const start = Math.max(0, Math.floor(offset));
+      const size = Math.max(1, Math.floor(pageSize));
+      const paged = result => ({
+        offset: start,
+        pageSize: size,
+        totalRowCount: result.metadata.rowHeaderCount,
+        hasPrevious: start > 0,
+        hasMore: start + result.rowHeaders.length < result.metadata.rowHeaderCount,
+        result
+      });
+
+      if (request.rows.length === 0) {
+        return paged(await pivot(request, { culture, signal }));
+      }
+
+      const ctx = context(culture, signal);
+      const schema = await schemaOf(signal);
+      const rows = request.rows.map(level => levelOf(schema, levelName(level)));
+      const columns = request.columns.map(level => levelOf(schema, levelName(level)));
+      const shared = rows.find(level => columns.some(column => column.hierarchy === level.hierarchy));
+      if (shared) {
+        throw new Error(
+          `${shared.hierarchy.name} has levels on both the rows and the columns; an MDX query places a hierarchy on one axis.`);
+      }
+
+      const keys = request.values.map(value => assembler().valueKey(value));
+      const slices = await slicesOf(schema, request.filters, ctx);
+      const empty = () => paged(assembler().assemble(assembler().emptyScan(keys), request, { culture, paged: true }));
+      if (slices === NOTHING) {
+        return empty();
+      }
+
+      const measures = measuresOf(request.values);
+      const from = fromClause(cube, slices);
+      const [total, leavesDocument, members, rowLabelers, columnLabelers] = await Promise.all([
+        rowCount(`WITH MEMBER ${COUNT_MEMBER} AS Count(${leafSet(rows, measures)}) SELECT {${COUNT_MEMBER}} ON 0 FROM ${from}`,
+          ctx.locale, recount, signal),
+        orderedLeafSet(request, rows, columns, measures, ctx).then(set => execute(
+          `SELECT {} ON 0, Subset(${set}, ${start}, ${size}) ${PROPERTIES} ON 1 FROM ${from}`,
+          { locale: ctx.locale, signal })),
+        memberIndex(levelsToLoad([...rows, ...columns]), ctx.locale, signal),
+        axisLabelers(rows, ctx.locale, signal),
+        axisLabelers(columns, ctx.locale, signal)
+      ]);
+
+      const leaves = tuplesOf(leavesDocument, "Axis1") ?? [];
+      if (leaves.length === 0) {
+        const result = assembler().assemble(assembler().emptyScan(keys), request, { culture, paged: true });
+        result.metadata.rowHeaderCount = total;
+        return paged(result);
+      }
+
+      const measureSet = setOf(measures);
+      const columnSet = columns.length > 0 ? crossJoin([axisSet(columns), measureSet]) : measureSet;
+      const document = await execute(
+        `SELECT NON EMPTY ${columnSet} ${PROPERTIES} ON COLUMNS, ${pageRowSet(rows, leaves, members)} ${PROPERTIES} ON ROWS ` +
+        `FROM ${from} CELL PROPERTIES VALUE`,
+        { locale: ctx.locale, signal });
+
+      const scan = scanOf(document, {
+        rows, columns, measures, keys, values: request.values, members, rowLabelers, columnLabelers, observeColumns: true
+      });
+      scan.columnRanks = columnLabelers.map(ranksOf);
+      const result = assembler().assemble(scan, request, { culture, paged: true });
+      result.metadata.rowHeaderCount = total;
+      return paged(result);
+    }
+
     // A tuple as the header path it stands for: each axis level the tuple
     // reaches, named by the label of the member's ancestor at that level.
     function pathOf(tuple, levels, members, labelers) {
@@ -658,7 +960,9 @@
       return cells;
     }
 
-    function scanOf(document, { rows, columns, measures, keys, values, members, rowLabelers, columnLabelers }) {
+    // observeColumns: every column the axis carries is one of the result's,
+    // though the rows read hold no value in it (a page of rows).
+    function scanOf(document, { rows, columns, measures, keys, values, members, rowLabelers, columnLabelers, observeColumns = false }) {
       const builder = assembler().createScan(rows.length, columns.length, keys);
       const columnTuples = tuplesOf(document, "Axis0") ?? [];
       const rowTuples = rows.length > 0 ? (tuplesOf(document, "Axis1") ?? []) : [[]];
@@ -681,6 +985,10 @@
         const position = measure ? measures.findIndex(name => name.toLowerCase() === measure.uniqueName.toLowerCase()) : 0;
         columnGroups[groupIndex.get(key)].ordinals.set(position, ordinal);
       });
+
+      if (observeColumns) {
+        columnGroups.forEach(group => builder.observeColumn(group.path));
+      }
 
       // The cells first, in the order the cube returned them, so every row and
       // column is known before a total or subtotal of it is placed.
@@ -888,13 +1196,14 @@
       return { fields: discovered };
     }
 
-    return { pivot, fieldValues, drillDown, fields, limit };
+    return { pivot, page, fieldValues, drillDown, fields, limit };
   }
 
   PivotForge.XmlaStore = {
     create: createXmlaStore,
     validateFields,
     validateRequest,
+    validatePage,
     parseXml,
     pivotStatement,
     LOCALE_IDENTIFIERS
