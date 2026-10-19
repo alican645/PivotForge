@@ -995,10 +995,32 @@ are in -- with `totalRowCount` from the cube.
   not know the rows before it), and ordering rows by a value shown through `showAs` (the cube
   orders by the values it holds).
 
+#### Loading branches (`expanded: false`)
+
+A row or column field declared `expanded: false` (`Expanded(false)`) is read down to itself and no
+further: its groups come closed, each showing its totals, and the cube is asked for a group's
+children only when it is opened -- DevExtreme's load on expand.
+
+- **One query a branch.** Opening a group reads what lies below it down to the next closed
+  level (`Descendants(…)`), across what the other axis holds, and adds it to what the grid has;
+  closing it, or opening it again, asks for nothing. Any other change -- a filter, a sort, a
+  field moved -- reads every open branch again in one query.
+- **Expand all**, or expanding one level from the header menu, opens those fields and reads them
+  whole, as DevExtreme does; collapse all reads nothing.
+- **Read whole instead,** with the same grid on screen: an axis with `runningTotal` or a
+  `differenceFromPrevious` / `percentDifferenceFromPrevious` value (both read the siblings a
+  closed group hides), the other axis when a level is ordered by a summary at a path
+  (`sortBySummaryPath`, `rowSort` with a column path), and every axis with `largeData`, which
+  pages the deepest rows.
+- The open groups are not part of the saved state; a restored grid opens with its closed levels
+  closed.
+
 #### Limitations
 
-- **Loading a branch** as it is expanded is not supported yet; the filter picker lists a level's
-  values whole, not a page at a time.
+- **The filter picker** lists a level's values whole, not a page at a time.
+- **Loading branches,** columns crossed without `hideEmptySummaryCells` are the values of the
+  branches read so far, so an empty column the whole grid would show under an open group may not
+  be there.
 - **With `largeData`,** `hideEmptySummaryCells` drops a column no row of the whole cube has a value
   in, judged by the values the cube holds rather than the ones shown; `sortBy: "displayText"`
   orders by the member's caption, not the ancestor-qualified label; and where an order by one

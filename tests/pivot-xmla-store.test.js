@@ -384,3 +384,65 @@ test("paging refuses a running total down a column and an order by a shown value
   await assert.rejects(store.page(request([region, year, { ...amount, showAs: "percentOfRowTotal" }],
     { rowSort: { mode: "RowTotalValue", valueKey: `${AMOUNT}_sum`, direction: "Descending" } })), /shown as percentOfRowTotal/);
 });
+
+// ---- Branches (load on expand) ----
+
+const QUARTERS_OF_2024 = dataset({
+  columns: [[M.q1of2024, M.amount], [M.q2of2024, M.amount]],
+  rows: [[M.all], [M.ege], [M.marmara]],
+  cells: { 0: 210, 1: 40, 2: 60, 3: 40, 4: 150 }
+});
+
+test("a closed level is read down to itself, and opening one of its groups reads that branch alone", async () => {
+  const { store, provider } = createStore([
+    { match: /^SELECT NON EMPTY CrossJoin\(Union/, response: BY_YEAR },
+    { match: /^SELECT NON EMPTY CrossJoin\(Descendants/, response: QUARTERS_OF_2024 }
+  ]);
+  const fields = [region, { ...year, expanded: false }, { dataField: QUARTER, area: "column" }, amount];
+  const branches = paths => ({ columns: { expanded: [false, true], paths } });
+  const key = `${AMOUNT}_sum`;
+
+  const closed = await store.pivot(request(fields), { culture: "tr-TR", branches: branches([]) });
+  assert.deepEqual(closed.columnHeaders, [["2024"], ["2025"]]);
+  assert.equal(closed.metadata.columnDepth, 2);
+  assert.deepEqual(closed.columnSubtotals.map(subtotal => [subtotal.columnHeader[0], subtotal.totals[key]]),
+    [["2024", 250], ["2025", 350]]);
+  assert.match(pivotStatements(provider)[0], /^SELECT NON EMPTY CrossJoin\(Union\(\{\[Date\]\.\[Calendar\]\.\[All\]\}, \[Date\]\.\[Calendar\]\.\[Year\]\.Members\)/);
+
+  const opened = await store.pivot(request(fields), { culture: "tr-TR", branches: branches([["2024"]]) });
+  assert.equal(pivotStatements(provider)[1],
+    "SELECT NON EMPTY CrossJoin(Descendants({[Date].[Calendar].[Year].&[2024]}, [Date].[Calendar].[Quarter]), {[Measures].[Amount]}) " +
+    "DIMENSION PROPERTIES PARENT_UNIQUE_NAME, HIERARCHY_UNIQUE_NAME ON COLUMNS, " +
+    "NON EMPTY Union({[Region].[Region].[All]}, [Region].[Region].[Region].Members) " +
+    "DIMENSION PROPERTIES PARENT_UNIQUE_NAME, HIERARCHY_UNIQUE_NAME ON ROWS FROM [Sales] CELL PROPERTIES VALUE");
+  assert.deepEqual(opened.columnHeaders, [["2024", "Q1"], ["2024", "Q2"], ["2025"]]);
+  assert.deepEqual(opened.cells.map(cell => [cell.row, cell.column, cell.values[key]]), [[0, 0, 60], [0, 1, 40], [1, 0, 150]]);
+  assert.deepEqual(opened.rowTotals.map(total => total.values[key]), [300, 300]);
+  assert.deepEqual(opened.grandTotals, { [key]: 600 });
+
+  // Closing it again reads what is open afresh, as does any other change.
+  await store.pivot(request(fields), { culture: "tr-TR", branches: branches([]) });
+  assert.equal(pivotStatements(provider).length, 3);
+  assert.match(pivotStatements(provider)[2], /^SELECT NON EMPTY CrossJoin\(Union/);
+});
+
+test("open paths join the closed level's members, and what reads siblings keeps the axis whole", async () => {
+  const statement = (fields, branches) => {
+    const { store, provider } = createStore([{ match: /^SELECT NON EMPTY/, response: BY_YEAR }]);
+    return store.pivot(request(fields), { culture: "tr-TR", branches })
+      .then(() => pivotStatements(provider)[0]);
+  };
+  const rows = [{ dataField: YEAR, area: "row", expanded: false }, { dataField: QUARTER, area: "row" }, amount];
+  const open = { rows: { expanded: [false, true], paths: [["2025"], ["Nowhere"], ["2024", "Q1"]] } };
+
+  assert.ok((await statement(rows, open)).includes(
+    "NON EMPTY Union(Union({[Date].[Calendar].[All]}, [Date].[Calendar].[Year].Members), " +
+    "Descendants({[Date].[Calendar].[Year].&[2025]}, [Date].[Calendar].[Quarter])) DIMENSION PROPERTIES"));
+
+  const whole = "NON EMPTY Union({[Date].[Calendar].[All]}, [Date].[Calendar].[Year].Members, [Date].[Calendar].[Quarter].Members)";
+  const running = [rows[0], rows[1], { ...amount, runningTotal: "row" }];
+  assert.ok((await statement(running, open)).includes(whole));
+  const byPrevious = [rows[0], rows[1], { ...amount, showAs: "differenceFromPrevious" }];
+  assert.ok((await statement(byPrevious, open)).includes(whole));
+  assert.ok((await statement(rows, null)).includes(whole));
+});

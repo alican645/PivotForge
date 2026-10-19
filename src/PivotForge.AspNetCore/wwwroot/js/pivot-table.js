@@ -604,14 +604,15 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     this.collapsedColumns ??= new Set();
     this.applyInitialColumnCollapse(columnHeaders, settings);
-    const columnDepth = Math.max(1, ...columnHeaders.map(header => header.length));
+    const columnDepth = Math.max(1, this.axisDepth("column", columnHeaders));
     const measureDepth = columnValues.length > 1 ? 1 : 0;
     const headerDepth = columnDepth + measureDepth;
-    const actualRowDepth = Math.max(1, ...rowHeaders.map(header => header.length));
+    const actualRowDepth = Math.max(1, this.axisDepth("row", rowHeaders));
     const rowDepth = isOneColumnLayout(settings) ? 1 : actualRowDepth;
     const lookup = this.createCellLookup(cells);
     this.collapsedRows ??= new Set();
     this.applyInitialCollapse(rowHeaders, actualRowDepth, settings);
+    this.collapseUnloaded(rowHeaders, actualRowDepth, columnHeaders, columnDepth);
     this.selectionMetadata = new WeakMap();
     this.renderedDataStart = this.dataStart(rowDepth);
     this.renderedValueSpan = columnValues.length;
@@ -971,10 +972,31 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       .forEach(key => this.collapsedColumns.add(key));
   }
 
+  // How deep an axis is: the deepest header, or, where the source loads
+  // branches, the depth it declares, which no header need reach.
+  axisDepth(axis, headers) {
+    const declared = this.lastResult?.metadata?.[axis === "column" ? "columnDepth" : "rowDepth"];
+    const deepest = (headers ?? []).reduce((depth, header) => Math.max(depth, header.length), 0);
+    return Number.isInteger(declared) ? Math.max(declared, deepest) : deepest;
+  }
+
+  // A header shorter than its axis is a group whose children were not loaded:
+  // it is drawn collapsed, and opening it asks the source for the branch
+  // (onBranchExpand) rather than showing children that are not there.
+  collapseUnloaded(rowHeaders, rowDepth, columnHeaders, columnDepth) {
+    const stubs = (headers, depth) => new Set((headers ?? [])
+      .filter(header => header.length > 0 && header.length < depth)
+      .map(header => this.createSubtotalKey(header)));
+    this.unloadedRows = stubs(rowHeaders, rowDepth);
+    this.unloadedColumns = stubs(columnHeaders, columnDepth);
+    this.unloadedRows.forEach(key => this.collapsedRows.add(key));
+    this.unloadedColumns.forEach(key => this.collapsedColumns.add(key));
+  }
+
   // Every column group at the given levels, by the key its toggle carries. The
   // innermost level has no groups: its columns are the leaves.
   columnGroupKeys(columnHeaders, levels) {
-    const depth = Math.max(0, ...(columnHeaders ?? []).map(header => header.length));
+    const depth = this.axisDepth("column", columnHeaders);
     const keys = new Set();
 
     for (const header of columnHeaders ?? []) {
@@ -992,6 +1014,22 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   // collapse; { axis: "column" } or { axis: "all" } reaches the column groups.
   expandAll(options = {}) {
     const axis = options.axis ?? "row";
+    const unloaded = (axis !== "column" && this.unloadedRows?.size > 0) ||
+      (axis !== "row" && this.unloadedColumns?.size > 0);
+    if (unloaded && typeof this.lastSettings?.onExpandAll === "function") {
+      // Opened now, drawn once the groups arrive.
+      if (axis !== "column") {
+        this.collapsedRows?.clear();
+      }
+
+      if (axis !== "row") {
+        this.collapsedColumns?.clear();
+      }
+
+      this.lastSettings.onExpandAll({ axis });
+      this.notifyViewStateChanged();
+      return;
+    }
 
     if (axis !== "column") {
       this.collapsedRows?.clear();
@@ -1016,7 +1054,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     if (axis !== "column") {
       const rowHeaders = result.rowHeaders ?? [];
-      const rowDepth = Math.max(1, ...rowHeaders.map(header => header.length));
+      const rowDepth = Math.max(1, this.axisDepth("row", rowHeaders));
       const plan = this.createRowPlan(rowHeaders, rowDepth, settings);
       this.collapsedRows = new Set(plan
         .filter(row => row.type === "subtotal" || row.type === "group")
@@ -1025,7 +1063,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
 
     if (axis !== "row") {
       const columnHeaders = result.columnHeaders ?? [];
-      const depth = Math.max(0, ...columnHeaders.map(header => header.length));
+      const depth = this.axisDepth("column", columnHeaders);
       this.collapsedColumns = new Set(this.columnGroupKeys(
         columnHeaders, Array.from({ length: Math.max(0, depth - 1) }, (_, level) => level)));
     }
@@ -1465,7 +1503,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   // totals, since otherwise the group would leave nothing on screen.
   createColumnPlan(columnHeaders, settings) {
     const items = (columnHeaders ?? []).map((columnHeader, columnIndex) => ({ columnHeader, columnIndex }));
-    const depth = Math.max(0, ...items.map(item => item.columnHeader.length));
+    const depth = this.axisDepth("column", columnHeaders);
     const plan = [];
     this.appendColumnGroups(plan, items, 0, depth, settings ?? {});
     return plan;
@@ -2395,7 +2433,8 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       // Both rows keep the group's key: the header so its toggle collapses
       // the group, the total so it finds the group's sums.
       plan.push(totalAfter ? { ...row, type: "group", opensTotal: true } : row);
-      this.appendGroupRows(plan, group.items, level + 1, rowDepth, settings);
+      // A group whose children were not loaded is its header alone.
+      this.appendGroupRows(plan, group.items.filter(item => item.rowHeader.length > level + 1), level + 1, rowDepth, settings);
 
       if (totalAfter) {
         plan.push({ ...row, trailing: true });
@@ -2457,6 +2496,15 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
         };
         this.lastSettings?.onExpandValueChanging?.(changing);
         if (changing.cancel) {
+          return;
+        }
+
+        const unloaded = isColumn ? this.unloadedColumns : this.unloadedRows;
+        if (unloaded?.has(key) && typeof this.lastSettings?.onBranchExpand === "function") {
+          // Drawn again once the branch arrives; it stays closed if it fails.
+          collapsed.delete(key);
+          this.lastSettings.onBranchExpand({ area: changing.area, path: changing.path });
+          this.notifyViewStateChanged();
           return;
         }
 
@@ -3112,7 +3160,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }
 
     const level = Number(cell.dataset.rowLevel);
-    const depth = Math.max(1, ...(this.lastResult?.rowHeaders ?? []).map(header => header.length));
+    const depth = Math.max(1, this.axisDepth("row", this.lastResult?.rowHeaders));
     return cell.closest("tbody") && Number.isInteger(level) && cell.dataset.rowLevel !== undefined && level < depth - 1
       ? { axis: "row", level }
       : null;
@@ -3132,7 +3180,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     }
 
     const rowHeaders = result.rowHeaders ?? [];
-    const depth = Math.max(1, ...rowHeaders.map(header => header.length));
+    const depth = Math.max(1, this.axisDepth("row", rowHeaders));
     // Keys are the same with or without totals before the rows, so the plan
     // is read with them before: a trailing total adds no key of its own.
     return [...new Set(this.createRowPlan(rowHeaders, depth, { ...settings, totalsPosition: "before" })
@@ -3141,8 +3189,18 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
   }
 
   expandLevel(axis, level) {
+    const unloaded = axis === "column" ? this.unloadedColumns : this.unloadedRows;
     const collapsed = axis === "column" ? this.collapsedColumns : this.collapsedRows;
-    this.levelGroupKeys(axis, level).forEach(key => collapsed?.delete(key));
+    const keys = this.levelGroupKeys(axis, level);
+    if (typeof this.lastSettings?.onExpandLevel === "function" && keys.some(key => unloaded?.has(key))) {
+      // Opened now, drawn once the groups arrive.
+      keys.forEach(key => collapsed?.delete(key));
+      this.lastSettings.onExpandLevel({ area: axis, level });
+      this.notifyViewStateChanged();
+      return;
+    }
+
+    keys.forEach(key => collapsed?.delete(key));
     this.rerenderLast();
     this.notifyViewStateChanged();
   }

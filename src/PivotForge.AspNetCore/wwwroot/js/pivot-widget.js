@@ -1488,6 +1488,14 @@
         onCellClick: payload => bridge("cellClick", this.withFieldContext(payload)),
         onContextMenuPreparing: payload => bridge("contextMenuPreparing", this.withFieldContext(payload)),
         onExpandValueChanging: payload => bridge("expandValueChanging", payload),
+        // Where an XMLA grid left groups unread, opening one reads it.
+        onBranchExpand: payload => this.expandBranch(payload),
+        onExpandLevel: ({ area, level }) =>
+          this.expandLevels([(area === "column" ? columnFields : rowFields)[level]].filter(Boolean)),
+        onExpandAll: ({ axis }) => this.expandLevels([
+          ...(axis !== "column" ? rowFields : []),
+          ...(axis !== "row" ? columnFields : [])
+        ]),
         // The cell and header menus' "Show field chooser", when there is one.
         onShowFieldChooser: this.fieldChooserOptions ? () => this.showFieldChooser() : null
       });
@@ -1904,7 +1912,9 @@
         const result = this.options.largeData
           ? await this.startLargeSession(controller.signal)
           : this.store
-            ? await this.store.pivot(this.request, { culture: this.remoteCulture(), signal: controller.signal })
+            ? await this.store.pivot(this.request, {
+              culture: this.remoteCulture(), signal: controller.signal, branches: this.branchOptions()
+            })
             : await this.post("/pivot", this.request, controller.signal);
         if (token !== this.requestToken || this.disposed) {
           return;
@@ -1926,6 +1936,58 @@
         this.showError(error);
         this.emit("error", error);
       }
+    }
+
+    // ---- Branches (an XMLA grid loads what is open) ----
+
+    // What the cube is asked to read: each axis' levels as their fields open
+    // them, a level opened since standing open, and the groups opened below a
+    // closed level. A different set of fields on the axes starts over.
+    branchOptions() {
+      if (this.storeType !== "xmla") {
+        return null;
+      }
+
+      const rows = this.fields.filter(field => field.visible && field.area === "row");
+      const columns = this.fields.filter(field => field.visible && field.area === "column");
+      const signature = JSON.stringify([rows.map(field => field.key), columns.map(field => field.key)]);
+      if (this.branchState?.signature !== signature) {
+        this.branchState = { signature, rows: [], columns: [], opened: new Set() };
+      }
+
+      const state = this.branchState;
+      const expanded = fields => fields.map(field => field.expanded !== false || state.opened.has(field.key));
+      return {
+        rows: { expanded: expanded(rows), paths: state.rows },
+        columns: { expanded: expanded(columns), paths: state.columns }
+      };
+    }
+
+    // A group the cube has not read yet was opened: its branch is read, and
+    // if that fails the group stays closed.
+    async expandBranch({ area, path }) {
+      this.branchOptions();
+      const paths = area === "column" ? this.branchState.columns : this.branchState.rows;
+      const key = JSON.stringify(path);
+      if (!paths.some(entry => JSON.stringify(entry) === key)) {
+        paths.push([...path]);
+      }
+
+      await this.refresh();
+      if (this.error) {
+        const index = paths.findIndex(entry => JSON.stringify(entry) === key);
+        if (index >= 0) {
+          paths.splice(index, 1);
+        }
+      }
+    }
+
+    // Expand all, or one level, where groups were not read: DevExtreme opens
+    // the fields and reads the whole depth again.
+    async expandLevels(fields) {
+      this.branchOptions();
+      fields.forEach(field => this.branchState.opened.add(field.key));
+      await this.refresh();
     }
 
     render(result) {

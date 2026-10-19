@@ -1452,3 +1452,55 @@ test("field header rows: more fields than columns share a cell, an unasked side 
     width: 3, rowHeaderWidth: 1, filterLabels: [], exportFilterFieldHeaders: true
   }), []);
 });
+
+test("a header shorter than its declared axis is a group drawn collapsed, with no rows below it", () => {
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const rowHeaders = [["Marmara"], ["Ege", "Aydin"], ["Ege", "Izmir"]];
+  const columnHeaders = [["2023"], ["2024", "Q1"], ["2024", "Q2"]];
+  renderer.lastResult = { rowHeaders, columnHeaders, metadata: { rowDepth: 2, columnDepth: 2 } };
+  renderer.collapsedRows = new Set();
+  renderer.collapsedColumns = new Set();
+
+  assert.equal(renderer.axisDepth("row", rowHeaders), 2);
+  assert.equal(renderer.axisDepth("row", [["Marmara"]]), 2);
+  renderer.collapseUnloaded(rowHeaders, 2, columnHeaders, 2);
+  assert.deepEqual([...renderer.unloadedRows], ["Marmara"]);
+  assert.deepEqual([...renderer.collapsedColumns], ["2023"]);
+
+  const plan = renderer.createRowPlan(rowHeaders, 2, { subtotals: true });
+  assert.deepEqual(plan.map(row => [row.type, row.rowHeader.join("/")]), [
+    ["subtotal", "Marmara"],
+    ["subtotal", "Ege"],
+    ["detail", "Ege/Aydin"],
+    ["detail", "Ege/Izmir"]
+  ]);
+
+  // Every column a stub: the plan still knows the axis has two levels.
+  renderer.lastResult = { rowHeaders, columnHeaders: [["2023"], ["2024"]], metadata: { rowDepth: 2, columnDepth: 2 } };
+  renderer.collapsedColumns = new Set(["2023", "2024"]);
+  const columns = renderer.createColumnPlan([["2023"], ["2024"]], { columnSubtotals: true });
+  assert.deepEqual(columns.map(entry => [entry.type, entry.columnHeader.join("/"), entry.collapsed === true]), [
+    ["subtotal", "2023", true],
+    ["subtotal", "2024", true]
+  ]);
+});
+
+test("opening a level with unloaded groups asks for it rather than showing nothing", () => {
+  const asked = [];
+  const renderer = new window.PivotForge.PivotTableRenderer({});
+  const rowHeaders = [["Marmara"], ["Ege"]];
+  renderer.lastResult = { rowHeaders, columnHeaders: [], metadata: { rowDepth: 2, columnDepth: 0 } };
+  renderer.lastSettings = {
+    onExpandLevel: payload => asked.push(["level", payload]),
+    onExpandAll: payload => asked.push(["all", payload])
+  };
+  renderer.collapsedRows = new Set();
+  renderer.collapsedColumns = new Set();
+  renderer.collapseUnloaded(rowHeaders, 2, [], 0);
+
+  renderer.expandLevel("row", 0);
+  renderer.expandAll({ axis: "all" });
+  assert.deepEqual(asked, [["level", { area: "row", level: 0 }], ["all", { axis: "all" }]]);
+  // Open already, so they are drawn open once the groups arrive.
+  assert.equal(renderer.collapsedRows.size, 0);
+});
