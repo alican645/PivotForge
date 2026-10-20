@@ -29,7 +29,7 @@ public static class SampleSalesData
         "Ece"
     ];
 
-    public static IReadOnlyList<SalesRecord> Create(int count = 100)
+    public static IReadOnlyList<SalesRecord> Create(int count = 1000)
     {
         var records = new List<SalesRecord>(count);
 
