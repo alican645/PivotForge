@@ -23,6 +23,11 @@ change will require a new major version.
   (`--pt-cell-height`, `--pt-cell-min-width`, `--pt-cell-max-width`, `--pt-cell-padding-inline`,
   `--pt-cell-font-size`, `--pt-header-bg`, `--pt-header-text`, `--pt-total-bg`), and the virtual
   scroller's default row height follows the new 24px.
+- `PivotForge.AspNetCore`: the field designer is laid out like Excel's field pane — each
+  section is a plain label above a white box, fields are flat 22px rows with a hover tint
+  instead of bordered rounded chips, and the drag grip shows only on hover or focus (always on
+  touch). Search, the calculated-field button and Update are 24px and square-cornered; a drop
+  target is marked on its box rather than by tinting the whole zone.
 
 ## [0.13.0-preview.1] — 2026-10-19
 

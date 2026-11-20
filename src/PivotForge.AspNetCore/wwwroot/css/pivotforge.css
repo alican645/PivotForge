@@ -125,9 +125,9 @@ select {
 .pivot-sidebar {
   grid-column: 2;
   grid-row: 1;
-  padding: 10px;
+  padding: 8px;
   border-inline-start: 1px solid var(--pt-border);
-  background: #f8fafc;
+  background: var(--pt-header-bg);
   overflow: auto;
 }
 
@@ -397,13 +397,13 @@ select {
 
 .pivot-field-list {
   display: grid;
-  gap: 1px;
+  gap: 0;
   max-height: 246px;
   overflow: auto;
-  padding: 4px 6px 6px;
-  border: 0;
+  padding: 1px;
+  border: 1px solid var(--pt-border);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--pt-panel);
 }
 
 /* A display-folder heading in the field list: a button that opens and closes
@@ -411,21 +411,22 @@ select {
 .pivot-field-folder {
   display: block;
   width: 100%;
-  margin-top: 4px;
-  padding: 4px 6px;
+  margin-top: 0;
+  padding: 0 6px;
+  min-height: 22px;
   border: 0;
-  border-radius: 3px;
+  border-radius: 0;
   background: transparent;
-  color: #475569;
+  color: var(--pt-header-text);
   font: inherit;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-align: start;
   cursor: pointer;
 }
 
 .pivot-field-folder:hover {
-  background: #f1f5f9;
+  background: var(--pt-header-bg);
 }
 
 .pivot-field-folder:focus-visible {
@@ -444,16 +445,16 @@ select {
 }
 
 .pivot-search {
-  padding: 7px 8px 6px;
+  padding: 0 0 4px;
   margin: 0;
 }
 
 .pivot-search input {
   width: 100%;
-  min-height: 30px;
-  padding: 5px 8px;
+  min-height: 24px;
+  padding: 0 6px;
   border: 1px solid var(--pt-border);
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--pt-panel);
   color: var(--pt-text);
   font-size: 12px;
@@ -462,7 +463,6 @@ select {
 
 .pivot-search input:focus {
   border-color: var(--pt-accent);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
 }
 
 .pivot-field-chip,
@@ -500,15 +500,13 @@ select {
   opacity: 0.55;
 }
 
-.pivot-field-drag-active .pivot-zone {
-  border-color: #bfd0df;
-  background: #f8fbfd;
+.pivot-field-drag-active .pivot-zone__body {
+  border-color: #b8c2d2;
 }
 
-.pivot-zone.is-over {
+.pivot-zone.is-over .pivot-zone__body {
   border-color: var(--pt-accent);
-  background: #eefbf8;
-  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.28), 0 0 0 3px rgba(15, 118, 110, 0.1);
+  box-shadow: inset 0 0 0 1px var(--pt-accent);
 }
 
 .pivot-zone.is-empty-drop-target .pivot-zone__body {
@@ -551,12 +549,12 @@ select {
 
 .pivot-placed-chip.is-drop-before::before,
 .pivot-chip.is-drop-before::before {
-  top: -5px;
+  top: -2px;
 }
 
 .pivot-placed-chip.is-drop-after::after,
 .pivot-chip.is-drop-after::after {
-  bottom: -5px;
+  bottom: -2px;
 }
 
 /* The dragged chip stays in place while it is being moved, so it is dimmed to
@@ -1116,10 +1114,22 @@ select {
   display: grid;
   gap: 0;
   margin-bottom: 8px;
-  border: 1px solid var(--pt-border);
-  border-radius: 3px;
-  background: var(--pt-panel);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   overflow: visible;
+}
+
+/* The designer's headings read as Excel's pane labels: plain text above a
+   white box, not a tinted bar inside a framed card. */
+.pivot-field-list-panel > .pivot-section__head {
+  min-height: 0;
+  padding: 0 0 4px;
+  border-bottom: 0;
+  background: transparent;
+  color: var(--pt-header-text);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .pivot-layout-grid {
@@ -1148,19 +1158,19 @@ select {
   align-items: center;
   gap: 6px;
   color: var(--pt-muted);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 
 .pivot-designer-footer__update {
-  min-height: 28px;
-  padding: 0 12px;
+  min-height: 24px;
+  padding: 0 10px;
   border: 1px solid var(--pt-accent);
-  border-radius: 3px;
+  border-radius: 0;
   background: var(--pt-accent);
   color: #ffffff;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -1185,19 +1195,12 @@ select {
   display: grid;
   gap: 0;
   align-self: start;
-  min-height: 112px;
   min-width: 0;
   margin-bottom: 0;
-  border: 1px solid var(--pt-border);
-  border-radius: 3px;
-  background: var(--pt-panel);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   overflow: visible;
-}
-
-.pivot-zone.is-over {
-  border-color: var(--pt-accent);
-  background: #f0fdfa;
-  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.28);
 }
 
 .pivot-zone.is-disabled {
@@ -1209,16 +1212,16 @@ select {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  min-height: 24px;
-  padding: 3px 6px;
-  border-bottom: 1px solid var(--pt-border);
-  background: #f1f5f9;
+  padding: 0 0 4px;
+  color: var(--pt-header-text);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .pivot-zone__head strong {
-  color: #334155;
-  font-size: 10px;
-  font-weight: 850;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .pivot-zone__head span {
@@ -1236,12 +1239,14 @@ select {
 
 .pivot-zone__body {
   display: grid;
-  gap: 3px;
+  gap: 0;
   align-content: start;
-  min-height: 80px;
+  min-height: 70px;
   max-height: 160px;
   overflow: visible;
-  padding: 4px;
+  padding: 1px;
+  border: 1px solid var(--pt-border);
+  background: var(--pt-panel);
 }
 
 .pivot-zone[data-zone="values"] .pivot-zone__body {
@@ -1249,20 +1254,15 @@ select {
 }
 
 .pivot-zone__empty {
-  min-height: 34px;
+  min-height: 22px;
   display: grid;
   place-items: center;
-  border: 1px dashed var(--pt-border);
-  border-radius: 4px;
-  background: #fbfdff;
   color: var(--pt-muted);
-  font-size: 10px;
+  font-size: 11px;
   text-align: center;
 }
 
 .pivot-zone.is-over .pivot-zone__empty {
-  border-color: var(--pt-accent);
-  background: #ffffff;
   color: var(--pt-accent-strong);
 }
 
@@ -2932,14 +2932,15 @@ select {
 .pivot-chip {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
-  margin: 0.125rem 0;
-  border: 1px solid var(--pt-border);
-  border-radius: 0.375rem;
-  background: var(--pt-panel);
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 6px;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
   cursor: grab;
-  font-size: 0.8125rem;
+  font-size: 12px;
   /* A mouse drag would otherwise select the caption text as it moves. */
   user-select: none;
   /* Deliberately left at the browser default: a finger anywhere on the chip
@@ -2948,6 +2949,10 @@ select {
 
 .pivot-chip:active {
   cursor: grabbing;
+}
+
+.pivot-chip:hover {
+  background: var(--pt-header-bg);
 }
 
 /* The chip is what a keyboard user operates, so it has to be visibly the thing
@@ -2962,7 +2967,6 @@ select {
    cursor and the keyboard has no other way to say. */
 .pivot-chip.is-keyboard-moving {
   border-color: var(--pt-accent);
-  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.25);
   opacity: 0.75;
 }
 
@@ -2978,6 +2982,14 @@ select {
   font-size: 0.75rem;
   line-height: 1;
   touch-action: none;
+  /* Shown where the pointer or focus is, so a list reads as names only. */
+  opacity: 0;
+}
+
+.pivot-chip:hover .pivot-chip__grip,
+.pivot-chip:focus-visible .pivot-chip__grip,
+.pivot-chip.is-keyboard-moving .pivot-chip__grip {
+  opacity: 1;
 }
 
 .pivot-chip__grip:hover {
@@ -2989,6 +3001,10 @@ select {
 @media (pointer: coarse) {
   .pivot-chip {
     min-height: 36px;
+  }
+
+  .pivot-chip__grip {
+    opacity: 1;
   }
 
   .pivot-chip__grip,
@@ -3069,9 +3085,14 @@ select {
   border: 0;
   background: transparent;
   cursor: pointer;
-  font-size: 1rem;
+  color: var(--pt-muted);
+  font-size: 13px;
   line-height: 1;
   padding: 0 0.125rem;
+}
+
+.pivot-chip__remove:hover:not(:disabled) {
+  color: var(--pt-danger);
 }
 
 .pivot-chip__remove:disabled {
@@ -3187,10 +3208,10 @@ select {
 
 .pivot-search__add {
   flex: 0 0 auto;
-  min-height: 30px;
-  padding: 0 8px;
+  min-height: 24px;
+  padding: 0 6px;
   border: 1px solid var(--pt-border);
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--pt-panel);
   color: var(--pt-accent);
   cursor: pointer;
