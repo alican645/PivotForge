@@ -14,6 +14,11 @@ change will require a new major version.
 
 ## [Unreleased]
 
+## [0.14.0-preview.1] — 2026-11-20
+
+A spreadsheet look: the grid is sized like Excel's, and the field designer is
+laid out like Excel's field pane.
+
 ### Changed
 
 - `PivotForge.AspNetCore`: the grid is sized like a spreadsheet — 24px rows, 64px narrowest
@@ -1041,7 +1046,8 @@ the endpoints a way to say no.
 Initial preview release of the PivotForge pivot engine and its ASP.NET Core
 integration.
 
-[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.13.0-preview.1...HEAD
+[Unreleased]: https://github.com/alican645/PivotForge/compare/v0.14.0-preview.1...HEAD
+[0.14.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.13.0-preview.1...v0.14.0-preview.1
 [0.13.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.12.0-preview.1...v0.13.0-preview.1
 [0.12.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.11.0-preview.1...v0.12.0-preview.1
 [0.11.0-preview.1]: https://github.com/alican645/PivotForge/compare/v0.10.0-preview.1...v0.11.0-preview.1
