@@ -26,6 +26,17 @@
   --pt-series-7: #6250d6;
   --pt-series-8: #e34948;
   --pt-row-header-width: 148px;
+  /* The grid is sized like a spreadsheet: a 24px row (the bottom line
+     included), a 64px column at its narrowest, 12px text. The virtual row
+     height in pivot-table.js is the same 24px; change the two together. */
+  --pt-cell-height: 24px;
+  --pt-cell-min-width: 64px;
+  --pt-cell-max-width: 240px;
+  --pt-cell-padding-inline: 6px;
+  --pt-cell-font-size: 12px;
+  --pt-header-bg: #f6f7f9;
+  --pt-header-text: #475569;
+  --pt-total-bg: #f6f7f9;
 }
 
 * {
@@ -1603,10 +1614,13 @@ select {
 
 .pivot-table__table th,
 .pivot-table__table td {
-  height: 36px;
-  min-width: 118px;
-  max-width: 240px;
-  padding: 8px 10px;
+  height: var(--pt-cell-height);
+  min-width: var(--pt-cell-min-width);
+  max-width: var(--pt-cell-max-width);
+  padding: 0 var(--pt-cell-padding-inline);
+  font-size: var(--pt-cell-font-size);
+  line-height: 18px;
+  font-weight: 400;
   border-inline-end: 1px solid var(--pt-border);
   border-bottom: 1px solid var(--pt-border);
   text-align: end;
@@ -1942,9 +1956,15 @@ select {
 
 .pivot-table__table th {
   position: relative;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--pt-text);
+  font-weight: 400;
+}
+
+/* Header cells read as a spreadsheet's header strip: quieter colour, a
+   little weight, one flat tint. */
+.pivot-table__table thead th {
+  color: var(--pt-header-text);
+  font-weight: 600;
 }
 
 /* The frozen headers. Said again at the table's specificity, because the rule
@@ -1969,12 +1989,11 @@ select {
   position: sticky;
   top: var(--sticky-top, 0px);
   z-index: 5;
-  background: #eef2f7 !important;
+  background: var(--pt-header-bg) !important;
 }
 
 .pivot-table__value-header {
-  color: #475569 !important;
-  font-size: 11px !important;
+  color: var(--pt-header-text) !important;
   text-align: center !important;
 }
 
@@ -1989,15 +2008,15 @@ select {
    names. Both sit in the header block but neither is a coordinate, so they read
    quieter than the value headers around them. */
 .pivot-table__column-field {
-  color: #475569 !important;
-  font-weight: 700;
+  color: var(--pt-header-text) !important;
+  font-weight: 600;
 }
 
 .pivot-table__column-field-filler {
   position: sticky;
   top: var(--sticky-top, 0px);
   z-index: 5;
-  background: #eef2f7 !important;
+  background: var(--pt-header-bg) !important;
 }
 
 .pivot-table__row-header,
@@ -2008,17 +2027,17 @@ select {
   z-index: 4;
   min-width: var(--pt-row-header-width) !important;
   text-align: start !important;
-  background: #ffffff !important;
-  font-weight: 700;
+  background: var(--pt-panel) !important;
+  font-weight: 400;
 }
 
 .pivot-table__table.is-compact .pivot-table__row-header.is-compact,
 .pivot-table__table.is-compact .pivot-table__subtotal-header.is-compact {
-  padding-inline-start: calc(10px + var(--pivot-indent, 0px)) !important;
+  padding-inline-start: calc(var(--pt-cell-padding-inline) + var(--pivot-indent, 0px)) !important;
 }
 
 /* Tree guides: a thin line for every ancestor, each under its parent's toggle
-   (10px padding, 18px per level, the 22px toggle's centre at +11px). The
+   (6px padding, 18px per level, the 14px toggle's centre at +7px). The
    gradient repeats every level and is only as wide as the row's indent, so a
    row draws exactly one line per level above it. */
 .pivot-table__table.is-tree .pivot-table__row-header.is-compact,
@@ -2026,7 +2045,7 @@ select {
   background-image: repeating-linear-gradient(
     to right, var(--pt-border) 0 1px, transparent 1px 18px) !important;
   background-size: var(--pivot-indent, 0px) 100% !important;
-  background-position: 21px 0 !important;
+  background-position: 13px 0 !important;
   background-repeat: no-repeat !important;
 }
 
@@ -2039,7 +2058,7 @@ select {
 .pivot-table__measure-row-header {
   min-width: 96px !important;
   color: var(--pt-muted);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 /* A header stretched over its value rows labels the block from its top line,
@@ -2061,7 +2080,7 @@ select {
 .pivot-table__column-header.is-empty,
 .pivot-table__value.is-empty {
   color: var(--pt-muted);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .pivot-table__column-header {
@@ -2076,12 +2095,12 @@ select {
 
 .pivot-table__sort-button {
   width: 100%;
-  min-height: 36px;
+  min-height: calc(var(--pt-cell-height) - 1px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 4px;
+  padding: 0 var(--pt-cell-padding-inline);
   border: 0;
   background: transparent;
   color: inherit;
@@ -2098,13 +2117,12 @@ select {
 
 .pivot-table__sort-button:hover,
 .pivot-table__sort-button:focus-visible {
-  background: #dde6f0;
+  background: #e9edf2;
   outline: none;
 }
 
 .pivot-table__sort-button.is-active {
   color: var(--pt-accent-strong);
-  background: #dcf7f2;
 }
 
 .pivot-table__sort-label {
@@ -2129,12 +2147,12 @@ select {
 /* A sortable corner gives its whole width to the sort button, so a funnel
    standing beside it has to be made room for. */
 .pivot-table__corner.is-sortable.is-filterable .pivot-table__sort-button {
-  width: calc(100% - 26px);
+  width: calc(100% - 20px);
 }
 
 .pivot-table__filter-button {
-  width: 24px;
-  min-height: 28px;
+  width: 18px;
+  min-height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2151,14 +2169,13 @@ select {
 
 .pivot-table__filter-button:hover,
 .pivot-table__filter-button:focus-visible {
-  background: #dde6f0;
+  background: #e9edf2;
   color: var(--pt-accent-strong);
   outline: none;
 }
 
 .pivot-table__filter-button.is-active {
   color: var(--pt-accent-strong);
-  background: #dcf7f2;
 }
 
 .pivot-table__resize-handle {
@@ -2175,9 +2192,9 @@ select {
 .pivot-table__resize-handle::after {
   content: "";
   position: absolute;
-  top: 7px;
+  top: 4px;
   inset-inline-end: 4px;
-  bottom: 7px;
+  bottom: 4px;
   width: 1px;
   background: transparent;
 }
@@ -2205,48 +2222,48 @@ select {
 .pivot-table__column-total,
 .pivot-table__grand-total,
 .pivot-table__row-total-label {
-  background: #f8fafc !important;
-  font-weight: 800;
+  background: var(--pt-total-bg) !important;
+  font-weight: 700;
 }
 
+/* Subtotals are told apart by weight, as in a spreadsheet, not by a colour. */
 .pivot-table__subtotal-row th,
 .pivot-table__subtotal-row td {
-  background: #eefbf8 !important;
-  border-bottom-color: #b7dfd7 !important;
-  font-weight: 800;
+  background: var(--pt-panel) !important;
+  font-weight: 700;
 }
 
 .pivot-table__subtotal-header {
-  color: #134e4a !important;
+  color: var(--pt-text) !important;
 }
 
 .pivot-table__subtotal-value,
 .pivot-table__subtotal-total {
-  color: #134e4a;
+  color: var(--pt-text);
 }
 
 /* The column axis' subtotals, in the subtotal rows' colours so a reader sees
    one kind of total wherever it is drawn. */
 .pivot-table__column-subtotal-header,
 .pivot-table__column-subtotal-value-header {
-  background: #eefbf8 !important;
-  color: #134e4a !important;
+  background: var(--pt-header-bg) !important;
+  color: var(--pt-text) !important;
 }
 
 .pivot-table__column-subtotal {
-  background: #f4fcfa !important;
-  color: #134e4a;
-  font-weight: 800;
+  background: var(--pt-panel) !important;
+  color: var(--pt-text);
+  font-weight: 700;
 }
 
 .pivot-table__group-row th,
 .pivot-table__group-row td {
-  background: #fbfdff !important;
-  font-weight: 800;
+  background: var(--pt-panel) !important;
+  font-weight: 700;
 }
 
 .pivot-table__group-row .pivot-table__subtotal-header {
-  color: #334155 !important;
+  color: var(--pt-text) !important;
 }
 
 .pivot-table__group-row .pivot-table__value,
@@ -2255,24 +2272,25 @@ select {
 }
 
 .pivot-table__toggle {
-  width: 22px;
-  height: 22px;
+  width: 14px;
+  height: 14px;
   display: inline-grid;
   place-items: center;
-  margin-inline-end: 6px;
-  border: 1px solid rgba(15, 118, 110, 0.32);
-  border-radius: 5px;
-  background: #ffffff;
-  color: var(--pt-accent-strong);
+  vertical-align: middle;
+  margin-inline-end: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pt-muted);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: 10px;
+  font-weight: 400;
   line-height: 1;
 }
 
 .pivot-table__toggle:hover {
-  border-color: var(--pt-accent);
-  background: #f0fdfa;
+  color: var(--pt-text);
 }
 
 /* A column group's toggle sits before its label in the header. Next to a
@@ -4014,7 +4032,7 @@ select {
 .pivot-table__table.is-tree .pivot-table__subtotal-header.is-compact:dir(rtl) {
   background-image: repeating-linear-gradient(
     to left, var(--pt-border) 0 1px, transparent 1px 18px) !important;
-  background-position: right 21px top 0 !important;
+  background-position: right 13px top 0 !important;
 }
 
 /* A collapsed group's arrow points along the reading direction. */

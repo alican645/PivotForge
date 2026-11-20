@@ -656,7 +656,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
     // A page holds rows of the pivot, and a rows layout draws each of them
     // once per value, so the rows a spacer stands in for are that much taller.
     const virtualState = valuesOnRows && settings.virtualState
-      ? { ...settings.virtualState, rowHeight: Math.max(24, settings.virtualState.rowHeight ?? 36) * values.length }
+      ? { ...settings.virtualState, rowHeight: Math.max(24, settings.virtualState.rowHeight ?? 24) * values.length }
       : settings.virtualState;
     this.applyVirtualSpacers(table, virtualState, rowDepth, columnHeaders, columnValues, settings);
     // After the spacers, so the rows they insert are excluded from the count.
@@ -2028,7 +2028,7 @@ PivotForge.PivotTableRenderer = class PivotTableRenderer {
       return;
     }
 
-    const rowHeight = Math.max(24, virtualState.rowHeight ?? 36);
+    const rowHeight = Math.max(24, virtualState.rowHeight ?? 24);
     const offset = Math.max(0, virtualState.offset ?? 0);
     const pageRowCount = Math.max(0, virtualState.pageRowCount ?? 0);
     const totalRows = Math.max(pageRowCount, virtualState.totalRowCount ?? pageRowCount);
