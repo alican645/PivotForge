@@ -14,6 +14,16 @@ change will require a new major version.
 
 ## [Unreleased]
 
+### Changed
+
+- `PivotForge.AspNetCore`: the grid is sized like a spreadsheet — 24px rows, 64px narrowest
+  column, 12px text, `0 6px` cell padding. Labels and values are regular weight; headers are
+  semi-bold on one flat tint, and totals are told apart by weight instead of a teal tint. The
+  group toggle is a plain 14px arrow. The sizes are CSS variables on `:root`
+  (`--pt-cell-height`, `--pt-cell-min-width`, `--pt-cell-max-width`, `--pt-cell-padding-inline`,
+  `--pt-cell-font-size`, `--pt-header-bg`, `--pt-header-text`, `--pt-total-bg`), and the virtual
+  scroller's default row height follows the new 24px.
+
 ## [0.13.0-preview.1] — 2026-10-19
 
 Branch loading for XMLA grids: a closed level's groups are read from the cube
